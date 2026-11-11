@@ -1,0 +1,85 @@
+# End-to-end cases for kubectl.grammar.toml. Each argv runs through the Shell of a real box, where
+# the program is a stub that prints its arguments and exits 0.
+
+policy = '''
+@id("kubectl_actions")
+permit (principal, action in Tool::kubectl::Action::"*", resource);
+
+@id("no_secret_reads")
+@description("Reading Secrets is not allowed.")
+forbid (principal, action in Tool::kubectl::Action::"*", resource)
+when { context.input.effects.contains(Tool::kubectl::Effect::"read_secrets") };
+
+@id("no_cluster_writes")
+@description("Changing the cluster is not allowed; use --dry-run.")
+forbid (principal, action in Tool::kubectl::Action::"*", resource)
+when { context.input.effects.contains(Tool::kubectl::Effect::"cluster_write") ||
+       context.input.effects.contains(Tool::kubectl::Effect::"cluster_delete") };
+
+@id("no_exec")
+@description("Running programs in containers is not allowed.")
+forbid (principal, action in Tool::kubectl::Action::"*", resource)
+when { context.input.effects.contains(Tool::kubectl::Effect::"run_program") };
+
+@id("no_other_context")
+@description("Only the current kubeconfig context is allowed.")
+forbid (principal, action in Tool::kubectl::Action::"*", resource)
+when { context.input.effects.contains(Tool::kubectl::Effect::"change_target") ||
+       context.input.effects.contains(Tool::kubectl::Effect::"impersonate") };
+'''
+
+# A permitted read runs the program
+[[case]]
+argv = ["kubectl", "get", "pods", "-n", "web", "-o", "wide"]
+exit = 0
+stdout = "stub-argv: [get] [pods] [-n] [web] [-o] [wide]"
+
+# Reading a Secret is refused, in any case
+[[case]]
+argv = ["kubectl", "get", "Secret/db-pass", "-o", "yaml"]
+exit = 126
+stderr = "[policy: no_secret_reads]: Reading Secrets is not allowed."
+
+# A real apply is refused
+[[case]]
+argv = ["kubectl", "apply", "-f", "deploy.yaml"]
+exit = 126
+stderr = "[policy: no_cluster_writes]"
+
+# --dry-run=server removes the write, so the apply runs
+[[case]]
+argv = ["kubectl", "apply", "-f", "deploy.yaml", "--dry-run=server"]
+exit = 0
+stdout = "stub-argv: [apply] [-f] [deploy.yaml] [--dry-run=server]"
+
+# exec is refused
+[[case]]
+argv = ["kubectl", "exec", "-it", "web-1", "--", "sh"]
+exit = 126
+stderr = "[policy: no_exec]"
+
+# Another context is refused
+[[case]]
+argv = ["kubectl", "--context", "prod", "get", "pods"]
+exit = 126
+stderr = "[policy: no_other_context]"
+
+# An unmodeled line (here, the --raw escape hatch) meets default deny
+[[case]]
+argv = ["kubectl", "get", "--raw", "/api/v1/secrets"]
+exit = 126
+stderr = "[default-deny]: No permit policy matched this request."
+
+# A rule over a persistent flag's field, from the README
+[[case]]
+argv = ["kubectl", "get", "pods", "-n", "kube-system"]
+exit = 126
+stderr = "[policy: kubectl_not_kube_system]"
+policy = '''
+@id("kubectl_actions")
+permit (principal, action in Tool::kubectl::Action::"*", resource);
+
+@id("kubectl_not_kube_system")
+forbid (principal, action in Tool::kubectl::Action::"*", resource)
+when { context.input has namespace && context.input.namespace == "kube-system" };
+'''
