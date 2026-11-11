@@ -1674,7 +1674,7 @@ effects = ["cluster_read", "manifest_input", "read_secrets"]
 # --- independent verifier cases, round 2 ---
 # kubectl v1.37.2 source. EXPECTED-FAIL cases state the CLI's real effect.
 
-# EXPECTED-FAIL. schema.ParseResourceArg + shortcutExpander: `ns.` and `ns.v1.` resolve to namespaces.
+# Was EXPECTED-FAIL, now fixed. schema.ParseResourceArg + shortcutExpander: `ns.` and `ns.v1.` resolve to namespaces.
 [[case]]
 argv = ["kubectl", "delete", "ns.v1.", "prod"]
 action = "delete"
@@ -1687,7 +1687,7 @@ action = "delete"
 fields = { type = "ns.", name = ["prod"] }
 effects = ["cluster_delete", "broad_delete"]
 
-# EXPECTED-FAIL. coerceResourceForMatching lowercases, so camel case resolves to CRDs.
+# Was EXPECTED-FAIL, now fixed. coerceResourceForMatching lowercases, so camel case resolves to CRDs.
 [[case]]
 argv = ["kubectl", "delete", "customResourceDefinitions", "widgets.example.com"]
 action = "delete"
@@ -1821,3 +1821,23 @@ argv = ["kubectl", "rollout", "undo", "deploy/web", "--dry-run=client", "-o", "y
 action = "rollout_undo"
 fields = { type = "deploy/web", dry_run = "client", output = "yaml" }
 effects = []
+
+# Round-2 fixes: `ns` with a .version.group suffix in a comma list, and the CRD name in any case
+# (every casing of `definition` holds a casing of `efin`).
+[[case]]
+argv = ["kubectl", "delete", "pods,Ns.v1.", "x"]
+action = "delete"
+fields = { type = "pods,Ns.v1.", name = ["x"] }
+effects = ["broad_delete", "cluster_delete"]
+
+[[case]]
+argv = ["kubectl", "delete", "CUSTOMresourceDEFINITIONS.apiextensions.k8s.io", "w"]
+action = "delete"
+fields = { type = "CUSTOMresourceDEFINITIONS.apiextensions.k8s.io", name = ["w"] }
+effects = ["broad_delete", "cluster_delete"]
+
+[[case]]
+argv = ["kubectl", "delete", "pod/a", "customResourceDefinition/w"]
+action = "delete"
+fields = { type = "pod/a", name = ["customResourceDefinition/w"] }
+effects = ["broad_delete", "cluster_delete"]

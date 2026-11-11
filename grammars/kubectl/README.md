@@ -170,10 +170,11 @@ These are deliberately `unmodeled`:
   `-o` print only names, so they carry `manifest_input` only.
 - **config view.** client-go redacts only some kubeconfig fields: auth-provider settings (such as
   OIDC tokens) and `exec` env values print in clear. So every `config view` carries `read_secrets`.
-- **Broad deletes.** A Namespace (`ns`, `namespace`, any case) or a CRD (`crd` in any case,
-  `customresourcedefinition` in lower, Title, Kind, and upper case) adds `broad_delete`. A
-  mixed-case spelling such as `customResourceDefinitions` does not, but it still carries
-  `cluster_delete`.
+- **Broad deletes.** A Namespace or a CRD adds `broad_delete`, in any case: `ns` as a whole type or
+  comma item, with any `.version.group` suffix (`ns.`, `ns.v1.`), and any type that contains
+  `namespace`, `crd`, or `efin`. kubectl lowercases the type, and every casing of
+  `customresourcedefinition` holds a casing of `efin`, so the 16 casings of `*efin*` cover it. Any
+  other type that contains `efin` also gets `broad_delete`, which is the safe direction.
 - **Operands.** `label` and `annotate` take the type, names, and `KEY=VAL` words as one set,
   `operands`. In `get`, `delete`, `scale`, and the rollout verbs, the first word is `type` and the
   rest are `name`. `exec` and `create deployment` keep the command after `--` as a set, so word
