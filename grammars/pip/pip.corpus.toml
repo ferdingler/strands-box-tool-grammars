@@ -1,0 +1,690 @@
+# Golden cases for pip.grammar.toml, checked against pip 26.3 (tag 26.3).
+#
+# Sources: `pip <command> --help` for pip 26.3, and at tag 26.3
+# src/pip/_internal/cli/cmdoptions.py (the option table), cli/main_parser.py (general options before
+# the command, `--python`), cli/base_command.py (`--python` after the command is refused), and
+# src/pip/_internal/commands/*.py. pip parses with optparse: `--x v` and `--x=v` are the same,
+# short flags cluster, a short flag takes an attached value (`-rfile`), and `--` ends the options.
+
+# ---------------------------------------------------------------- install
+
+# `pip install <requirement specifier>` (install --help, Usage). It contacts the index, installs,
+# and may build a source distribution.
+[[case]]
+argv = ["pip", "install", "requests"]
+action = "install"
+fields = { spec = ["requests"] }
+effects = ["install_packages", "network", "run_build_backend"]
+
+# Several specifiers, with version operators
+[[case]]
+argv = ["pip", "install", "requests==2.32.3", "flask>=3"]
+action = "install"
+fields = { spec = ["flask>=3", "requests==2.32.3"] }
+effects = ["install_packages", "network", "run_build_backend"]
+
+# `-r` is `action="append"` (cmdoptions.requirements): it repeats, and `-rfile` attaches the value
+[[case]]
+argv = ["pip", "install", "-r", "requirements.txt", "--requirement=dev.txt", "-rtest.txt"]
+action = "install"
+fields = { requirement = ["dev.txt", "requirements.txt", "test.txt"] }
+effects = ["install_packages", "network", "run_build_backend"]
+
+# `-e <local project path>` (install --help, Usage) builds the project
+[[case]]
+argv = ["pip", "install", "-e", "."]
+action = "install"
+fields = { editable = ["."] }
+effects = ["install_packages", "network", "run_build_backend"]
+
+# `-e <vcs project url>` runs the VCS program; so does a VCS URL operand
+[[case]]
+argv = ["pip", "install", "-e", "git+https://github.com/pypa/sampleproject#egg=sampleproject"]
+action = "install"
+fields = { editable = ["git+https://github.com/pypa/sampleproject#egg=sampleproject"] }
+effects = ["install_packages", "network", "run_build_backend", "run_vcs"]
+
+[[case]]
+argv = ["pip", "install", "hg+https://hg.example.org/proj"]
+action = "install"
+fields = { spec = ["hg+https://hg.example.org/proj"] }
+effects = ["install_packages", "network", "run_build_backend", "run_vcs"]
+
+# Short clusters: `-Uq` is `-U` (install) and `-q` (a general option, accepted after the command)
+[[case]]
+argv = ["pip", "install", "-Uq", "pip"]
+action = "install"
+fields = { upgrade = true, quiet = true, spec = ["pip"] }
+effects = ["install_packages", "network", "run_build_backend"]
+
+# `-U` then `-r` in one cluster: the value-taking letter takes the next word
+[[case]]
+argv = ["pip", "install", "-Ur", "requirements.txt"]
+action = "install"
+fields = { upgrade = true, requirement = ["requirements.txt"] }
+effects = ["install_packages", "network", "run_build_backend"]
+
+# `-v` is `action="count"`: it repeats, also as `-vvv`
+[[case]]
+argv = ["pip", "install", "-vvv", "--verbose", "six"]
+action = "install"
+fields = { verbose = true, spec = ["six"] }
+effects = ["install_packages", "network", "run_build_backend"]
+
+# Options after the operands (optparse intersperses)
+[[case]]
+argv = ["pip", "install", "six", "--no-deps", "--pre"]
+action = "install"
+fields = { no_deps = true, pre = true, spec = ["six"] }
+effects = ["install_packages", "network", "run_build_backend"]
+
+# `--no-dependencies` is a second spelling of `--no-deps` (cmdoptions.no_deps)
+[[case]]
+argv = ["pip", "install", "--no-dependencies", "six"]
+action = "install"
+fields = { no_deps = true, spec = ["six"] }
+effects = ["install_packages", "network", "run_build_backend"]
+
+# `--user`, `--target`, `--prefix`, `--root` install outside the active environment
+[[case]]
+argv = ["pip", "install", "--user", "black"]
+action = "install"
+fields = { user = true, spec = ["black"] }
+effects = ["install_packages", "network", "run_build_backend", "write_outside_env"]
+
+[[case]]
+argv = ["pip", "install", "-t", "vendor", "attrs"]
+action = "install"
+fields = { target = "vendor", spec = ["attrs"] }
+effects = ["install_packages", "network", "run_build_backend", "write_outside_env"]
+
+[[case]]
+argv = ["pip", "install", "--target=vendor", "attrs"]
+action = "install"
+fields = { target = "vendor", spec = ["attrs"] }
+effects = ["install_packages", "network", "run_build_backend", "write_outside_env"]
+
+[[case]]
+argv = ["pip", "install", "--prefix", "/opt/py", "--root", "/stage", "attrs"]
+action = "install"
+fields = { prefix = "/opt/py", root = "/stage", spec = ["attrs"] }
+effects = ["install_packages", "network", "run_build_backend", "write_outside_env"]
+
+# `--no-user` only stores false; it adds nothing
+[[case]]
+argv = ["pip", "install", "--no-user", "attrs"]
+action = "install"
+fields = { no_user = true, spec = ["attrs"] }
+effects = ["install_packages", "network", "run_build_backend"]
+
+# `--break-system-packages` (PEP 668 override)
+[[case]]
+argv = ["pip", "install", "--break-system-packages", "attrs"]
+action = "install"
+fields = { break_system_packages = true, spec = ["attrs"] }
+effects = ["break_system_packages", "install_packages", "network", "run_build_backend"]
+
+# `--dry-run`: "Don't actually install anything" (install --help). It removes the install effects
+# and the location effects, in any order on the line. It still resolves and builds metadata.
+[[case]]
+argv = ["pip", "install", "--user", "--break-system-packages", "attrs", "--dry-run"]
+action = "install"
+fields = { dry_run = true, user = true, break_system_packages = true, spec = ["attrs"] }
+effects = ["network", "run_build_backend"]
+
+[[case]]
+argv = ["pip", "install", "--dry-run", "--report", "-", "-q", "-t", "out", "attrs"]
+action = "install"
+fields = { dry_run = true, report = "-", quiet = true, target = "out", spec = ["attrs"] }
+effects = ["network", "run_build_backend"]
+
+# Index options: `-i`, `--index-url`, `--extra-index-url` (repeats), `-f` name a package source
+[[case]]
+argv = ["pip", "install", "-i", "https://mirror.example/simple", "attrs"]
+action = "install"
+fields = { index_url = "https://mirror.example/simple", spec = ["attrs"] }
+effects = ["install_packages", "network", "override_index", "run_build_backend"]
+
+[[case]]
+argv = ["pip", "install", "--extra-index-url", "https://a.example/simple", "--extra-index-url=https://b.example/simple", "attrs"]
+action = "install"
+fields = { extra_index_url = ["https://a.example/simple", "https://b.example/simple"], spec = ["attrs"] }
+effects = ["install_packages", "network", "override_index", "run_build_backend"]
+
+[[case]]
+argv = ["pip", "install", "--no-index", "-f", "./wheels", "attrs"]
+action = "install"
+fields = { no_index = true, find_links = ["./wheels"], spec = ["attrs"] }
+effects = ["install_packages", "network", "override_index", "run_build_backend"]
+
+# `--pypi-url` is a hidden spelling of `--index-url` (cmdoptions.index_url)
+[[case]]
+argv = ["pip", "install", "--pypi-url=https://mirror.example/simple", "attrs"]
+action = "install"
+fields = { index_url = "https://mirror.example/simple", spec = ["attrs"] }
+effects = ["install_packages", "network", "override_index", "run_build_backend"]
+
+# `-i` is a plain store option: given twice it is `unmodeled` (the grammar does not guess "last wins")
+[[case]]
+argv = ["pip", "install", "-i", "https://a.example/simple", "-i", "https://b.example/simple", "attrs"]
+action = "unmodeled"
+
+# `--trusted-host` is a general option (pip --help); it disables TLS checks for that host, and repeats
+[[case]]
+argv = ["pip", "install", "--trusted-host", "mirror.example", "--trusted-host=other.example", "attrs"]
+action = "install"
+fields = { trusted_host = ["mirror.example", "other.example"], spec = ["attrs"] }
+effects = ["disable_tls_verification", "install_packages", "network", "run_build_backend"]
+
+# `--only-binary` / `--no-binary` accumulate (callbacks). They do not remove `run_build_backend`:
+# a local path, `-e`, or a requirements file still builds.
+[[case]]
+argv = ["pip", "install", "--only-binary", ":all:", "numpy"]
+action = "install"
+fields = { only_binary = [":all:"], spec = ["numpy"] }
+effects = ["install_packages", "network", "run_build_backend"]
+
+[[case]]
+argv = ["pip", "install", "--no-binary=:all:", "--no-binary", "lxml", "lxml"]
+action = "install"
+fields = { no_binary = [":all:", "lxml"], spec = ["lxml"] }
+effects = ["install_packages", "network", "run_build_backend"]
+
+# `-C KEY=VAL` repeats and is passed to the build backend
+[[case]]
+argv = ["pip", "install", "-C", "editable_mode=compat", "-Cfoo=bar", "-e", "."]
+action = "install"
+fields = { config_settings = ["editable_mode=compat", "foo=bar"], editable = ["."] }
+effects = ["install_packages", "network", "run_build_backend"]
+
+# A required value takes the next word even when it looks like a flag (optparse)
+[[case]]
+argv = ["pip", "install", "-r", "--user", "attrs"]
+action = "install"
+fields = { requirement = ["--user"], spec = ["attrs"] }
+effects = ["install_packages", "network", "run_build_backend"]
+
+# `--` ends the options: `-weird` is a requirement, not a cluster
+[[case]]
+argv = ["pip", "install", "--", "-weird"]
+action = "install"
+fields = { spec = ["-weird"] }
+effects = ["install_packages", "network", "run_build_backend"]
+
+# Install with only `-r`: no operand
+[[case]]
+argv = ["pip", "install", "--require-hashes", "--no-deps", "-r", "lock.txt"]
+action = "install"
+fields = { require_hashes = true, no_deps = true, requirement = ["lock.txt"] }
+effects = ["install_packages", "network", "run_build_backend"]
+
+# `--group` (pip 25.1+) and `--uploaded-prior-to`
+[[case]]
+argv = ["pip", "install", "--group", "dev", "--group=pyproject.toml:test", "--uploaded-prior-to", "P3D"]
+action = "install"
+fields = { group = ["dev", "pyproject.toml:test"], uploaded_prior_to = "P3D" }
+effects = ["install_packages", "network", "run_build_backend"]
+
+# pip accepts a unique prefix of a long option (optparse); the grammar does not
+[[case]]
+argv = ["pip", "install", "--upgr", "attrs"]
+action = "unmodeled"
+
+# An undeclared option (`--log` writes a file; left out on purpose)
+[[case]]
+argv = ["pip", "install", "--log", "pip.log", "attrs"]
+action = "unmodeled"
+
+# `--use-feature` changes behaviour in ways the grammar does not describe
+[[case]]
+argv = ["pip", "install", "--use-feature", "fast-deps", "attrs"]
+action = "unmodeled"
+
+# `-r=file` is not an optparse value spelling the grammar accepts (pip would read "=file")
+[[case]]
+argv = ["pip", "install", "-r=requirements.txt"]
+action = "unmodeled"
+
+# `--help` is not modeled
+[[case]]
+argv = ["pip", "install", "--help"]
+action = "unmodeled"
+
+# A command option before the command is refused by pip's main parser ("no such option")
+[[case]]
+argv = ["pip", "--user", "install", "attrs"]
+action = "unmodeled"
+
+# ---------------------------------------------------------------- general options
+
+# General options go before the command (main_parser.parse_command) and after it
+[[case]]
+argv = ["pip", "--isolated", "--disable-pip-version-check", "install", "attrs", "--no-input"]
+action = "install"
+fields = { isolated = true, disable_pip_version_check = true, no_input = true, spec = ["attrs"] }
+effects = ["install_packages", "network", "run_build_backend"]
+
+# `--proxy` sends traffic through a proxy; `--cert` replaces the CA bundle
+[[case]]
+argv = ["pip", "--proxy", "http://proxy.example:3128", "download", "attrs", "--cert=/etc/ca.pem"]
+action = "download"
+fields = { proxy = "http://proxy.example:3128", cert = "/etc/ca.pem", spec = ["attrs"] }
+effects = ["network", "override_proxy", "override_tls_trust", "run_build_backend"]
+
+# `--default-timeout` is a hidden spelling of `--timeout`; `--require-venv` of `--require-virtualenv`
+[[case]]
+argv = ["pip", "--default-timeout=60", "list", "--require-venv", "--retries", "2"]
+action = "list"
+fields = { timeout = "60", require_virtualenv = true, retries = "2" }
+
+# A general option with a value given before and after the command counts twice: `unmodeled`
+[[case]]
+argv = ["pip", "--timeout", "5", "list", "--timeout", "6"]
+action = "unmodeled"
+
+# `--python` before the command runs pip under that interpreter (main_parser.parse_command)
+[[case]]
+argv = ["pip", "--python", ".venv/bin/python", "install", "attrs"]
+action = "install"
+fields = { python = ".venv/bin/python", spec = ["attrs"] }
+effects = ["install_packages", "network", "other_interpreter", "run_build_backend"]
+
+[[case]]
+argv = ["pip", "--python=/usr/bin/python3", "list"]
+action = "list"
+fields = { python = "/usr/bin/python3" }
+effects = ["other_interpreter"]
+
+# pip refuses `--python` after the command name (base_command.py), so it is `unmodeled` here
+[[case]]
+argv = ["pip", "install", "--python", ".venv/bin/python", "attrs"]
+action = "unmodeled"
+
+# `-V`/`--version` and a bare `pip` are not commands
+[[case]]
+argv = ["pip", "--version"]
+action = "unmodeled"
+
+[[case]]
+argv = ["pip"]
+action = "unmodeled"
+
+# `--keyring-provider` and `--client-cert` are left out
+[[case]]
+argv = ["pip", "--keyring-provider", "subprocess", "install", "attrs"]
+action = "unmodeled"
+
+[[case]]
+argv = ["pip", "install", "--client-cert", "key.pem", "attrs"]
+action = "unmodeled"
+
+# `--no-cache-dir` takes no value on the command line (cmdoptions.no_cache)
+[[case]]
+argv = ["pip", "install", "--no-cache-dir", "attrs"]
+action = "install"
+fields = { no_cache_dir = true, spec = ["attrs"] }
+effects = ["install_packages", "network", "run_build_backend"]
+
+[[case]]
+argv = ["pip", "install", "--no-cache-dir=1", "attrs"]
+action = "unmodeled"
+
+# An unknown command and a wrong-case command
+[[case]]
+argv = ["pip", "instal", "attrs"]
+action = "unmodeled"
+
+[[case]]
+argv = ["pip", "INSTALL", "attrs"]
+action = "unmodeled"
+
+# ---------------------------------------------------------------- download, wheel, lock
+
+[[case]]
+argv = ["pip", "download", "-d", "dist", "--no-deps", "attrs==24.2.0"]
+action = "download"
+fields = { dest = "dist", no_deps = true, spec = ["attrs==24.2.0"] }
+effects = ["network", "run_build_backend"]
+
+# `--destination-dir` is a hidden spelling of `-d`; cross-platform download
+[[case]]
+argv = ["pip", "download", "--destination-dir=dist", "--platform", "manylinux2014_x86_64", "--platform", "any", "--python-version", "312", "--only-binary=:all:", "numpy"]
+action = "download"
+fields = { dest = "dist", platform = ["any", "manylinux2014_x86_64"], python_version = "312", only_binary = [":all:"], spec = ["numpy"] }
+effects = ["network", "run_build_backend"]
+
+# `pip download` has no `-e` (commands/download.py)
+[[case]]
+argv = ["pip", "download", "-e", "."]
+action = "unmodeled"
+
+[[case]]
+argv = ["pip", "download", "svn+https://svn.example.org/proj/trunk", "-i", "https://mirror.example/simple"]
+action = "download"
+fields = { spec = ["svn+https://svn.example.org/proj/trunk"], index_url = "https://mirror.example/simple" }
+effects = ["network", "override_index", "run_build_backend", "run_vcs"]
+
+# `pip wheel -w <dir>`; `--no-verify` is wheel-only
+[[case]]
+argv = ["pip", "wheel", "-w", "wheelhouse", "--no-verify", "-r", "requirements.txt"]
+action = "wheel"
+fields = { wheel_dir = "wheelhouse", no_verify = true, requirement = ["requirements.txt"] }
+effects = ["network", "run_build_backend"]
+
+[[case]]
+argv = ["pip", "wheel", "-e", "bzr+lp:proj"]
+action = "wheel"
+fields = { editable = ["bzr+lp:proj"] }
+effects = ["network", "run_build_backend", "run_vcs"]
+
+# `--dry-run` is install-only
+[[case]]
+argv = ["pip", "wheel", "--dry-run", "attrs"]
+action = "unmodeled"
+
+# `pip lock` (pip 25.1+, experimental) writes pylock.toml, or `-o`
+[[case]]
+argv = ["pip", "lock", "-e", "."]
+action = "lock"
+fields = { editable = ["."] }
+effects = ["network", "run_build_backend"]
+
+[[case]]
+argv = ["pip", "lock", "-o", "-", "-r", "requirements.in", "--output-dummy"]
+action = "unmodeled"
+
+[[case]]
+argv = ["pip", "lock", "--output=pylock.dev.toml", "-r", "requirements.in"]
+action = "lock"
+fields = { output = "pylock.dev.toml", requirement = ["requirements.in"] }
+effects = ["network", "run_build_backend"]
+
+# pip 26.3 has no `pip lock check`: the word is a requirement named "check"
+[[case]]
+argv = ["pip", "lock", "check"]
+action = "lock"
+fields = { spec = ["check"] }
+effects = ["network", "run_build_backend"]
+
+# ---------------------------------------------------------------- uninstall
+
+[[case]]
+argv = ["pip", "uninstall", "attrs"]
+action = "uninstall"
+fields = { package = ["attrs"] }
+effects = ["remove_packages"]
+
+# `-y` skips the prompt (uninstall --help)
+[[case]]
+argv = ["pip", "uninstall", "-y", "attrs", "six"]
+action = "uninstall"
+fields = { yes = true, package = ["attrs", "six"] }
+effects = ["remove_packages", "skip_prompt"]
+
+[[case]]
+argv = ["pip", "uninstall", "--yes", "--break-system-packages", "-r", "old.txt"]
+action = "uninstall"
+fields = { yes = true, break_system_packages = true, requirement = ["old.txt"] }
+effects = ["break_system_packages", "remove_packages", "skip_prompt"]
+
+# Cluster: `-yq`
+[[case]]
+argv = ["pip", "uninstall", "-yq", "attrs"]
+action = "uninstall"
+fields = { yes = true, quiet = true, package = ["attrs"] }
+effects = ["remove_packages", "skip_prompt"]
+
+# `--dry-run` does not exist for uninstall
+[[case]]
+argv = ["pip", "uninstall", "--dry-run", "attrs"]
+action = "unmodeled"
+
+# ---------------------------------------------------------------- list, show, freeze, inspect, check
+
+[[case]]
+argv = ["pip", "list"]
+action = "list"
+
+# `-o` queries the index (list --help); `--format=json`
+[[case]]
+argv = ["pip", "list", "-o", "--format=json"]
+action = "list"
+fields = { outdated = true, format = "json" }
+effects = ["network"]
+
+[[case]]
+argv = ["pip", "list", "--uptodate", "--format", "freeze", "-i", "https://mirror.example/simple"]
+action = "list"
+fields = { uptodate = true, format = "freeze", index_url = "https://mirror.example/simple" }
+effects = ["network", "override_index"]
+
+# In `list`, `-e` is a flag (editable projects), not a value option; cluster `-el`
+[[case]]
+argv = ["pip", "list", "-el", "--exclude", "pip", "--exclude", "setuptools"]
+action = "list"
+fields = { editable = true, local = true, exclude = ["pip", "setuptools"] }
+
+# `list` takes no operand
+[[case]]
+argv = ["pip", "list", "attrs"]
+action = "unmodeled"
+
+[[case]]
+argv = ["pip", "show", "-f", "attrs", "six"]
+action = "show"
+fields = { files = true, package = ["attrs", "six"] }
+
+# `show` needs a package
+[[case]]
+argv = ["pip", "show"]
+action = "unmodeled"
+
+[[case]]
+argv = ["pip", "freeze", "--all", "--exclude-editable", "-l"]
+action = "freeze"
+fields = { all = true, exclude_editable = true, local = true }
+
+# `freeze -r` orders output by a file; it installs nothing
+[[case]]
+argv = ["pip", "freeze", "-r", "requirements.txt"]
+action = "freeze"
+fields = { requirement = ["requirements.txt"] }
+
+[[case]]
+argv = ["pip", "freeze", "--path", "/opt/a", "--path=/opt/b"]
+action = "freeze"
+fields = { path = ["/opt/a", "/opt/b"] }
+
+[[case]]
+argv = ["pip", "inspect", "--local", "-q"]
+action = "inspect"
+fields = { local = true, quiet = true }
+
+[[case]]
+argv = ["pip", "check"]
+action = "check"
+
+[[case]]
+argv = ["pip", "check", "-v"]
+action = "check"
+fields = { verbose = true }
+
+[[case]]
+argv = ["pip", "check", "--all"]
+action = "unmodeled"
+
+# ---------------------------------------------------------------- hash, debug, help, completion, search
+
+[[case]]
+argv = ["pip", "hash", "-a", "sha512", "dist/attrs-24.2.0-py3-none-any.whl"]
+action = "hash"
+fields = { algorithm = "sha512", file = ["dist/attrs-24.2.0-py3-none-any.whl"] }
+
+[[case]]
+argv = ["pip", "hash", "-asha384", "a.whl", "b.tar.gz"]
+action = "hash"
+fields = { algorithm = "sha384", file = ["a.whl", "b.tar.gz"] }
+
+[[case]]
+argv = ["pip", "hash"]
+action = "unmodeled"
+
+[[case]]
+argv = ["pip", "debug", "--platform", "macosx_14_0_arm64", "-v"]
+action = "debug"
+fields = { platform = ["macosx_14_0_arm64"], verbose = true }
+
+[[case]]
+argv = ["pip", "help", "install"]
+action = "help"
+fields = { command = "install" }
+
+[[case]]
+argv = ["pip", "help"]
+action = "help"
+
+[[case]]
+argv = ["pip", "completion", "--zsh"]
+action = "completion"
+fields = { zsh = true }
+
+[[case]]
+argv = ["pip", "search", "requests", "-i", "https://pypi.example/pypi"]
+action = "search"
+fields = { query = ["requests"], index = "https://pypi.example/pypi" }
+effects = ["network", "override_index"]
+
+# ---------------------------------------------------------------- index versions
+
+[[case]]
+argv = ["pip", "index", "versions", "attrs"]
+action = "index_versions"
+fields = { package = "attrs" }
+effects = ["network"]
+
+[[case]]
+argv = ["pip", "index", "versions", "--json", "--pre", "attrs", "--index-url", "https://mirror.example/simple"]
+action = "index_versions"
+fields = { json = true, pre = true, package = "attrs", index_url = "https://mirror.example/simple" }
+effects = ["network", "override_index"]
+
+# An `anywhere` general option between the command words
+[[case]]
+argv = ["pip", "index", "-q", "versions", "attrs"]
+action = "index_versions"
+fields = { quiet = true, package = "attrs" }
+effects = ["network"]
+
+# `versions` takes exactly one package (commands/index.py)
+[[case]]
+argv = ["pip", "index", "versions", "attrs", "six"]
+action = "unmodeled"
+
+# A bare `pip index` is "Need an action"
+[[case]]
+argv = ["pip", "index"]
+action = "unmodeled"
+
+# ---------------------------------------------------------------- cache
+
+[[case]]
+argv = ["pip", "cache", "dir"]
+action = "cache_dir"
+
+[[case]]
+argv = ["pip", "cache", "info"]
+action = "cache_info"
+
+[[case]]
+argv = ["pip", "cache", "list", "attrs*", "--format=abspath"]
+action = "cache_list"
+fields = { pattern = "attrs*", format = "abspath" }
+
+[[case]]
+argv = ["pip", "cache", "list"]
+action = "cache_list"
+
+[[case]]
+argv = ["pip", "cache", "remove", "numpy"]
+action = "cache_remove"
+fields = { pattern = "numpy" }
+effects = ["delete_cache"]
+
+[[case]]
+argv = ["pip", "cache", "purge"]
+action = "cache_purge"
+effects = ["delete_cache"]
+
+# `cache remove` needs exactly one pattern; `cache dir` takes none
+[[case]]
+argv = ["pip", "cache", "remove"]
+action = "unmodeled"
+
+[[case]]
+argv = ["pip", "cache", "dir", "extra"]
+action = "unmodeled"
+
+[[case]]
+argv = ["pip", "cache", "clean"]
+action = "unmodeled"
+
+# ---------------------------------------------------------------- config
+
+[[case]]
+argv = ["pip", "config", "list"]
+action = "config_list"
+
+[[case]]
+argv = ["pip", "config", "debug"]
+action = "config_debug"
+
+[[case]]
+argv = ["pip", "config", "get", "global.index-url"]
+action = "config_get"
+fields = { name = "global.index-url" }
+
+# `set` and `unset` change a configuration file
+[[case]]
+argv = ["pip", "config", "set", "global.index-url", "https://mirror.example/simple"]
+action = "config_set"
+fields = { name = "global.index-url", value = "https://mirror.example/simple" }
+effects = ["override_config"]
+
+[[case]]
+argv = ["pip", "config", "set", "--user", "global.timeout", "60"]
+action = "config_set"
+fields = { user = true, name = "global.timeout", value = "60" }
+effects = ["override_config"]
+
+[[case]]
+argv = ["pip", "config", "unset", "--global", "global.index-url"]
+action = "config_unset"
+fields = { global = true, name = "global.index-url" }
+effects = ["override_config"]
+
+# `edit` runs an editor (`--editor`, VISUAL, or EDITOR)
+[[case]]
+argv = ["pip", "config", "edit", "--editor", "vi", "--site"]
+action = "config_edit"
+fields = { editor = "vi", site = true }
+effects = ["override_config", "run_program"]
+
+# pip accepts `pip config --user set ...` (config --help); a command option between the command
+# words is outside the grammar, so it is `unmodeled`
+[[case]]
+argv = ["pip", "config", "--user", "set", "global.timeout", "60"]
+action = "unmodeled"
+
+# `set` takes exactly a name and a value (configuration._config_handler)
+[[case]]
+argv = ["pip", "config", "set", "global.timeout"]
+action = "unmodeled"
+
+[[case]]
+argv = ["pip", "config", "set", "global.timeout", "60", "extra"]
+action = "unmodeled"
+
+# `--editor` is declared on `edit` only
+[[case]]
+argv = ["pip", "config", "set", "--editor", "vi", "global.timeout", "60"]
+action = "unmodeled"
