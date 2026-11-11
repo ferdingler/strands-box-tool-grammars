@@ -81,7 +81,7 @@ command, because pip refuses it after the command name.
 | `remove_packages` | Uninstalls packages | `uninstall` |
 | `run_build_backend` | May build a project or source distribution, which runs that project's code | `install`, `download`, `wheel`, `lock` |
 | `run_vcs` | Runs git, hg, svn, or bzr | a requirement or `-e` value that holds `+` and later `:`, such as `git+https://...`, `pkg @ git+https://...`, `GIT+ssh://...`, or `bzr+lp:...` (case of the scheme does not matter) |
-| `override_index` | Uses a package source that the command line names | `-i`/`--index-url`, `--extra-index-url`, `-f`/`--find-links`, `search -i`, and a requirement or `-e` value that is a URL (`://`), a VCS URL, or an archive (`.whl`, `.tar.gz`, `.tgz`, `.tar.bz2`, `.tar.xz`, `.zip`) |
+| `override_index` | Uses a package source that the command line names | `-i`/`--index-url`, `--extra-index-url`, `-f`/`--find-links`, `search -i`, and a requirement or `-e` value that is a URL (`://`), a VCS URL, or an archive (`.whl`, `.zip`, `.tar`, `.tar.gz`, `.tgz`, `.tar.bz2`, `.tbz`, `.tar.xz`, `.txz`, `.tlz`, `.tar.lz`, `.tar.lzma`) |
 | `opaque_input` | Reads requirements or pip options from a file the grammar cannot see | `-r`, `-c`, `--build-constraint`, `--requirements-from-script`, `--group` |
 | `write_file` | Writes a file or directory at a path the line names | `install --report <file>` (not `-`, and not removed by `--dry-run`), `download -d`, `wheel -w`, `lock -o <file>` (not `-`) |
 | `disable_tls_verification` | Trusts a host without valid HTTPS | `--trusted-host` |
@@ -167,7 +167,13 @@ A line that uses any of these is `unmodeled`, and only a rule that names
 - **Package sources are matched by pattern.** `override_index` and `run_vcs` on a requirement are
   found by its spelling. A local project directory (`.`, `./proj`) adds neither; it adds
   `run_build_backend` only. Patterns over-match on purpose: any value with `+` and later `:` is
-  read as a VCS URL.
+  read as a VCS URL. An archive suffix matches in lower case, upper case, or title case per part
+  (`.tar.gz`, `.TAR.GZ`, `.Tar.Gz`); other mixed case (`.tAr.gz`) is not matched, because a `like`
+  pattern is case sensitive. Every remote source still matches `://`.
+- **A project's own dependencies are not on the line.** A local project (`.`, `./proj`, `-e .`)
+  or a selected source distribution can declare dependencies such as `name @ git+https://...` or
+  `name @ https://...`. pip then runs the VCS program or fetches that URL, and the line shows no
+  `run_vcs` or `override_index`.
 - **Other written paths.** `--src` (editable checkouts), `--cache-dir`, and the default outputs of
   `download`, `wheel`, and `lock` in the current directory carry no `write_file` effect.
 - **`run_build_backend` is always on for install, download, wheel, and lock.** pip may build any

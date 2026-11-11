@@ -93,8 +93,9 @@ options.no_python_version_warning  = { flag = ["--no-python-version-warning"], a
 # `--only-binary :all:` does not remove `run_build_backend`: local paths, `-e`, VCS URLs, and
 # requirements files still build. A rule can read the `only_binary` field.
 # A requirement or `-e` value with `+` and later `:` is a VCS URL in any case (`pkg @ git+https`,
-# `GIT+ssh`, `bzr+lp:`; models/link.py::Link.is_vcs). A URL, a VCS URL, or an archive file is a
-# package source that the line names. `--report -` writes to stdout; `--dry-run` still writes a
+# `GIT+ssh`, `bzr+lp:`; models/link.py::Link.is_vcs). A URL, a VCS URL, or an archive file
+# (utils/filetypes.py ARCHIVE_EXTENSIONS, lower, UPPER, or Title case per part) is a package
+# source that the line names. `--report -` writes to stdout; `--dry-run` still writes a
 # `--report` file.
 [shell.install]
 usage = "pip [global options] install [options] [<spec>...]"
@@ -105,7 +106,7 @@ options.build_constraint         = { flag = ["--build-constraint"], value = "req
 options.requirements_from_script = { flag = ["--requirements-from-script"], value = "required", repeated = true, adds = ["opaque_input"] }
 options.no_deps                  = { flag = ["--no-deps", "--no-dependencies"] }
 options.only_deps                = { flag = ["--only-deps", "--only-dependencies"] }
-options.editable                 = { flag = ["-e", "--editable"], value = "required", repeated = true, when = [{ like = ["*+*:*"], adds = ["run_vcs"] }, { like = ["*://*", "*+*:*", "*.whl", "*.WHL", "*.tar.gz", "*.TAR.GZ", "*.tgz", "*.tar.bz2", "*.tar.xz", "*.zip", "*.ZIP"], adds = ["override_index"] }] }
+options.editable                 = { flag = ["-e", "--editable"], value = "required", repeated = true, when = [{ like = ["*+*:*"], adds = ["run_vcs"] }, { like = ["*://*", "*+*:*", "*.whl", "*.WHL", "*.Whl", "*.zip", "*.ZIP", "*.Zip", "*.tar.gz", "*.TAR.GZ", "*.Tar.Gz", "*.tgz", "*.TGZ", "*.Tgz", "*.tar", "*.TAR", "*.Tar", "*.tar.bz2", "*.TAR.BZ2", "*.Tar.Bz2", "*.tbz", "*.TBZ", "*.Tbz", "*.tar.xz", "*.TAR.XZ", "*.Tar.Xz", "*.txz", "*.TXZ", "*.Txz", "*.tlz", "*.TLZ", "*.Tlz", "*.tar.lz", "*.TAR.LZ", "*.Tar.Lz", "*.tar.lzma", "*.TAR.LZMA", "*.Tar.Lzma"], adds = ["override_index"] }] }
 options.dry_run                  = { flag = ["--dry-run"], removes = ["install_packages", "write_outside_env", "break_system_packages"] }
 options.target                   = { flag = ["-t", "--target"], value = "required", adds = ["write_outside_env"] }
 options.platform                 = { flag = ["--platform"], value = "required", repeated = true }
@@ -149,7 +150,7 @@ options.no_index                 = { flag = ["--no-index"] }
 options.refresh_package          = { flag = ["--refresh-package"], value = "required", repeated = true }
 options.find_links               = { flag = ["-f", "--find-links"], value = "required", repeated = true, adds = ["override_index"] }
 options.uploaded_prior_to        = { flag = ["--uploaded-prior-to"], value = "required" }
-operands.spec                    = { when = [{ like = ["*+*:*"], adds = ["run_vcs"] }, { like = ["*://*", "*+*:*", "*.whl", "*.WHL", "*.tar.gz", "*.TAR.GZ", "*.tgz", "*.tar.bz2", "*.tar.xz", "*.zip", "*.ZIP"], adds = ["override_index"] }] }
+operands.spec                    = { when = [{ like = ["*+*:*"], adds = ["run_vcs"] }, { like = ["*://*", "*+*:*", "*.whl", "*.WHL", "*.Whl", "*.zip", "*.ZIP", "*.Zip", "*.tar.gz", "*.TAR.GZ", "*.Tar.Gz", "*.tgz", "*.TGZ", "*.Tgz", "*.tar", "*.TAR", "*.Tar", "*.tar.bz2", "*.TAR.BZ2", "*.Tar.Bz2", "*.tbz", "*.TBZ", "*.Tbz", "*.tar.xz", "*.TAR.XZ", "*.Tar.Xz", "*.txz", "*.TXZ", "*.Txz", "*.tlz", "*.TLZ", "*.Tlz", "*.tar.lz", "*.TAR.LZ", "*.Tar.Lz", "*.tar.lzma", "*.TAR.LZMA", "*.Tar.Lzma"], adds = ["override_index"] }] }
 
 # ---------------------------------------------------------------- download
 # commands/download.py. Downloads into `-d` (default: the current directory). It resolves like
@@ -189,7 +190,7 @@ options.no_index                 = { flag = ["--no-index"] }
 options.refresh_package          = { flag = ["--refresh-package"], value = "required", repeated = true }
 options.find_links               = { flag = ["-f", "--find-links"], value = "required", repeated = true, adds = ["override_index"] }
 options.uploaded_prior_to        = { flag = ["--uploaded-prior-to"], value = "required" }
-operands.spec                    = { when = [{ like = ["*+*:*"], adds = ["run_vcs"] }, { like = ["*://*", "*+*:*", "*.whl", "*.WHL", "*.tar.gz", "*.TAR.GZ", "*.tgz", "*.tar.bz2", "*.tar.xz", "*.zip", "*.ZIP"], adds = ["override_index"] }] }
+operands.spec                    = { when = [{ like = ["*+*:*"], adds = ["run_vcs"] }, { like = ["*://*", "*+*:*", "*.whl", "*.WHL", "*.Whl", "*.zip", "*.ZIP", "*.Zip", "*.tar.gz", "*.TAR.GZ", "*.Tar.Gz", "*.tgz", "*.TGZ", "*.Tgz", "*.tar", "*.TAR", "*.Tar", "*.tar.bz2", "*.TAR.BZ2", "*.Tar.Bz2", "*.tbz", "*.TBZ", "*.Tbz", "*.tar.xz", "*.TAR.XZ", "*.Tar.Xz", "*.txz", "*.TXZ", "*.Txz", "*.tlz", "*.TLZ", "*.Tlz", "*.tar.lz", "*.TAR.LZ", "*.Tar.Lz", "*.tar.lzma", "*.TAR.LZMA", "*.Tar.Lzma"], adds = ["override_index"] }] }
 
 # ---------------------------------------------------------------- wheel
 # commands/wheel.py. Builds wheels into `-w` (default: the current directory).
@@ -201,7 +202,7 @@ options.no_build_isolation       = { flag = ["--no-build-isolation"] }
 options.check_build_dependencies = { flag = ["--check-build-dependencies"] }
 options.constraint               = { flag = ["-c", "--constraint"], value = "required", repeated = true, adds = ["opaque_input"] }
 options.build_constraint         = { flag = ["--build-constraint"], value = "required", repeated = true, adds = ["opaque_input"] }
-options.editable                 = { flag = ["-e", "--editable"], value = "required", repeated = true, when = [{ like = ["*+*:*"], adds = ["run_vcs"] }, { like = ["*://*", "*+*:*", "*.whl", "*.WHL", "*.tar.gz", "*.TAR.GZ", "*.tgz", "*.tar.bz2", "*.tar.xz", "*.zip", "*.ZIP"], adds = ["override_index"] }] }
+options.editable                 = { flag = ["-e", "--editable"], value = "required", repeated = true, when = [{ like = ["*+*:*"], adds = ["run_vcs"] }, { like = ["*://*", "*+*:*", "*.whl", "*.WHL", "*.Whl", "*.zip", "*.ZIP", "*.Zip", "*.tar.gz", "*.TAR.GZ", "*.Tar.Gz", "*.tgz", "*.TGZ", "*.Tgz", "*.tar", "*.TAR", "*.Tar", "*.tar.bz2", "*.TAR.BZ2", "*.Tar.Bz2", "*.tbz", "*.TBZ", "*.Tbz", "*.tar.xz", "*.TAR.XZ", "*.Tar.Xz", "*.txz", "*.TXZ", "*.Txz", "*.tlz", "*.TLZ", "*.Tlz", "*.tar.lz", "*.TAR.LZ", "*.Tar.Lz", "*.tar.lzma", "*.TAR.LZMA", "*.Tar.Lzma"], adds = ["override_index"] }] }
 options.requirement              = { flag = ["-r", "--requirement"], value = "required", repeated = true, adds = ["opaque_input"] }
 options.requirements_from_script = { flag = ["--requirements-from-script"], value = "required", repeated = true, adds = ["opaque_input"] }
 options.src                      = { flag = ["--src", "--source", "--source-dir", "--source-directory"], value = "required" }
@@ -227,7 +228,7 @@ options.no_index                 = { flag = ["--no-index"] }
 options.refresh_package          = { flag = ["--refresh-package"], value = "required", repeated = true }
 options.find_links               = { flag = ["-f", "--find-links"], value = "required", repeated = true, adds = ["override_index"] }
 options.uploaded_prior_to        = { flag = ["--uploaded-prior-to"], value = "required" }
-operands.spec                    = { when = [{ like = ["*+*:*"], adds = ["run_vcs"] }, { like = ["*://*", "*+*:*", "*.whl", "*.WHL", "*.tar.gz", "*.TAR.GZ", "*.tgz", "*.tar.bz2", "*.tar.xz", "*.zip", "*.ZIP"], adds = ["override_index"] }] }
+operands.spec                    = { when = [{ like = ["*+*:*"], adds = ["run_vcs"] }, { like = ["*://*", "*+*:*", "*.whl", "*.WHL", "*.Whl", "*.zip", "*.ZIP", "*.Zip", "*.tar.gz", "*.TAR.GZ", "*.Tar.Gz", "*.tgz", "*.TGZ", "*.Tgz", "*.tar", "*.TAR", "*.Tar", "*.tar.bz2", "*.TAR.BZ2", "*.Tar.Bz2", "*.tbz", "*.TBZ", "*.Tbz", "*.tar.xz", "*.TAR.XZ", "*.Tar.Xz", "*.txz", "*.TXZ", "*.Txz", "*.tlz", "*.TLZ", "*.Tlz", "*.tar.lz", "*.TAR.LZ", "*.Tar.Lz", "*.tar.lzma", "*.TAR.LZMA", "*.Tar.Lzma"], adds = ["override_index"] }] }
 
 # ---------------------------------------------------------------- lock
 # commands/lock.py (experimental). Writes `-o` (default: pylock.toml; `-` is stdout). pip 26.3 has
@@ -242,7 +243,7 @@ options.constraint               = { flag = ["-c", "--constraint"], value = "req
 options.build_constraint         = { flag = ["--build-constraint"], value = "required", repeated = true, adds = ["opaque_input"] }
 options.no_deps                  = { flag = ["--no-deps", "--no-dependencies"] }
 options.only_deps                = { flag = ["--only-deps", "--only-dependencies"] }
-options.editable                 = { flag = ["-e", "--editable"], value = "required", repeated = true, when = [{ like = ["*+*:*"], adds = ["run_vcs"] }, { like = ["*://*", "*+*:*", "*.whl", "*.WHL", "*.tar.gz", "*.TAR.GZ", "*.tgz", "*.tar.bz2", "*.tar.xz", "*.zip", "*.ZIP"], adds = ["override_index"] }] }
+options.editable                 = { flag = ["-e", "--editable"], value = "required", repeated = true, when = [{ like = ["*+*:*"], adds = ["run_vcs"] }, { like = ["*://*", "*+*:*", "*.whl", "*.WHL", "*.Whl", "*.zip", "*.ZIP", "*.Zip", "*.tar.gz", "*.TAR.GZ", "*.Tar.Gz", "*.tgz", "*.TGZ", "*.Tgz", "*.tar", "*.TAR", "*.Tar", "*.tar.bz2", "*.TAR.BZ2", "*.Tar.Bz2", "*.tbz", "*.TBZ", "*.Tbz", "*.tar.xz", "*.TAR.XZ", "*.Tar.Xz", "*.txz", "*.TXZ", "*.Txz", "*.tlz", "*.TLZ", "*.Tlz", "*.tar.lz", "*.TAR.LZ", "*.Tar.Lz", "*.tar.lzma", "*.TAR.LZMA", "*.Tar.Lzma"], adds = ["override_index"] }] }
 options.src                      = { flag = ["--src", "--source", "--source-dir", "--source-directory"], value = "required" }
 options.ignore_requires_python   = { flag = ["--ignore-requires-python"] }
 options.no_build_isolation       = { flag = ["--no-build-isolation"] }
@@ -265,7 +266,7 @@ options.no_index                 = { flag = ["--no-index"] }
 options.refresh_package          = { flag = ["--refresh-package"], value = "required", repeated = true }
 options.find_links               = { flag = ["-f", "--find-links"], value = "required", repeated = true, adds = ["override_index"] }
 options.uploaded_prior_to        = { flag = ["--uploaded-prior-to"], value = "required" }
-operands.spec                    = { when = [{ like = ["*+*:*"], adds = ["run_vcs"] }, { like = ["*://*", "*+*:*", "*.whl", "*.WHL", "*.tar.gz", "*.TAR.GZ", "*.tgz", "*.tar.bz2", "*.tar.xz", "*.zip", "*.ZIP"], adds = ["override_index"] }] }
+operands.spec                    = { when = [{ like = ["*+*:*"], adds = ["run_vcs"] }, { like = ["*://*", "*+*:*", "*.whl", "*.WHL", "*.Whl", "*.zip", "*.ZIP", "*.Zip", "*.tar.gz", "*.TAR.GZ", "*.Tar.Gz", "*.tgz", "*.TGZ", "*.Tgz", "*.tar", "*.TAR", "*.Tar", "*.tar.bz2", "*.TAR.BZ2", "*.Tar.Bz2", "*.tbz", "*.TBZ", "*.Tbz", "*.tar.xz", "*.TAR.XZ", "*.Tar.Xz", "*.txz", "*.TXZ", "*.Txz", "*.tlz", "*.TLZ", "*.Tlz", "*.tar.lz", "*.TAR.LZ", "*.Tar.Lz", "*.tar.lzma", "*.TAR.LZMA", "*.Tar.Lzma"], adds = ["override_index"] }] }
 
 # ---------------------------------------------------------------- uninstall
 # commands/uninstall.py. Asks before it deletes, unless `-y`.
