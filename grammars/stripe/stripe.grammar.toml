@@ -1,0 +1,2038 @@
+# Tool grammar for the Stripe CLI.
+#
+# Project:    Stripe CLI, https://github.com/stripe/stripe-cli (official, by Stripe)
+# Executable: stripe (a native Go binary)
+# Checked:    stripe version 1.55.10, tag v1.55.10 (commit cb778872cf48291bd53050554ade5321191dbb7c),
+#             against `stripe <command> --help` and the source at that tag.
+#
+# This file is the body of `[tool.<label>.grammar]` in box.toml. The resource-command section at the
+# end is generated from the CLI's own operation specs (pkg/cmd/resources/specs_gen.go).
+#
+# What this grammar cannot see:
+# - Environment variables. STRIPE_API_KEY replaces the logged-in key (a live key makes every
+#   command live), STRIPE_PROJECT_NAME selects a profile, STRIPE_DEVICE_NAME, XDG_CONFIG_HOME
+#   moves the config file, EDITOR, HTTPS_PROXY, STRIPE_PLUGINS_PATH.
+# - The config file (~/.config/stripe/config.toml) and the keyring. They hold the keys, the
+#   active account, and whether `stripe switch` put the profile in live mode. With an OAuth
+#   login in live mode, a command without `--live` is refused by the CLI; with a stored or
+#   environment API key, the key decides the mode, and `live_mode` here sees only the flag
+#   or a `--api-key` value.
+# - The contents of a fixture file (`stripe fixtures <file>`): it can send any API request.
+# - Plugins (`stripe apps`, `stripe projects`, ...) and `stripe provision`: other programs that
+#   the CLI starts. They are not modeled, so they are `unmodeled`.
+# - Cobra's bracket spelling of a nested parameter (`--address[city]=x`). The CLI maps it to
+#   `--address.city`; this grammar models only the dotted spelling that the help prints.
+
+format  = 1
+version = 1
+name    = "stripe"
+program = "stripe"
+
+[effects]
+network           = "Contacts the Stripe API or another network service"
+write_data        = "Creates or changes Stripe objects"
+delete_data       = "Deletes or cancels a Stripe object"
+move_money        = "Can charge, capture, pay, or refund money (real money in live mode)"
+live_mode         = "Targets live-mode data instead of test mode or a sandbox"
+api_key_override  = "Uses an API key from the command line instead of the logged-in session"
+select_project    = "Uses the keys and settings of a named project profile"
+override_config   = "Uses another config file, or changes a stored config value"
+credentials       = "Prints or removes stored credentials (API keys) in the config file"
+connected_account = "Acts on a connected account or another account context"
+skip_prompt       = "Skips the confirmation prompt"
+raw_request       = "Sends a request to an API path that the command line names"
+forward_events    = "Forwards webhook events to a URL that the command line or the account names"
+insecure_tls      = "Skips TLS certificate checks when it forwards events"
+write_files       = "Writes a file in the working directory (.env)"
+
+# Persistent flags of the root command (pkg/cmd/root.go). Cobra accepts them before, between,
+# and after the command words. Hidden flags (`--api-base`, `--access-base`, `--dashboard-base`)
+# and `--map` are left out, so a line that gives one is `unmodeled`.
+[global]
+options.api_key      = { flag = ["--api-key"], value = "required", anywhere = true, adds = ["api_key_override"], when = [{ like = ["*_live_*", "*_live"], adds = ["live_mode"] }] }
+options.color        = { flag = ["--color"], value = "required", anywhere = true }
+options.config       = { flag = ["--config"], value = "required", anywhere = true, adds = ["override_config"] }
+options.device_name  = { flag = ["--device-name"], value = "required", anywhere = true }
+options.log_level    = { flag = ["--log-level"], value = "required", anywhere = true }
+options.project_name = { flag = ["-p", "--project-name"], value = "required", anywhere = true, adds = ["select_project"] }
+
+# ---------------------------------------------------------------------------------------------------
+# Webhook, log, and fixture commands
+# ---------------------------------------------------------------------------------------------------
+
+# pkg/cmd/listen.go. Deprecated flags (`--thin-events`, `--forward-thin-to`,
+# `--forward-thin-connect-to`, `-j`/`--print-json`) and hidden ones (`--no-wss`, `--timeout`,
+# `--api-base`) are left out. `--load-from-webhooks-api` is the old name the CLI still maps to
+# `--use-configured-webhooks`.
+[shell.listen]
+usage = "stripe [global options] listen [options]"
+adds  = ["network"]
+options.all_snapshot            = { flag = ["--all-snapshot"] }
+options.all_thin                = { flag = ["--all-thin"] }
+options.connect_headers         = { flag = ["--connect-headers"], value = "required", repeated = true }
+options.events                  = { flag = ["-e", "--events"], value = "required", repeated = true }
+options.events_from             = { flag = ["--events-from"], value = "required" }
+options.format                  = { flag = ["--format"], value = "required" }
+options.forward_connect_to      = { flag = ["-c", "--forward-connect-to"], value = "required", adds = ["forward_events"] }
+options.forward_to              = { flag = ["-f", "--forward-to"], value = "required", adds = ["forward_events"] }
+options.headers                 = { flag = ["-H", "--headers"], value = "required", repeated = true }
+options.latest                  = { flag = ["-l", "--latest"] }
+options.live                    = { flag = ["--live"], adds = ["live_mode"] }
+options.print_secret            = { flag = ["--print-secret"] }
+options.skip_update             = { flag = ["-s", "--skip-update"] }
+options.skip_verify             = { flag = ["--skip-verify"], adds = ["insecure_tls"] }
+options.use_configured_webhooks = { flag = ["-a", "--use-configured-webhooks", "--load-from-webhooks-api"], adds = ["forward_events"] }
+
+# pkg/cmd/trigger.go. A trigger runs a built-in fixture: it creates real objects in the account,
+# such as customers, payment intents, charges, and refunds. The CLI asks for test-mode
+# credentials, but an explicit live API key still wins. `--raw` (a fixture given inline) and
+# `--edit` (opens an editor) are left out.
+[shell.trigger]
+usage = "stripe [global options] trigger [options] <event>"
+adds  = ["move_money", "network", "write_data"]
+options.add            = { flag = ["--add"], value = "required", repeated = true }
+options.api_version    = { flag = ["--api-version"], value = "required" }
+options.override       = { flag = ["--override"], value = "required", repeated = true }
+options.remove         = { flag = ["--remove"], value = "required", repeated = true }
+options.skip           = { flag = ["--skip"], value = "required", repeated = true }
+options.stripe_account = { flag = ["--stripe-account"], value = "required", adds = ["connected_account"] }
+
+# pkg/cmd/fixtures.go. A fixture file is a list of API requests with any method and path, and it
+# can update a `.env` file in the working directory. `--edit` is left out.
+[shell.fixtures]
+usage = "stripe [global options] fixtures [options] <file>"
+adds  = ["delete_data", "move_money", "network", "raw_request", "write_data", "write_files"]
+options.add            = { flag = ["--add"], value = "required", repeated = true }
+options.api_version    = { flag = ["--api-version"], value = "required" }
+options.override       = { flag = ["--override"], value = "required", repeated = true }
+options.remove         = { flag = ["--remove"], value = "required", repeated = true }
+options.skip           = { flag = ["--skip"], value = "required", repeated = true }
+options.stripe_account = { flag = ["--stripe-account"], value = "required", adds = ["connected_account"] }
+
+# pkg/cmd/logs/tail.go. Hidden `--no-wss` and `--api-base` are left out.
+[shell.logs_tail]
+usage = "stripe [global options] logs tail [options]"
+adds  = ["network"]
+options.filter_account          = { flag = ["--filter-account"], value = "required", repeated = true }
+options.filter_http_method      = { flag = ["--filter-http-method"], value = "required", repeated = true }
+options.filter_ip_address       = { flag = ["--filter-ip-address"], value = "required", repeated = true }
+options.filter_request_path     = { flag = ["--filter-request-path"], value = "required", repeated = true }
+options.filter_request_status   = { flag = ["--filter-request-status"], value = "required", repeated = true }
+options.filter_source           = { flag = ["--filter-source"], value = "required", repeated = true }
+options.filter_status_code      = { flag = ["--filter-status-code"], value = "required", repeated = true }
+options.filter_status_code_type = { flag = ["--filter-status-code-type"], value = "required", repeated = true }
+options.format                  = { flag = ["--format"], value = "required" }
+
+# ---------------------------------------------------------------------------------------------------
+# Raw API commands (pkg/cmd/get.go, post.go, delete.go; flags from requests/base.go::InitFlags).
+# The operand is an object ID (`get` only) or an API path. `-H`/`--request-header` can set any
+# header, including the account and the authorization, so it is left out.
+# ---------------------------------------------------------------------------------------------------
+
+[shell.get]
+usage = "stripe [global options] get [options] <path>"
+adds  = ["network", "raw_request"]
+options.confirm        = { flag = ["-c", "--confirm"] }
+options.dark_style     = { flag = ["--dark-style"] }
+options.data           = { flag = ["-d", "--data"], value = "required", repeated = true }
+options.dry_run        = { flag = ["--dry-run"] }
+options.ending_before  = { flag = ["-b", "--ending-before"], value = "required" }
+options.expand         = { flag = ["-e", "--expand"], value = "required", repeated = true }
+options.idempotency    = { flag = ["-i", "--idempotency"], value = "required" }
+options.limit          = { flag = ["-l", "--limit"], value = "required" }
+options.live           = { flag = ["--live"], adds = ["live_mode"] }
+options.show_headers   = { flag = ["-s", "--show-headers"] }
+options.starting_after = { flag = ["-a", "--starting-after"], value = "required" }
+options.stripe_account = { flag = ["--stripe-account"], value = "required", adds = ["connected_account"] }
+options.stripe_context = { flag = ["--stripe-context"], value = "required", adds = ["connected_account"] }
+options.stripe_version = { flag = ["-v", "--stripe-version"], value = "required" }
+
+# `post` can reach every write endpoint, so the grammar cannot tell a refund from a new customer.
+[shell.post]
+usage = "stripe [global options] post [options] <path>"
+adds  = ["move_money", "network", "raw_request", "write_data"]
+options.confirm        = { flag = ["-c", "--confirm"] }
+options.dark_style     = { flag = ["--dark-style"] }
+options.data           = { flag = ["-d", "--data"], value = "required", repeated = true }
+options.dry_run        = { flag = ["--dry-run"], removes = ["move_money", "write_data"] }
+options.expand         = { flag = ["-e", "--expand"], value = "required", repeated = true }
+options.idempotency    = { flag = ["-i", "--idempotency"], value = "required" }
+options.live           = { flag = ["--live"], adds = ["live_mode"] }
+options.show_headers   = { flag = ["-s", "--show-headers"] }
+options.stripe_account = { flag = ["--stripe-account"], value = "required", adds = ["connected_account"] }
+options.stripe_context = { flag = ["--stripe-context"], value = "required", adds = ["connected_account"] }
+options.stripe_version = { flag = ["-v", "--stripe-version"], value = "required" }
+
+# A DELETE asks for confirmation on stdin unless `-c` is given (requests/base.go::confirmCommand).
+# Some DELETE endpoints cancel rather than delete, and a cancel can create a final invoice.
+[shell.delete]
+usage = "stripe [global options] delete [options] <path>"
+adds  = ["delete_data", "move_money", "network", "raw_request"]
+options.confirm        = { flag = ["-c", "--confirm"], adds = ["skip_prompt"] }
+options.dark_style     = { flag = ["--dark-style"] }
+options.data           = { flag = ["-d", "--data"], value = "required", repeated = true }
+options.dry_run        = { flag = ["--dry-run"], removes = ["delete_data", "move_money"] }
+options.expand         = { flag = ["-e", "--expand"], value = "required", repeated = true }
+options.idempotency    = { flag = ["-i", "--idempotency"], value = "required" }
+options.live           = { flag = ["--live"], adds = ["live_mode"] }
+options.show_headers   = { flag = ["-s", "--show-headers"] }
+options.stripe_account = { flag = ["--stripe-account"], value = "required", adds = ["connected_account"] }
+options.stripe_context = { flag = ["--stripe-context"], value = "required", adds = ["connected_account"] }
+options.stripe_version = { flag = ["-v", "--stripe-version"], value = "required" }
+
+# ---------------------------------------------------------------------------------------------------
+# Local and account-information commands
+# ---------------------------------------------------------------------------------------------------
+
+# pkg/cmd/config.go. One action, because the flag picks the operation: `--set <field> <value>`,
+# `--unset <field>`, `--remove-profile <name>`, `--list`. `--list` prints the config file,
+# test-mode keys included. `-e`/`--edit` (opens an editor) is left out. The CLI stops reading
+# flags at the first operand, so `config color off --set` sets nothing; this grammar still gives it
+# `override_config`.
+[shell.config]
+usage = "stripe [global options] config [options] [<field> [<value>]]"
+options.confirm        = { flag = ["-c", "--confirm"], adds = ["skip_prompt"] }
+options.list           = { flag = ["--list"], adds = ["credentials"] }
+options.remove_profile = { flag = ["--remove-profile"], value = "required", adds = ["credentials", "override_config"] }
+options.set            = { flag = ["--set"], adds = ["override_config"] }
+options.unset          = { flag = ["--unset"], value = "required", adds = ["override_config"] }
+
+# pkg/cmd/version.go. It checks GitHub for a newer release, or fetches the notes with `--notes`.
+[shell.version]
+usage = "stripe [global options] version [options]"
+adds  = ["network"]
+options.notes = { flag = ["--notes"] }
+
+# pkg/cmd/whoami.go. Hidden `--access-base` and `--api-base` are left out.
+[shell.whoami]
+usage = "stripe [global options] whoami [options]"
+adds  = ["network"]
+options.format = { flag = ["--format"], value = "required" }
+
+# --------------------------------------------------------------------------------------------------
+# Resource commands. Generated from stripe-cli v1.55.10 pkg/cmd/resources/specs_gen.go: one
+# option per request parameter that NewOperationCmd registers as a flag (object parameters get
+# none), with the dotted-hyphen spelling the help prints. The shared request flags come from
+# requests/base.go::InitFlags. `--request-header`/`-H` and the hidden `--api-base` are left out.
+# --------------------------------------------------------------------------------------------------
+
+# GET /v1/balance
+[shell.balance_retrieve]
+usage = "stripe [global options] balance retrieve [options]"
+adds  = ["network"]
+options.confirm = { flag = ["-c", "--confirm"] }
+options.dark_style = { flag = ["--dark-style"] }
+options.data = { flag = ["-d", "--data"], value = "required", repeated = true }
+options.dry_run = { flag = ["--dry-run"], removes = ["delete_data", "move_money", "write_data"] }
+options.ending_before = { flag = ["-b", "--ending-before"], value = "required" }
+options.expand = { flag = ["-e", "--expand"], value = "required", repeated = true }
+options.idempotency = { flag = ["-i", "--idempotency"], value = "required" }
+options.limit = { flag = ["-l", "--limit"], value = "required" }
+options.live = { flag = ["--live"], adds = ["live_mode"] }
+options.show_headers = { flag = ["-s", "--show-headers"] }
+options.starting_after = { flag = ["-a", "--starting-after"], value = "required" }
+options.stripe_account = { flag = ["--stripe-account"], value = "required", adds = ["connected_account"] }
+options.stripe_context = { flag = ["--stripe-context"], value = "required", adds = ["connected_account"] }
+options.stripe_version = { flag = ["-v", "--stripe-version"], value = "required" }
+
+# POST /v1/customers
+[shell.customers_create]
+usage = "stripe [global options] customers create [options]"
+adds  = ["network", "write_data"]
+options.address = { flag = ["--address"], value = "required" }
+options.address_city = { flag = ["--address.city"], value = "required" }
+options.address_country = { flag = ["--address.country"], value = "required" }
+options.address_line1 = { flag = ["--address.line1"], value = "required" }
+options.address_line2 = { flag = ["--address.line2"], value = "required" }
+options.address_postal_code = { flag = ["--address.postal-code"], value = "required" }
+options.address_state = { flag = ["--address.state"], value = "required" }
+options.balance = { flag = ["--balance"], value = "required" }
+options.business_name = { flag = ["--business-name"], value = "required" }
+options.cash_balance_settings_reconciliation_mode = { flag = ["--cash-balance.settings.reconciliation-mode"], value = "required" }
+options.confirm = { flag = ["-c", "--confirm"] }
+options.dark_style = { flag = ["--dark-style"] }
+options.data = { flag = ["-d", "--data"], value = "required", repeated = true }
+options.description = { flag = ["--description"], value = "required" }
+options.dry_run = { flag = ["--dry-run"], removes = ["delete_data", "move_money", "write_data"] }
+options.email = { flag = ["--email"], value = "required" }
+options.expand = { flag = ["-e", "--expand"], value = "required", repeated = true }
+options.idempotency = { flag = ["-i", "--idempotency"], value = "required" }
+options.individual_name = { flag = ["--individual-name"], value = "required" }
+options.invoice_prefix = { flag = ["--invoice-prefix"], value = "required" }
+options.invoice_settings_default_payment_method = { flag = ["--invoice-settings.default-payment-method"], value = "required" }
+options.invoice_settings_footer = { flag = ["--invoice-settings.footer"], value = "required" }
+options.invoice_settings_rendering_options_amount_tax_display = { flag = ["--invoice-settings.rendering-options.amount-tax-display"], value = "required" }
+options.invoice_settings_rendering_options_template = { flag = ["--invoice-settings.rendering-options.template"], value = "required" }
+options.live = { flag = ["--live"], adds = ["live_mode"] }
+options.name = { flag = ["--name"], value = "required" }
+options.next_invoice_sequence = { flag = ["--next-invoice-sequence"], value = "required" }
+options.payment_method = { flag = ["--payment-method"], value = "required" }
+options.phone = { flag = ["--phone"], value = "required" }
+options.preferred_locales = { flag = ["--preferred-locales"], value = "required", repeated = true }
+options.shipping = { flag = ["--shipping"], value = "required" }
+options.shipping_address_city = { flag = ["--shipping.address.city"], value = "required" }
+options.shipping_address_country = { flag = ["--shipping.address.country"], value = "required" }
+options.shipping_address_line1 = { flag = ["--shipping.address.line1"], value = "required" }
+options.shipping_address_line2 = { flag = ["--shipping.address.line2"], value = "required" }
+options.shipping_address_postal_code = { flag = ["--shipping.address.postal-code"], value = "required" }
+options.shipping_address_state = { flag = ["--shipping.address.state"], value = "required" }
+options.shipping_name = { flag = ["--shipping.name"], value = "required" }
+options.shipping_phone = { flag = ["--shipping.phone"], value = "required" }
+options.show_headers = { flag = ["-s", "--show-headers"] }
+options.source = { flag = ["--source"], value = "required" }
+options.stripe_account = { flag = ["--stripe-account"], value = "required", adds = ["connected_account"] }
+options.stripe_context = { flag = ["--stripe-context"], value = "required", adds = ["connected_account"] }
+options.stripe_version = { flag = ["-v", "--stripe-version"], value = "required" }
+options.tax_exempt = { flag = ["--tax-exempt"], value = "required" }
+options.tax_ip_address = { flag = ["--tax.ip-address"], value = "required" }
+options.tax_validate_location = { flag = ["--tax.validate-location"], value = "required" }
+options.test_clock = { flag = ["--test-clock"], value = "required" }
+options.validate = { flag = ["--validate"], value = "optional" }
+
+# DELETE /v1/customers/{customer}
+[shell.customers_delete]
+usage = "stripe [global options] customers delete [options] <customer>"
+adds  = ["delete_data", "network"]
+options.confirm = { flag = ["-c", "--confirm"], adds = ["skip_prompt"] }
+options.dark_style = { flag = ["--dark-style"] }
+options.data = { flag = ["-d", "--data"], value = "required", repeated = true }
+options.dry_run = { flag = ["--dry-run"], removes = ["delete_data", "move_money", "write_data"] }
+options.expand = { flag = ["-e", "--expand"], value = "required", repeated = true }
+options.idempotency = { flag = ["-i", "--idempotency"], value = "required" }
+options.live = { flag = ["--live"], adds = ["live_mode"] }
+options.show_headers = { flag = ["-s", "--show-headers"] }
+options.stripe_account = { flag = ["--stripe-account"], value = "required", adds = ["connected_account"] }
+options.stripe_context = { flag = ["--stripe-context"], value = "required", adds = ["connected_account"] }
+options.stripe_version = { flag = ["-v", "--stripe-version"], value = "required" }
+
+# GET /v1/customers
+[shell.customers_list]
+usage = "stripe [global options] customers list [options]"
+adds  = ["network"]
+options.confirm = { flag = ["-c", "--confirm"] }
+options.created = { flag = ["--created"], value = "required" }
+options.dark_style = { flag = ["--dark-style"] }
+options.data = { flag = ["-d", "--data"], value = "required", repeated = true }
+options.dry_run = { flag = ["--dry-run"], removes = ["delete_data", "move_money", "write_data"] }
+options.email = { flag = ["--email"], value = "required" }
+options.ending_before = { flag = ["--ending-before"], value = "required" }
+options.expand = { flag = ["-e", "--expand"], value = "required", repeated = true }
+options.idempotency = { flag = ["-i", "--idempotency"], value = "required" }
+options.limit = { flag = ["--limit"], value = "required" }
+options.live = { flag = ["--live"], adds = ["live_mode"] }
+options.show_headers = { flag = ["-s", "--show-headers"] }
+options.starting_after = { flag = ["--starting-after"], value = "required" }
+options.stripe_account = { flag = ["--stripe-account"], value = "required", adds = ["connected_account"] }
+options.stripe_context = { flag = ["--stripe-context"], value = "required", adds = ["connected_account"] }
+options.stripe_version = { flag = ["-v", "--stripe-version"], value = "required" }
+options.test_clock = { flag = ["--test-clock"], value = "required" }
+
+# GET /v1/customers/{customer}
+[shell.customers_retrieve]
+usage = "stripe [global options] customers retrieve [options] <customer>"
+adds  = ["network"]
+options.confirm = { flag = ["-c", "--confirm"] }
+options.dark_style = { flag = ["--dark-style"] }
+options.data = { flag = ["-d", "--data"], value = "required", repeated = true }
+options.dry_run = { flag = ["--dry-run"], removes = ["delete_data", "move_money", "write_data"] }
+options.ending_before = { flag = ["-b", "--ending-before"], value = "required" }
+options.expand = { flag = ["-e", "--expand"], value = "required", repeated = true }
+options.idempotency = { flag = ["-i", "--idempotency"], value = "required" }
+options.limit = { flag = ["-l", "--limit"], value = "required" }
+options.live = { flag = ["--live"], adds = ["live_mode"] }
+options.show_headers = { flag = ["-s", "--show-headers"] }
+options.starting_after = { flag = ["-a", "--starting-after"], value = "required" }
+options.stripe_account = { flag = ["--stripe-account"], value = "required", adds = ["connected_account"] }
+options.stripe_context = { flag = ["--stripe-context"], value = "required", adds = ["connected_account"] }
+options.stripe_version = { flag = ["-v", "--stripe-version"], value = "required" }
+
+# GET /v1/customers/search
+[shell.customers_search]
+usage = "stripe [global options] customers search [options]"
+adds  = ["network"]
+options.confirm = { flag = ["-c", "--confirm"] }
+options.dark_style = { flag = ["--dark-style"] }
+options.data = { flag = ["-d", "--data"], value = "required", repeated = true }
+options.dry_run = { flag = ["--dry-run"], removes = ["delete_data", "move_money", "write_data"] }
+options.ending_before = { flag = ["-b", "--ending-before"], value = "required" }
+options.expand = { flag = ["-e", "--expand"], value = "required", repeated = true }
+options.idempotency = { flag = ["-i", "--idempotency"], value = "required" }
+options.limit = { flag = ["--limit"], value = "required" }
+options.live = { flag = ["--live"], adds = ["live_mode"] }
+options.page = { flag = ["--page"], value = "required" }
+options.query = { flag = ["--query"], value = "required" }
+options.show_headers = { flag = ["-s", "--show-headers"] }
+options.starting_after = { flag = ["-a", "--starting-after"], value = "required" }
+options.stripe_account = { flag = ["--stripe-account"], value = "required", adds = ["connected_account"] }
+options.stripe_context = { flag = ["--stripe-context"], value = "required", adds = ["connected_account"] }
+options.stripe_version = { flag = ["-v", "--stripe-version"], value = "required" }
+
+# POST /v1/customers/{customer}
+[shell.customers_update]
+usage = "stripe [global options] customers update [options] <customer>"
+adds  = ["network", "write_data"]
+options.address = { flag = ["--address"], value = "required" }
+options.address_city = { flag = ["--address.city"], value = "required" }
+options.address_country = { flag = ["--address.country"], value = "required" }
+options.address_line1 = { flag = ["--address.line1"], value = "required" }
+options.address_line2 = { flag = ["--address.line2"], value = "required" }
+options.address_postal_code = { flag = ["--address.postal-code"], value = "required" }
+options.address_state = { flag = ["--address.state"], value = "required" }
+options.balance = { flag = ["--balance"], value = "required" }
+options.business_name = { flag = ["--business-name"], value = "required" }
+options.cash_balance_settings_reconciliation_mode = { flag = ["--cash-balance.settings.reconciliation-mode"], value = "required" }
+options.confirm = { flag = ["-c", "--confirm"] }
+options.dark_style = { flag = ["--dark-style"] }
+options.data = { flag = ["-d", "--data"], value = "required", repeated = true }
+options.default_source = { flag = ["--default-source"], value = "required" }
+options.description = { flag = ["--description"], value = "required" }
+options.dry_run = { flag = ["--dry-run"], removes = ["delete_data", "move_money", "write_data"] }
+options.email = { flag = ["--email"], value = "required" }
+options.expand = { flag = ["-e", "--expand"], value = "required", repeated = true }
+options.idempotency = { flag = ["-i", "--idempotency"], value = "required" }
+options.individual_name = { flag = ["--individual-name"], value = "required" }
+options.invoice_prefix = { flag = ["--invoice-prefix"], value = "required" }
+options.invoice_settings_default_payment_method = { flag = ["--invoice-settings.default-payment-method"], value = "required" }
+options.invoice_settings_footer = { flag = ["--invoice-settings.footer"], value = "required" }
+options.invoice_settings_rendering_options_amount_tax_display = { flag = ["--invoice-settings.rendering-options.amount-tax-display"], value = "required" }
+options.invoice_settings_rendering_options_template = { flag = ["--invoice-settings.rendering-options.template"], value = "required" }
+options.live = { flag = ["--live"], adds = ["live_mode"] }
+options.name = { flag = ["--name"], value = "required" }
+options.next_invoice_sequence = { flag = ["--next-invoice-sequence"], value = "required" }
+options.phone = { flag = ["--phone"], value = "required" }
+options.preferred_locales = { flag = ["--preferred-locales"], value = "required", repeated = true }
+options.shipping = { flag = ["--shipping"], value = "required" }
+options.shipping_address_city = { flag = ["--shipping.address.city"], value = "required" }
+options.shipping_address_country = { flag = ["--shipping.address.country"], value = "required" }
+options.shipping_address_line1 = { flag = ["--shipping.address.line1"], value = "required" }
+options.shipping_address_line2 = { flag = ["--shipping.address.line2"], value = "required" }
+options.shipping_address_postal_code = { flag = ["--shipping.address.postal-code"], value = "required" }
+options.shipping_address_state = { flag = ["--shipping.address.state"], value = "required" }
+options.shipping_name = { flag = ["--shipping.name"], value = "required" }
+options.shipping_phone = { flag = ["--shipping.phone"], value = "required" }
+options.show_headers = { flag = ["-s", "--show-headers"] }
+options.source = { flag = ["--source"], value = "required" }
+options.stripe_account = { flag = ["--stripe-account"], value = "required", adds = ["connected_account"] }
+options.stripe_context = { flag = ["--stripe-context"], value = "required", adds = ["connected_account"] }
+options.stripe_version = { flag = ["-v", "--stripe-version"], value = "required" }
+options.tax_exempt = { flag = ["--tax-exempt"], value = "required" }
+options.tax_ip_address = { flag = ["--tax.ip-address"], value = "required" }
+options.tax_validate_location = { flag = ["--tax.validate-location"], value = "required" }
+options.validate = { flag = ["--validate"], value = "optional" }
+
+# POST /v1/charges/{charge}/capture
+[shell.charges_capture]
+usage = "stripe [global options] charges capture [options] <charge>"
+adds  = ["move_money", "network", "write_data"]
+options.amount = { flag = ["--amount"], value = "required" }
+options.application_fee = { flag = ["--application-fee"], value = "required" }
+options.application_fee_amount = { flag = ["--application-fee-amount"], value = "required" }
+options.confirm = { flag = ["-c", "--confirm"] }
+options.dark_style = { flag = ["--dark-style"] }
+options.data = { flag = ["-d", "--data"], value = "required", repeated = true }
+options.dry_run = { flag = ["--dry-run"], removes = ["delete_data", "move_money", "write_data"] }
+options.expand = { flag = ["-e", "--expand"], value = "required", repeated = true }
+options.idempotency = { flag = ["-i", "--idempotency"], value = "required" }
+options.live = { flag = ["--live"], adds = ["live_mode"] }
+options.receipt_email = { flag = ["--receipt-email"], value = "required" }
+options.show_headers = { flag = ["-s", "--show-headers"] }
+options.statement_descriptor = { flag = ["--statement-descriptor"], value = "required" }
+options.statement_descriptor_suffix = { flag = ["--statement-descriptor-suffix"], value = "required" }
+options.stripe_account = { flag = ["--stripe-account"], value = "required", adds = ["connected_account"] }
+options.stripe_context = { flag = ["--stripe-context"], value = "required", adds = ["connected_account"] }
+options.stripe_version = { flag = ["-v", "--stripe-version"], value = "required" }
+options.transfer_data_amount = { flag = ["--transfer-data.amount"], value = "required" }
+options.transfer_group = { flag = ["--transfer-group"], value = "required" }
+
+# POST /v1/charges
+[shell.charges_create]
+usage = "stripe [global options] charges create [options]"
+adds  = ["move_money", "network", "write_data"]
+options.amount = { flag = ["--amount"], value = "required" }
+options.application_fee = { flag = ["--application-fee"], value = "required" }
+options.application_fee_amount = { flag = ["--application-fee-amount"], value = "required" }
+options.capture = { flag = ["--capture"], value = "optional" }
+options.confirm = { flag = ["-c", "--confirm"] }
+options.currency = { flag = ["--currency"], value = "required" }
+options.customer = { flag = ["--customer"], value = "required" }
+options.dark_style = { flag = ["--dark-style"] }
+options.data = { flag = ["-d", "--data"], value = "required", repeated = true }
+options.description = { flag = ["--description"], value = "required" }
+options.destination_account = { flag = ["--destination.account"], value = "required" }
+options.destination_amount = { flag = ["--destination.amount"], value = "required" }
+options.dry_run = { flag = ["--dry-run"], removes = ["delete_data", "move_money", "write_data"] }
+options.expand = { flag = ["-e", "--expand"], value = "required", repeated = true }
+options.idempotency = { flag = ["-i", "--idempotency"], value = "required" }
+options.live = { flag = ["--live"], adds = ["live_mode"] }
+options.on_behalf_of = { flag = ["--on-behalf-of"], value = "required" }
+options.radar_options_session = { flag = ["--radar-options.session"], value = "required" }
+options.receipt_email = { flag = ["--receipt-email"], value = "required" }
+options.shipping_address_city = { flag = ["--shipping.address.city"], value = "required" }
+options.shipping_address_country = { flag = ["--shipping.address.country"], value = "required" }
+options.shipping_address_line1 = { flag = ["--shipping.address.line1"], value = "required" }
+options.shipping_address_line2 = { flag = ["--shipping.address.line2"], value = "required" }
+options.shipping_address_postal_code = { flag = ["--shipping.address.postal-code"], value = "required" }
+options.shipping_address_state = { flag = ["--shipping.address.state"], value = "required" }
+options.shipping_carrier = { flag = ["--shipping.carrier"], value = "required" }
+options.shipping_name = { flag = ["--shipping.name"], value = "required" }
+options.shipping_phone = { flag = ["--shipping.phone"], value = "required" }
+options.shipping_tracking_number = { flag = ["--shipping.tracking-number"], value = "required" }
+options.show_headers = { flag = ["-s", "--show-headers"] }
+options.source = { flag = ["--source"], value = "required" }
+options.statement_descriptor = { flag = ["--statement-descriptor"], value = "required" }
+options.statement_descriptor_suffix = { flag = ["--statement-descriptor-suffix"], value = "required" }
+options.stripe_account = { flag = ["--stripe-account"], value = "required", adds = ["connected_account"] }
+options.stripe_context = { flag = ["--stripe-context"], value = "required", adds = ["connected_account"] }
+options.stripe_version = { flag = ["-v", "--stripe-version"], value = "required" }
+options.transfer_data_amount = { flag = ["--transfer-data.amount"], value = "required" }
+options.transfer_data_description = { flag = ["--transfer-data.description"], value = "required" }
+options.transfer_data_destination = { flag = ["--transfer-data.destination"], value = "required" }
+options.transfer_group = { flag = ["--transfer-group"], value = "required" }
+
+# GET /v1/charges
+[shell.charges_list]
+usage = "stripe [global options] charges list [options]"
+adds  = ["network"]
+options.confirm = { flag = ["-c", "--confirm"] }
+options.created = { flag = ["--created"], value = "required" }
+options.customer = { flag = ["--customer"], value = "required" }
+options.dark_style = { flag = ["--dark-style"] }
+options.data = { flag = ["-d", "--data"], value = "required", repeated = true }
+options.dry_run = { flag = ["--dry-run"], removes = ["delete_data", "move_money", "write_data"] }
+options.ending_before = { flag = ["--ending-before"], value = "required" }
+options.expand = { flag = ["-e", "--expand"], value = "required", repeated = true }
+options.idempotency = { flag = ["-i", "--idempotency"], value = "required" }
+options.limit = { flag = ["--limit"], value = "required" }
+options.live = { flag = ["--live"], adds = ["live_mode"] }
+options.payment_intent = { flag = ["--payment-intent"], value = "required" }
+options.show_headers = { flag = ["-s", "--show-headers"] }
+options.starting_after = { flag = ["--starting-after"], value = "required" }
+options.stripe_account = { flag = ["--stripe-account"], value = "required", adds = ["connected_account"] }
+options.stripe_context = { flag = ["--stripe-context"], value = "required", adds = ["connected_account"] }
+options.stripe_version = { flag = ["-v", "--stripe-version"], value = "required" }
+options.transfer_group = { flag = ["--transfer-group"], value = "required" }
+
+# GET /v1/charges/{charge}
+[shell.charges_retrieve]
+usage = "stripe [global options] charges retrieve [options] <charge>"
+adds  = ["network"]
+options.confirm = { flag = ["-c", "--confirm"] }
+options.dark_style = { flag = ["--dark-style"] }
+options.data = { flag = ["-d", "--data"], value = "required", repeated = true }
+options.dry_run = { flag = ["--dry-run"], removes = ["delete_data", "move_money", "write_data"] }
+options.ending_before = { flag = ["-b", "--ending-before"], value = "required" }
+options.expand = { flag = ["-e", "--expand"], value = "required", repeated = true }
+options.idempotency = { flag = ["-i", "--idempotency"], value = "required" }
+options.limit = { flag = ["-l", "--limit"], value = "required" }
+options.live = { flag = ["--live"], adds = ["live_mode"] }
+options.show_headers = { flag = ["-s", "--show-headers"] }
+options.starting_after = { flag = ["-a", "--starting-after"], value = "required" }
+options.stripe_account = { flag = ["--stripe-account"], value = "required", adds = ["connected_account"] }
+options.stripe_context = { flag = ["--stripe-context"], value = "required", adds = ["connected_account"] }
+options.stripe_version = { flag = ["-v", "--stripe-version"], value = "required" }
+
+# GET /v1/charges/search
+[shell.charges_search]
+usage = "stripe [global options] charges search [options]"
+adds  = ["network"]
+options.confirm = { flag = ["-c", "--confirm"] }
+options.dark_style = { flag = ["--dark-style"] }
+options.data = { flag = ["-d", "--data"], value = "required", repeated = true }
+options.dry_run = { flag = ["--dry-run"], removes = ["delete_data", "move_money", "write_data"] }
+options.ending_before = { flag = ["-b", "--ending-before"], value = "required" }
+options.expand = { flag = ["-e", "--expand"], value = "required", repeated = true }
+options.idempotency = { flag = ["-i", "--idempotency"], value = "required" }
+options.limit = { flag = ["--limit"], value = "required" }
+options.live = { flag = ["--live"], adds = ["live_mode"] }
+options.page = { flag = ["--page"], value = "required" }
+options.query = { flag = ["--query"], value = "required" }
+options.show_headers = { flag = ["-s", "--show-headers"] }
+options.starting_after = { flag = ["-a", "--starting-after"], value = "required" }
+options.stripe_account = { flag = ["--stripe-account"], value = "required", adds = ["connected_account"] }
+options.stripe_context = { flag = ["--stripe-context"], value = "required", adds = ["connected_account"] }
+options.stripe_version = { flag = ["-v", "--stripe-version"], value = "required" }
+
+# POST /v1/charges/{charge}
+[shell.charges_update]
+usage = "stripe [global options] charges update [options] <charge>"
+adds  = ["network", "write_data"]
+options.confirm = { flag = ["-c", "--confirm"] }
+options.customer = { flag = ["--customer"], value = "required" }
+options.dark_style = { flag = ["--dark-style"] }
+options.data = { flag = ["-d", "--data"], value = "required", repeated = true }
+options.description = { flag = ["--description"], value = "required" }
+options.dry_run = { flag = ["--dry-run"], removes = ["delete_data", "move_money", "write_data"] }
+options.expand = { flag = ["-e", "--expand"], value = "required", repeated = true }
+options.fraud_details_user_report = { flag = ["--fraud-details.user-report"], value = "required" }
+options.idempotency = { flag = ["-i", "--idempotency"], value = "required" }
+options.live = { flag = ["--live"], adds = ["live_mode"] }
+options.receipt_email = { flag = ["--receipt-email"], value = "required" }
+options.shipping_address_city = { flag = ["--shipping.address.city"], value = "required" }
+options.shipping_address_country = { flag = ["--shipping.address.country"], value = "required" }
+options.shipping_address_line1 = { flag = ["--shipping.address.line1"], value = "required" }
+options.shipping_address_line2 = { flag = ["--shipping.address.line2"], value = "required" }
+options.shipping_address_postal_code = { flag = ["--shipping.address.postal-code"], value = "required" }
+options.shipping_address_state = { flag = ["--shipping.address.state"], value = "required" }
+options.shipping_carrier = { flag = ["--shipping.carrier"], value = "required" }
+options.shipping_name = { flag = ["--shipping.name"], value = "required" }
+options.shipping_phone = { flag = ["--shipping.phone"], value = "required" }
+options.shipping_tracking_number = { flag = ["--shipping.tracking-number"], value = "required" }
+options.show_headers = { flag = ["-s", "--show-headers"] }
+options.stripe_account = { flag = ["--stripe-account"], value = "required", adds = ["connected_account"] }
+options.stripe_context = { flag = ["--stripe-context"], value = "required", adds = ["connected_account"] }
+options.stripe_version = { flag = ["-v", "--stripe-version"], value = "required" }
+options.transfer_group = { flag = ["--transfer-group"], value = "required" }
+
+# POST /v1/refunds/{refund}/cancel
+[shell.refunds_cancel]
+usage = "stripe [global options] refunds cancel [options] <refund>"
+adds  = ["network", "write_data"]
+options.confirm = { flag = ["-c", "--confirm"] }
+options.dark_style = { flag = ["--dark-style"] }
+options.data = { flag = ["-d", "--data"], value = "required", repeated = true }
+options.dry_run = { flag = ["--dry-run"], removes = ["delete_data", "move_money", "write_data"] }
+options.expand = { flag = ["-e", "--expand"], value = "required", repeated = true }
+options.idempotency = { flag = ["-i", "--idempotency"], value = "required" }
+options.live = { flag = ["--live"], adds = ["live_mode"] }
+options.show_headers = { flag = ["-s", "--show-headers"] }
+options.stripe_account = { flag = ["--stripe-account"], value = "required", adds = ["connected_account"] }
+options.stripe_context = { flag = ["--stripe-context"], value = "required", adds = ["connected_account"] }
+options.stripe_version = { flag = ["-v", "--stripe-version"], value = "required" }
+
+# POST /v1/refunds
+[shell.refunds_create]
+usage = "stripe [global options] refunds create [options]"
+adds  = ["move_money", "network", "write_data"]
+options.amount = { flag = ["--amount"], value = "required" }
+options.charge = { flag = ["--charge"], value = "required" }
+options.confirm = { flag = ["-c", "--confirm"] }
+options.currency = { flag = ["--currency"], value = "required" }
+options.customer = { flag = ["--customer"], value = "required" }
+options.dark_style = { flag = ["--dark-style"] }
+options.data = { flag = ["-d", "--data"], value = "required", repeated = true }
+options.dry_run = { flag = ["--dry-run"], removes = ["delete_data", "move_money", "write_data"] }
+options.expand = { flag = ["-e", "--expand"], value = "required", repeated = true }
+options.idempotency = { flag = ["-i", "--idempotency"], value = "required" }
+options.instructions_email = { flag = ["--instructions-email"], value = "required" }
+options.live = { flag = ["--live"], adds = ["live_mode"] }
+options.origin = { flag = ["--origin"], value = "required" }
+options.payment_intent = { flag = ["--payment-intent"], value = "required" }
+options.reason = { flag = ["--reason"], value = "required" }
+options.refund_application_fee = { flag = ["--refund-application-fee"], value = "optional" }
+options.reverse_transfer = { flag = ["--reverse-transfer"], value = "optional" }
+options.show_headers = { flag = ["-s", "--show-headers"] }
+options.stripe_account = { flag = ["--stripe-account"], value = "required", adds = ["connected_account"] }
+options.stripe_context = { flag = ["--stripe-context"], value = "required", adds = ["connected_account"] }
+options.stripe_version = { flag = ["-v", "--stripe-version"], value = "required" }
+
+# GET /v1/refunds
+[shell.refunds_list]
+usage = "stripe [global options] refunds list [options]"
+adds  = ["network"]
+options.charge = { flag = ["--charge"], value = "required" }
+options.confirm = { flag = ["-c", "--confirm"] }
+options.created = { flag = ["--created"], value = "required" }
+options.dark_style = { flag = ["--dark-style"] }
+options.data = { flag = ["-d", "--data"], value = "required", repeated = true }
+options.dry_run = { flag = ["--dry-run"], removes = ["delete_data", "move_money", "write_data"] }
+options.ending_before = { flag = ["--ending-before"], value = "required" }
+options.expand = { flag = ["-e", "--expand"], value = "required", repeated = true }
+options.idempotency = { flag = ["-i", "--idempotency"], value = "required" }
+options.limit = { flag = ["--limit"], value = "required" }
+options.live = { flag = ["--live"], adds = ["live_mode"] }
+options.payment_intent = { flag = ["--payment-intent"], value = "required" }
+options.show_headers = { flag = ["-s", "--show-headers"] }
+options.starting_after = { flag = ["--starting-after"], value = "required" }
+options.stripe_account = { flag = ["--stripe-account"], value = "required", adds = ["connected_account"] }
+options.stripe_context = { flag = ["--stripe-context"], value = "required", adds = ["connected_account"] }
+options.stripe_version = { flag = ["-v", "--stripe-version"], value = "required" }
+
+# GET /v1/refunds/{refund}
+[shell.refunds_retrieve]
+usage = "stripe [global options] refunds retrieve [options] <refund>"
+adds  = ["network"]
+options.confirm = { flag = ["-c", "--confirm"] }
+options.dark_style = { flag = ["--dark-style"] }
+options.data = { flag = ["-d", "--data"], value = "required", repeated = true }
+options.dry_run = { flag = ["--dry-run"], removes = ["delete_data", "move_money", "write_data"] }
+options.ending_before = { flag = ["-b", "--ending-before"], value = "required" }
+options.expand = { flag = ["-e", "--expand"], value = "required", repeated = true }
+options.idempotency = { flag = ["-i", "--idempotency"], value = "required" }
+options.limit = { flag = ["-l", "--limit"], value = "required" }
+options.live = { flag = ["--live"], adds = ["live_mode"] }
+options.show_headers = { flag = ["-s", "--show-headers"] }
+options.starting_after = { flag = ["-a", "--starting-after"], value = "required" }
+options.stripe_account = { flag = ["--stripe-account"], value = "required", adds = ["connected_account"] }
+options.stripe_context = { flag = ["--stripe-context"], value = "required", adds = ["connected_account"] }
+options.stripe_version = { flag = ["-v", "--stripe-version"], value = "required" }
+
+# POST /v1/refunds/{refund}
+[shell.refunds_update]
+usage = "stripe [global options] refunds update [options] <refund>"
+adds  = ["network", "write_data"]
+options.confirm = { flag = ["-c", "--confirm"] }
+options.dark_style = { flag = ["--dark-style"] }
+options.data = { flag = ["-d", "--data"], value = "required", repeated = true }
+options.dry_run = { flag = ["--dry-run"], removes = ["delete_data", "move_money", "write_data"] }
+options.expand = { flag = ["-e", "--expand"], value = "required", repeated = true }
+options.idempotency = { flag = ["-i", "--idempotency"], value = "required" }
+options.live = { flag = ["--live"], adds = ["live_mode"] }
+options.show_headers = { flag = ["-s", "--show-headers"] }
+options.stripe_account = { flag = ["--stripe-account"], value = "required", adds = ["connected_account"] }
+options.stripe_context = { flag = ["--stripe-context"], value = "required", adds = ["connected_account"] }
+options.stripe_version = { flag = ["-v", "--stripe-version"], value = "required" }
+
+# DELETE /v1/subscriptions/{subscription_exposed_id}
+[shell.subscriptions_cancel]
+usage = "stripe [global options] subscriptions cancel [options] <subscription_exposed_id>"
+adds  = ["delete_data", "move_money", "network"]
+options.confirm = { flag = ["-c", "--confirm"], adds = ["skip_prompt"] }
+options.dark_style = { flag = ["--dark-style"] }
+options.data = { flag = ["-d", "--data"], value = "required", repeated = true }
+options.dry_run = { flag = ["--dry-run"], removes = ["delete_data", "move_money", "write_data"] }
+options.expand = { flag = ["-e", "--expand"], value = "required", repeated = true }
+options.idempotency = { flag = ["-i", "--idempotency"], value = "required" }
+options.live = { flag = ["--live"], adds = ["live_mode"] }
+options.show_headers = { flag = ["-s", "--show-headers"] }
+options.stripe_account = { flag = ["--stripe-account"], value = "required", adds = ["connected_account"] }
+options.stripe_context = { flag = ["--stripe-context"], value = "required", adds = ["connected_account"] }
+options.stripe_version = { flag = ["-v", "--stripe-version"], value = "required" }
+
+# POST /v1/subscriptions
+[shell.subscriptions_create]
+usage = "stripe [global options] subscriptions create [options]"
+adds  = ["move_money", "network", "write_data"]
+options.application_fee_percent = { flag = ["--application-fee-percent"], value = "required" }
+options.automatic_tax_enabled = { flag = ["--automatic-tax.enabled"], value = "optional" }
+options.automatic_tax_liability_account = { flag = ["--automatic-tax.liability.account"], value = "required" }
+options.automatic_tax_liability_type = { flag = ["--automatic-tax.liability.type"], value = "required" }
+options.backdate_start_date = { flag = ["--backdate-start-date"], value = "required" }
+options.billing_cycle_anchor = { flag = ["--billing-cycle-anchor"], value = "required" }
+options.billing_cycle_anchor_config_day_of_month = { flag = ["--billing-cycle-anchor-config.day-of-month"], value = "required" }
+options.billing_cycle_anchor_config_hour = { flag = ["--billing-cycle-anchor-config.hour"], value = "required" }
+options.billing_cycle_anchor_config_minute = { flag = ["--billing-cycle-anchor-config.minute"], value = "required" }
+options.billing_cycle_anchor_config_month = { flag = ["--billing-cycle-anchor-config.month"], value = "required" }
+options.billing_cycle_anchor_config_second = { flag = ["--billing-cycle-anchor-config.second"], value = "required" }
+options.billing_mode_flexible_proration_discounts = { flag = ["--billing-mode.flexible.proration-discounts"], value = "required" }
+options.billing_mode_type = { flag = ["--billing-mode.type"], value = "required" }
+options.billing_thresholds = { flag = ["--billing-thresholds"], value = "required" }
+options.billing_thresholds_amount_gte = { flag = ["--billing-thresholds.amount-gte"], value = "required" }
+options.billing_thresholds_reset_billing_cycle_anchor = { flag = ["--billing-thresholds.reset-billing-cycle-anchor"], value = "optional" }
+options.cancel_at = { flag = ["--cancel-at"], value = "required" }
+options.cancel_at_period_end = { flag = ["--cancel-at-period-end"], value = "optional" }
+options.collection_method = { flag = ["--collection-method"], value = "required" }
+options.confirm = { flag = ["-c", "--confirm"] }
+options.currency = { flag = ["--currency"], value = "required" }
+options.customer = { flag = ["--customer"], value = "required" }
+options.customer_account = { flag = ["--customer-account"], value = "required" }
+options.dark_style = { flag = ["--dark-style"] }
+options.data = { flag = ["-d", "--data"], value = "required", repeated = true }
+options.days_until_due = { flag = ["--days-until-due"], value = "required" }
+options.default_payment_method = { flag = ["--default-payment-method"], value = "required" }
+options.default_source = { flag = ["--default-source"], value = "required" }
+options.default_tax_rates = { flag = ["--default-tax-rates"], value = "required", repeated = true }
+options.description = { flag = ["--description"], value = "required" }
+options.dry_run = { flag = ["--dry-run"], removes = ["delete_data", "move_money", "write_data"] }
+options.expand = { flag = ["-e", "--expand"], value = "required", repeated = true }
+options.idempotency = { flag = ["-i", "--idempotency"], value = "required" }
+options.invoice_settings_account_tax_ids = { flag = ["--invoice-settings.account-tax-ids"], value = "required", repeated = true }
+options.invoice_settings_description = { flag = ["--invoice-settings.description"], value = "required" }
+options.invoice_settings_footer = { flag = ["--invoice-settings.footer"], value = "required" }
+options.invoice_settings_issuer_account = { flag = ["--invoice-settings.issuer.account"], value = "required" }
+options.invoice_settings_issuer_type = { flag = ["--invoice-settings.issuer.type"], value = "required" }
+options.live = { flag = ["--live"], adds = ["live_mode"] }
+options.off_session = { flag = ["--off-session"], value = "optional" }
+options.on_behalf_of = { flag = ["--on-behalf-of"], value = "required" }
+options.payment_behavior = { flag = ["--payment-behavior"], value = "required" }
+options.payment_settings_payment_method_options_acss_debit_mandate_options_transaction_type = { flag = ["--payment-settings.payment-method-options.acss-debit.mandate-options.transaction-type"], value = "required" }
+options.payment_settings_payment_method_options_acss_debit_verification_method = { flag = ["--payment-settings.payment-method-options.acss-debit.verification-method"], value = "required" }
+options.payment_settings_payment_method_options_bancontact_preferred_language = { flag = ["--payment-settings.payment-method-options.bancontact.preferred-language"], value = "required" }
+options.payment_settings_payment_method_options_billie_company_details_registered_address_city = { flag = ["--payment-settings.payment-method-options.billie.company-details.registered-address.city"], value = "required" }
+options.payment_settings_payment_method_options_billie_company_details_registered_address_country = { flag = ["--payment-settings.payment-method-options.billie.company-details.registered-address.country"], value = "required" }
+options.payment_settings_payment_method_options_billie_company_details_registered_address_line1 = { flag = ["--payment-settings.payment-method-options.billie.company-details.registered-address.line1"], value = "required" }
+options.payment_settings_payment_method_options_billie_company_details_registered_address_line2 = { flag = ["--payment-settings.payment-method-options.billie.company-details.registered-address.line2"], value = "required" }
+options.payment_settings_payment_method_options_billie_company_details_registered_address_postal_code = { flag = ["--payment-settings.payment-method-options.billie.company-details.registered-address.postal-code"], value = "required" }
+options.payment_settings_payment_method_options_billie_company_details_registered_address_state = { flag = ["--payment-settings.payment-method-options.billie.company-details.registered-address.state"], value = "required" }
+options.payment_settings_payment_method_options_billie_company_details_registered_name = { flag = ["--payment-settings.payment-method-options.billie.company-details.registered-name"], value = "required" }
+options.payment_settings_payment_method_options_billie_company_details_registration_number = { flag = ["--payment-settings.payment-method-options.billie.company-details.registration-number"], value = "required" }
+options.payment_settings_payment_method_options_billie_company_details_registration_type = { flag = ["--payment-settings.payment-method-options.billie.company-details.registration-type"], value = "required" }
+options.payment_settings_payment_method_options_billie_company_details_vat = { flag = ["--payment-settings.payment-method-options.billie.company-details.vat"], value = "required" }
+options.payment_settings_payment_method_options_blik_mandate_options_expires_at = { flag = ["--payment-settings.payment-method-options.blik.mandate-options.expires-at"], value = "required" }
+options.payment_settings_payment_method_options_card_mandate_options_amount = { flag = ["--payment-settings.payment-method-options.card.mandate-options.amount"], value = "required" }
+options.payment_settings_payment_method_options_card_mandate_options_amount_type = { flag = ["--payment-settings.payment-method-options.card.mandate-options.amount-type"], value = "required" }
+options.payment_settings_payment_method_options_card_mandate_options_description = { flag = ["--payment-settings.payment-method-options.card.mandate-options.description"], value = "required" }
+options.payment_settings_payment_method_options_card_network = { flag = ["--payment-settings.payment-method-options.card.network"], value = "required" }
+options.payment_settings_payment_method_options_card_request_three_d_secure = { flag = ["--payment-settings.payment-method-options.card.request-three-d-secure"], value = "required" }
+options.payment_settings_payment_method_options_customer_balance_bank_transfer_eu_bank_transfer_country = { flag = ["--payment-settings.payment-method-options.customer-balance.bank-transfer.eu-bank-transfer.country"], value = "required" }
+options.payment_settings_payment_method_options_customer_balance_bank_transfer_type = { flag = ["--payment-settings.payment-method-options.customer-balance.bank-transfer.type"], value = "required" }
+options.payment_settings_payment_method_options_customer_balance_funding_type = { flag = ["--payment-settings.payment-method-options.customer-balance.funding-type"], value = "required" }
+options.payment_settings_payment_method_options_payto_mandate_options_amount = { flag = ["--payment-settings.payment-method-options.payto.mandate-options.amount"], value = "required" }
+options.payment_settings_payment_method_options_payto_mandate_options_purpose = { flag = ["--payment-settings.payment-method-options.payto.mandate-options.purpose"], value = "required" }
+options.payment_settings_payment_method_options_pix_expires_after_seconds = { flag = ["--payment-settings.payment-method-options.pix.expires-after-seconds"], value = "required" }
+options.payment_settings_payment_method_options_pix_mandate_options_amount = { flag = ["--payment-settings.payment-method-options.pix.mandate-options.amount"], value = "required" }
+options.payment_settings_payment_method_options_pix_mandate_options_amount_includes_iof = { flag = ["--payment-settings.payment-method-options.pix.mandate-options.amount-includes-iof"], value = "required" }
+options.payment_settings_payment_method_options_pix_mandate_options_end_date = { flag = ["--payment-settings.payment-method-options.pix.mandate-options.end-date"], value = "required" }
+options.payment_settings_payment_method_options_pix_mandate_options_payment_schedule = { flag = ["--payment-settings.payment-method-options.pix.mandate-options.payment-schedule"], value = "required" }
+options.payment_settings_payment_method_options_upi_mandate_options_amount = { flag = ["--payment-settings.payment-method-options.upi.mandate-options.amount"], value = "required" }
+options.payment_settings_payment_method_options_upi_mandate_options_amount_type = { flag = ["--payment-settings.payment-method-options.upi.mandate-options.amount-type"], value = "required" }
+options.payment_settings_payment_method_options_upi_mandate_options_description = { flag = ["--payment-settings.payment-method-options.upi.mandate-options.description"], value = "required" }
+options.payment_settings_payment_method_options_upi_mandate_options_end_date = { flag = ["--payment-settings.payment-method-options.upi.mandate-options.end-date"], value = "required" }
+options.payment_settings_payment_method_options_us_bank_account_financial_connections_filters_account_subcategories = { flag = ["--payment-settings.payment-method-options.us-bank-account.financial-connections.filters.account-subcategories"], value = "required", repeated = true }
+options.payment_settings_payment_method_options_us_bank_account_financial_connections_permissions = { flag = ["--payment-settings.payment-method-options.us-bank-account.financial-connections.permissions"], value = "required", repeated = true }
+options.payment_settings_payment_method_options_us_bank_account_financial_connections_prefetch = { flag = ["--payment-settings.payment-method-options.us-bank-account.financial-connections.prefetch"], value = "required", repeated = true }
+options.payment_settings_payment_method_options_us_bank_account_verification_method = { flag = ["--payment-settings.payment-method-options.us-bank-account.verification-method"], value = "required" }
+options.payment_settings_payment_method_types = { flag = ["--payment-settings.payment-method-types"], value = "required", repeated = true }
+options.payment_settings_save_default_payment_method = { flag = ["--payment-settings.save-default-payment-method"], value = "required" }
+options.pending_invoice_item_interval = { flag = ["--pending-invoice-item-interval"], value = "required" }
+options.pending_invoice_item_interval_interval = { flag = ["--pending-invoice-item-interval.interval"], value = "required" }
+options.pending_invoice_item_interval_interval_count = { flag = ["--pending-invoice-item-interval.interval-count"], value = "required" }
+options.proration_behavior = { flag = ["--proration-behavior"], value = "required" }
+options.show_headers = { flag = ["-s", "--show-headers"] }
+options.stripe_account = { flag = ["--stripe-account"], value = "required", adds = ["connected_account"] }
+options.stripe_context = { flag = ["--stripe-context"], value = "required", adds = ["connected_account"] }
+options.stripe_version = { flag = ["-v", "--stripe-version"], value = "required" }
+options.transfer_data_amount_percent = { flag = ["--transfer-data.amount-percent"], value = "required" }
+options.transfer_data_destination = { flag = ["--transfer-data.destination"], value = "required" }
+options.trial_end = { flag = ["--trial-end"], value = "required" }
+options.trial_from_plan = { flag = ["--trial-from-plan"], value = "optional" }
+options.trial_period_days = { flag = ["--trial-period-days"], value = "required" }
+options.trial_settings_end_behavior_billing_cycle_anchor = { flag = ["--trial-settings.end-behavior.billing-cycle-anchor"], value = "required" }
+options.trial_settings_end_behavior_missing_payment_method = { flag = ["--trial-settings.end-behavior.missing-payment-method"], value = "required" }
+
+# GET /v1/subscriptions
+[shell.subscriptions_list]
+usage = "stripe [global options] subscriptions list [options]"
+adds  = ["network"]
+options.collection_method = { flag = ["--collection-method"], value = "required" }
+options.confirm = { flag = ["-c", "--confirm"] }
+options.created = { flag = ["--created"], value = "required" }
+options.current_period_end = { flag = ["--current-period-end"], value = "required" }
+options.current_period_start = { flag = ["--current-period-start"], value = "required" }
+options.customer = { flag = ["--customer"], value = "required" }
+options.customer_account = { flag = ["--customer-account"], value = "required" }
+options.dark_style = { flag = ["--dark-style"] }
+options.data = { flag = ["-d", "--data"], value = "required", repeated = true }
+options.dry_run = { flag = ["--dry-run"], removes = ["delete_data", "move_money", "write_data"] }
+options.ending_before = { flag = ["--ending-before"], value = "required" }
+options.expand = { flag = ["-e", "--expand"], value = "required", repeated = true }
+options.idempotency = { flag = ["-i", "--idempotency"], value = "required" }
+options.limit = { flag = ["--limit"], value = "required" }
+options.live = { flag = ["--live"], adds = ["live_mode"] }
+options.plan = { flag = ["--plan"], value = "required" }
+options.price = { flag = ["--price"], value = "required" }
+options.show_headers = { flag = ["-s", "--show-headers"] }
+options.starting_after = { flag = ["--starting-after"], value = "required" }
+options.status = { flag = ["--status"], value = "required" }
+options.stripe_account = { flag = ["--stripe-account"], value = "required", adds = ["connected_account"] }
+options.stripe_context = { flag = ["--stripe-context"], value = "required", adds = ["connected_account"] }
+options.stripe_version = { flag = ["-v", "--stripe-version"], value = "required" }
+options.test_clock = { flag = ["--test-clock"], value = "required" }
+
+# POST /v1/subscriptions/{subscription}/migrate
+[shell.subscriptions_migrate]
+usage = "stripe [global options] subscriptions migrate [options] <subscription>"
+adds  = ["network", "write_data"]
+options.billing_mode_flexible_proration_discounts = { flag = ["--billing-mode.flexible.proration-discounts"], value = "required" }
+options.billing_mode_type = { flag = ["--billing-mode.type"], value = "required" }
+options.confirm = { flag = ["-c", "--confirm"] }
+options.dark_style = { flag = ["--dark-style"] }
+options.data = { flag = ["-d", "--data"], value = "required", repeated = true }
+options.dry_run = { flag = ["--dry-run"], removes = ["delete_data", "move_money", "write_data"] }
+options.expand = { flag = ["-e", "--expand"], value = "required", repeated = true }
+options.idempotency = { flag = ["-i", "--idempotency"], value = "required" }
+options.live = { flag = ["--live"], adds = ["live_mode"] }
+options.show_headers = { flag = ["-s", "--show-headers"] }
+options.stripe_account = { flag = ["--stripe-account"], value = "required", adds = ["connected_account"] }
+options.stripe_context = { flag = ["--stripe-context"], value = "required", adds = ["connected_account"] }
+options.stripe_version = { flag = ["-v", "--stripe-version"], value = "required" }
+
+# POST /v1/subscriptions/{subscription}/pause
+[shell.subscriptions_pause]
+usage = "stripe [global options] subscriptions pause [options] <subscription>"
+adds  = ["network", "write_data"]
+options.bill_for_outstanding_usage_through_type = { flag = ["--bill-for.outstanding-usage-through.type"], value = "required" }
+options.bill_for_unused_time_from_type = { flag = ["--bill-for.unused-time-from.type"], value = "required" }
+options.confirm = { flag = ["-c", "--confirm"] }
+options.dark_style = { flag = ["--dark-style"] }
+options.data = { flag = ["-d", "--data"], value = "required", repeated = true }
+options.dry_run = { flag = ["--dry-run"], removes = ["delete_data", "move_money", "write_data"] }
+options.expand = { flag = ["-e", "--expand"], value = "required", repeated = true }
+options.idempotency = { flag = ["-i", "--idempotency"], value = "required" }
+options.invoicing_behavior = { flag = ["--invoicing-behavior"], value = "required" }
+options.live = { flag = ["--live"], adds = ["live_mode"] }
+options.show_headers = { flag = ["-s", "--show-headers"] }
+options.stripe_account = { flag = ["--stripe-account"], value = "required", adds = ["connected_account"] }
+options.stripe_context = { flag = ["--stripe-context"], value = "required", adds = ["connected_account"] }
+options.stripe_version = { flag = ["-v", "--stripe-version"], value = "required" }
+options.type = { flag = ["--type"], value = "required" }
+
+# POST /v1/subscriptions/{subscription}/resume
+[shell.subscriptions_resume]
+usage = "stripe [global options] subscriptions resume [options] <subscription>"
+adds  = ["move_money", "network", "write_data"]
+options.billing_cycle_anchor_type = { flag = ["--billing-cycle-anchor.type"], value = "required" }
+options.confirm = { flag = ["-c", "--confirm"] }
+options.dark_style = { flag = ["--dark-style"] }
+options.data = { flag = ["-d", "--data"], value = "required", repeated = true }
+options.dry_run = { flag = ["--dry-run"], removes = ["delete_data", "move_money", "write_data"] }
+options.expand = { flag = ["-e", "--expand"], value = "required", repeated = true }
+options.idempotency = { flag = ["-i", "--idempotency"], value = "required" }
+options.live = { flag = ["--live"], adds = ["live_mode"] }
+options.payment_behavior = { flag = ["--payment-behavior"], value = "required" }
+options.proration_behavior = { flag = ["--proration-behavior"], value = "required" }
+options.proration_date = { flag = ["--proration-date"], value = "required" }
+options.show_headers = { flag = ["-s", "--show-headers"] }
+options.stripe_account = { flag = ["--stripe-account"], value = "required", adds = ["connected_account"] }
+options.stripe_context = { flag = ["--stripe-context"], value = "required", adds = ["connected_account"] }
+options.stripe_version = { flag = ["-v", "--stripe-version"], value = "required" }
+
+# GET /v1/subscriptions/{subscription_exposed_id}
+[shell.subscriptions_retrieve]
+usage = "stripe [global options] subscriptions retrieve [options] <subscription_exposed_id>"
+adds  = ["network"]
+options.confirm = { flag = ["-c", "--confirm"] }
+options.dark_style = { flag = ["--dark-style"] }
+options.data = { flag = ["-d", "--data"], value = "required", repeated = true }
+options.dry_run = { flag = ["--dry-run"], removes = ["delete_data", "move_money", "write_data"] }
+options.ending_before = { flag = ["-b", "--ending-before"], value = "required" }
+options.expand = { flag = ["-e", "--expand"], value = "required", repeated = true }
+options.idempotency = { flag = ["-i", "--idempotency"], value = "required" }
+options.limit = { flag = ["-l", "--limit"], value = "required" }
+options.live = { flag = ["--live"], adds = ["live_mode"] }
+options.show_headers = { flag = ["-s", "--show-headers"] }
+options.starting_after = { flag = ["-a", "--starting-after"], value = "required" }
+options.stripe_account = { flag = ["--stripe-account"], value = "required", adds = ["connected_account"] }
+options.stripe_context = { flag = ["--stripe-context"], value = "required", adds = ["connected_account"] }
+options.stripe_version = { flag = ["-v", "--stripe-version"], value = "required" }
+
+# GET /v1/subscriptions/search
+[shell.subscriptions_search]
+usage = "stripe [global options] subscriptions search [options]"
+adds  = ["network"]
+options.confirm = { flag = ["-c", "--confirm"] }
+options.dark_style = { flag = ["--dark-style"] }
+options.data = { flag = ["-d", "--data"], value = "required", repeated = true }
+options.dry_run = { flag = ["--dry-run"], removes = ["delete_data", "move_money", "write_data"] }
+options.ending_before = { flag = ["-b", "--ending-before"], value = "required" }
+options.expand = { flag = ["-e", "--expand"], value = "required", repeated = true }
+options.idempotency = { flag = ["-i", "--idempotency"], value = "required" }
+options.limit = { flag = ["--limit"], value = "required" }
+options.live = { flag = ["--live"], adds = ["live_mode"] }
+options.page = { flag = ["--page"], value = "required" }
+options.query = { flag = ["--query"], value = "required" }
+options.show_headers = { flag = ["-s", "--show-headers"] }
+options.starting_after = { flag = ["-a", "--starting-after"], value = "required" }
+options.stripe_account = { flag = ["--stripe-account"], value = "required", adds = ["connected_account"] }
+options.stripe_context = { flag = ["--stripe-context"], value = "required", adds = ["connected_account"] }
+options.stripe_version = { flag = ["-v", "--stripe-version"], value = "required" }
+
+# POST /v1/subscriptions/{subscription_exposed_id}
+[shell.subscriptions_update]
+usage = "stripe [global options] subscriptions update [options] <subscription_exposed_id>"
+adds  = ["move_money", "network", "write_data"]
+options.application_fee_percent = { flag = ["--application-fee-percent"], value = "required" }
+options.automatic_tax_enabled = { flag = ["--automatic-tax.enabled"], value = "optional" }
+options.automatic_tax_liability_account = { flag = ["--automatic-tax.liability.account"], value = "required" }
+options.automatic_tax_liability_type = { flag = ["--automatic-tax.liability.type"], value = "required" }
+options.billing_cycle_anchor_type = { flag = ["--billing-cycle-anchor.type"], value = "required" }
+options.billing_thresholds = { flag = ["--billing-thresholds"], value = "required" }
+options.billing_thresholds_amount_gte = { flag = ["--billing-thresholds.amount-gte"], value = "required" }
+options.billing_thresholds_reset_billing_cycle_anchor = { flag = ["--billing-thresholds.reset-billing-cycle-anchor"], value = "optional" }
+options.cancel_at = { flag = ["--cancel-at"], value = "required" }
+options.cancel_at_period_end = { flag = ["--cancel-at-period-end"], value = "optional" }
+options.cancellation_details_comment = { flag = ["--cancellation-details.comment"], value = "required" }
+options.cancellation_details_feedback = { flag = ["--cancellation-details.feedback"], value = "required" }
+options.cancellation_details_feedback_option = { flag = ["--cancellation-details.feedback-option"], value = "required" }
+options.collection_method = { flag = ["--collection-method"], value = "required" }
+options.confirm = { flag = ["-c", "--confirm"] }
+options.dark_style = { flag = ["--dark-style"] }
+options.data = { flag = ["-d", "--data"], value = "required", repeated = true }
+options.days_until_due = { flag = ["--days-until-due"], value = "required" }
+options.default_payment_method = { flag = ["--default-payment-method"], value = "required" }
+options.default_source = { flag = ["--default-source"], value = "required" }
+options.default_tax_rates = { flag = ["--default-tax-rates"], value = "required", repeated = true }
+options.description = { flag = ["--description"], value = "required" }
+options.dry_run = { flag = ["--dry-run"], removes = ["delete_data", "move_money", "write_data"] }
+options.expand = { flag = ["-e", "--expand"], value = "required", repeated = true }
+options.idempotency = { flag = ["-i", "--idempotency"], value = "required" }
+options.invoice_settings_account_tax_ids = { flag = ["--invoice-settings.account-tax-ids"], value = "required", repeated = true }
+options.invoice_settings_description = { flag = ["--invoice-settings.description"], value = "required" }
+options.invoice_settings_footer = { flag = ["--invoice-settings.footer"], value = "required" }
+options.invoice_settings_issuer_account = { flag = ["--invoice-settings.issuer.account"], value = "required" }
+options.invoice_settings_issuer_type = { flag = ["--invoice-settings.issuer.type"], value = "required" }
+options.live = { flag = ["--live"], adds = ["live_mode"] }
+options.off_session = { flag = ["--off-session"], value = "optional" }
+options.on_behalf_of = { flag = ["--on-behalf-of"], value = "required" }
+options.pause_collection = { flag = ["--pause-collection"], value = "required" }
+options.pause_collection_behavior = { flag = ["--pause-collection.behavior"], value = "required" }
+options.pause_collection_resumes_at = { flag = ["--pause-collection.resumes-at"], value = "required" }
+options.payment_behavior = { flag = ["--payment-behavior"], value = "required" }
+options.payment_settings_payment_method_options_acss_debit_mandate_options_transaction_type = { flag = ["--payment-settings.payment-method-options.acss-debit.mandate-options.transaction-type"], value = "required" }
+options.payment_settings_payment_method_options_acss_debit_verification_method = { flag = ["--payment-settings.payment-method-options.acss-debit.verification-method"], value = "required" }
+options.payment_settings_payment_method_options_bancontact_preferred_language = { flag = ["--payment-settings.payment-method-options.bancontact.preferred-language"], value = "required" }
+options.payment_settings_payment_method_options_billie_company_details_registered_address_city = { flag = ["--payment-settings.payment-method-options.billie.company-details.registered-address.city"], value = "required" }
+options.payment_settings_payment_method_options_billie_company_details_registered_address_country = { flag = ["--payment-settings.payment-method-options.billie.company-details.registered-address.country"], value = "required" }
+options.payment_settings_payment_method_options_billie_company_details_registered_address_line1 = { flag = ["--payment-settings.payment-method-options.billie.company-details.registered-address.line1"], value = "required" }
+options.payment_settings_payment_method_options_billie_company_details_registered_address_line2 = { flag = ["--payment-settings.payment-method-options.billie.company-details.registered-address.line2"], value = "required" }
+options.payment_settings_payment_method_options_billie_company_details_registered_address_postal_code = { flag = ["--payment-settings.payment-method-options.billie.company-details.registered-address.postal-code"], value = "required" }
+options.payment_settings_payment_method_options_billie_company_details_registered_address_state = { flag = ["--payment-settings.payment-method-options.billie.company-details.registered-address.state"], value = "required" }
+options.payment_settings_payment_method_options_billie_company_details_registered_name = { flag = ["--payment-settings.payment-method-options.billie.company-details.registered-name"], value = "required" }
+options.payment_settings_payment_method_options_billie_company_details_registration_number = { flag = ["--payment-settings.payment-method-options.billie.company-details.registration-number"], value = "required" }
+options.payment_settings_payment_method_options_billie_company_details_registration_type = { flag = ["--payment-settings.payment-method-options.billie.company-details.registration-type"], value = "required" }
+options.payment_settings_payment_method_options_billie_company_details_vat = { flag = ["--payment-settings.payment-method-options.billie.company-details.vat"], value = "required" }
+options.payment_settings_payment_method_options_blik_mandate_options_expires_at = { flag = ["--payment-settings.payment-method-options.blik.mandate-options.expires-at"], value = "required" }
+options.payment_settings_payment_method_options_card_mandate_options_amount = { flag = ["--payment-settings.payment-method-options.card.mandate-options.amount"], value = "required" }
+options.payment_settings_payment_method_options_card_mandate_options_amount_type = { flag = ["--payment-settings.payment-method-options.card.mandate-options.amount-type"], value = "required" }
+options.payment_settings_payment_method_options_card_mandate_options_description = { flag = ["--payment-settings.payment-method-options.card.mandate-options.description"], value = "required" }
+options.payment_settings_payment_method_options_card_network = { flag = ["--payment-settings.payment-method-options.card.network"], value = "required" }
+options.payment_settings_payment_method_options_card_request_three_d_secure = { flag = ["--payment-settings.payment-method-options.card.request-three-d-secure"], value = "required" }
+options.payment_settings_payment_method_options_customer_balance_bank_transfer_eu_bank_transfer_country = { flag = ["--payment-settings.payment-method-options.customer-balance.bank-transfer.eu-bank-transfer.country"], value = "required" }
+options.payment_settings_payment_method_options_customer_balance_bank_transfer_type = { flag = ["--payment-settings.payment-method-options.customer-balance.bank-transfer.type"], value = "required" }
+options.payment_settings_payment_method_options_customer_balance_funding_type = { flag = ["--payment-settings.payment-method-options.customer-balance.funding-type"], value = "required" }
+options.payment_settings_payment_method_options_payto_mandate_options_amount = { flag = ["--payment-settings.payment-method-options.payto.mandate-options.amount"], value = "required" }
+options.payment_settings_payment_method_options_payto_mandate_options_purpose = { flag = ["--payment-settings.payment-method-options.payto.mandate-options.purpose"], value = "required" }
+options.payment_settings_payment_method_options_pix_expires_after_seconds = { flag = ["--payment-settings.payment-method-options.pix.expires-after-seconds"], value = "required" }
+options.payment_settings_payment_method_options_pix_mandate_options_amount = { flag = ["--payment-settings.payment-method-options.pix.mandate-options.amount"], value = "required" }
+options.payment_settings_payment_method_options_pix_mandate_options_amount_includes_iof = { flag = ["--payment-settings.payment-method-options.pix.mandate-options.amount-includes-iof"], value = "required" }
+options.payment_settings_payment_method_options_pix_mandate_options_end_date = { flag = ["--payment-settings.payment-method-options.pix.mandate-options.end-date"], value = "required" }
+options.payment_settings_payment_method_options_pix_mandate_options_payment_schedule = { flag = ["--payment-settings.payment-method-options.pix.mandate-options.payment-schedule"], value = "required" }
+options.payment_settings_payment_method_options_upi_mandate_options_amount = { flag = ["--payment-settings.payment-method-options.upi.mandate-options.amount"], value = "required" }
+options.payment_settings_payment_method_options_upi_mandate_options_amount_type = { flag = ["--payment-settings.payment-method-options.upi.mandate-options.amount-type"], value = "required" }
+options.payment_settings_payment_method_options_upi_mandate_options_description = { flag = ["--payment-settings.payment-method-options.upi.mandate-options.description"], value = "required" }
+options.payment_settings_payment_method_options_upi_mandate_options_end_date = { flag = ["--payment-settings.payment-method-options.upi.mandate-options.end-date"], value = "required" }
+options.payment_settings_payment_method_options_us_bank_account_financial_connections_filters_account_subcategories = { flag = ["--payment-settings.payment-method-options.us-bank-account.financial-connections.filters.account-subcategories"], value = "required", repeated = true }
+options.payment_settings_payment_method_options_us_bank_account_financial_connections_permissions = { flag = ["--payment-settings.payment-method-options.us-bank-account.financial-connections.permissions"], value = "required", repeated = true }
+options.payment_settings_payment_method_options_us_bank_account_financial_connections_prefetch = { flag = ["--payment-settings.payment-method-options.us-bank-account.financial-connections.prefetch"], value = "required", repeated = true }
+options.payment_settings_payment_method_options_us_bank_account_verification_method = { flag = ["--payment-settings.payment-method-options.us-bank-account.verification-method"], value = "required" }
+options.payment_settings_payment_method_types = { flag = ["--payment-settings.payment-method-types"], value = "required", repeated = true }
+options.payment_settings_save_default_payment_method = { flag = ["--payment-settings.save-default-payment-method"], value = "required" }
+options.pending_invoice_item_interval = { flag = ["--pending-invoice-item-interval"], value = "required" }
+options.pending_invoice_item_interval_interval = { flag = ["--pending-invoice-item-interval.interval"], value = "required" }
+options.pending_invoice_item_interval_interval_count = { flag = ["--pending-invoice-item-interval.interval-count"], value = "required" }
+options.proration_behavior = { flag = ["--proration-behavior"], value = "required" }
+options.proration_date = { flag = ["--proration-date"], value = "required" }
+options.show_headers = { flag = ["-s", "--show-headers"] }
+options.stripe_account = { flag = ["--stripe-account"], value = "required", adds = ["connected_account"] }
+options.stripe_context = { flag = ["--stripe-context"], value = "required", adds = ["connected_account"] }
+options.stripe_version = { flag = ["-v", "--stripe-version"], value = "required" }
+options.transfer_data = { flag = ["--transfer-data"], value = "required" }
+options.transfer_data_amount_percent = { flag = ["--transfer-data.amount-percent"], value = "required" }
+options.transfer_data_destination = { flag = ["--transfer-data.destination"], value = "required" }
+options.trial_end = { flag = ["--trial-end"], value = "required" }
+options.trial_from_plan = { flag = ["--trial-from-plan"], value = "optional" }
+options.trial_settings_end_behavior_billing_cycle_anchor = { flag = ["--trial-settings.end-behavior.billing-cycle-anchor"], value = "required" }
+options.trial_settings_end_behavior_missing_payment_method = { flag = ["--trial-settings.end-behavior.missing-payment-method"], value = "required" }
+
+# POST /v1/invoices
+[shell.invoices_create]
+usage = "stripe [global options] invoices create [options]"
+adds  = ["network", "write_data"]
+options.account_tax_ids = { flag = ["--account-tax-ids"], value = "required", repeated = true }
+options.application_fee_amount = { flag = ["--application-fee-amount"], value = "required" }
+options.auto_advance = { flag = ["--auto-advance"], value = "optional", adds = ["move_money"] }
+options.automatic_tax_enabled = { flag = ["--automatic-tax.enabled"], value = "optional" }
+options.automatic_tax_liability_account = { flag = ["--automatic-tax.liability.account"], value = "required" }
+options.automatic_tax_liability_type = { flag = ["--automatic-tax.liability.type"], value = "required" }
+options.automatically_finalizes_at = { flag = ["--automatically-finalizes-at"], value = "required" }
+options.collection_method = { flag = ["--collection-method"], value = "required" }
+options.confirm = { flag = ["-c", "--confirm"] }
+options.currency = { flag = ["--currency"], value = "required" }
+options.customer = { flag = ["--customer"], value = "required" }
+options.customer_account = { flag = ["--customer-account"], value = "required" }
+options.dark_style = { flag = ["--dark-style"] }
+options.data = { flag = ["-d", "--data"], value = "required", repeated = true }
+options.days_until_due = { flag = ["--days-until-due"], value = "required" }
+options.default_payment_method = { flag = ["--default-payment-method"], value = "required" }
+options.default_source = { flag = ["--default-source"], value = "required" }
+options.default_tax_rates = { flag = ["--default-tax-rates"], value = "required", repeated = true }
+options.description = { flag = ["--description"], value = "required" }
+options.dry_run = { flag = ["--dry-run"], removes = ["delete_data", "move_money", "write_data"] }
+options.due_date = { flag = ["--due-date"], value = "required" }
+options.effective_at = { flag = ["--effective-at"], value = "required" }
+options.expand = { flag = ["-e", "--expand"], value = "required", repeated = true }
+options.footer = { flag = ["--footer"], value = "required" }
+options.from_invoice_action = { flag = ["--from-invoice.action"], value = "required" }
+options.from_invoice_invoice = { flag = ["--from-invoice.invoice"], value = "required" }
+options.idempotency = { flag = ["-i", "--idempotency"], value = "required" }
+options.issuer_account = { flag = ["--issuer.account"], value = "required" }
+options.issuer_type = { flag = ["--issuer.type"], value = "required" }
+options.live = { flag = ["--live"], adds = ["live_mode"] }
+options.number = { flag = ["--number"], value = "required" }
+options.on_behalf_of = { flag = ["--on-behalf-of"], value = "required" }
+options.payment_settings_default_mandate = { flag = ["--payment-settings.default-mandate"], value = "required" }
+options.payment_settings_payment_method_options_acss_debit_mandate_options_transaction_type = { flag = ["--payment-settings.payment-method-options.acss-debit.mandate-options.transaction-type"], value = "required" }
+options.payment_settings_payment_method_options_acss_debit_verification_method = { flag = ["--payment-settings.payment-method-options.acss-debit.verification-method"], value = "required" }
+options.payment_settings_payment_method_options_bancontact_preferred_language = { flag = ["--payment-settings.payment-method-options.bancontact.preferred-language"], value = "required" }
+options.payment_settings_payment_method_options_billie_company_details_registered_address_city = { flag = ["--payment-settings.payment-method-options.billie.company-details.registered-address.city"], value = "required" }
+options.payment_settings_payment_method_options_billie_company_details_registered_address_country = { flag = ["--payment-settings.payment-method-options.billie.company-details.registered-address.country"], value = "required" }
+options.payment_settings_payment_method_options_billie_company_details_registered_address_line1 = { flag = ["--payment-settings.payment-method-options.billie.company-details.registered-address.line1"], value = "required" }
+options.payment_settings_payment_method_options_billie_company_details_registered_address_line2 = { flag = ["--payment-settings.payment-method-options.billie.company-details.registered-address.line2"], value = "required" }
+options.payment_settings_payment_method_options_billie_company_details_registered_address_postal_code = { flag = ["--payment-settings.payment-method-options.billie.company-details.registered-address.postal-code"], value = "required" }
+options.payment_settings_payment_method_options_billie_company_details_registered_address_state = { flag = ["--payment-settings.payment-method-options.billie.company-details.registered-address.state"], value = "required" }
+options.payment_settings_payment_method_options_billie_company_details_registered_name = { flag = ["--payment-settings.payment-method-options.billie.company-details.registered-name"], value = "required" }
+options.payment_settings_payment_method_options_billie_company_details_registration_number = { flag = ["--payment-settings.payment-method-options.billie.company-details.registration-number"], value = "required" }
+options.payment_settings_payment_method_options_billie_company_details_registration_type = { flag = ["--payment-settings.payment-method-options.billie.company-details.registration-type"], value = "required" }
+options.payment_settings_payment_method_options_billie_company_details_vat = { flag = ["--payment-settings.payment-method-options.billie.company-details.vat"], value = "required" }
+options.payment_settings_payment_method_options_billie_reference = { flag = ["--payment-settings.payment-method-options.billie.reference"], value = "required" }
+options.payment_settings_payment_method_options_card_installments_enabled = { flag = ["--payment-settings.payment-method-options.card.installments.enabled"], value = "optional" }
+options.payment_settings_payment_method_options_card_installments_plan_count = { flag = ["--payment-settings.payment-method-options.card.installments.plan.count"], value = "required" }
+options.payment_settings_payment_method_options_card_installments_plan_interval = { flag = ["--payment-settings.payment-method-options.card.installments.plan.interval"], value = "required" }
+options.payment_settings_payment_method_options_card_installments_plan_type = { flag = ["--payment-settings.payment-method-options.card.installments.plan.type"], value = "required" }
+options.payment_settings_payment_method_options_card_request_three_d_secure = { flag = ["--payment-settings.payment-method-options.card.request-three-d-secure"], value = "required" }
+options.payment_settings_payment_method_options_customer_balance_bank_transfer_eu_bank_transfer_country = { flag = ["--payment-settings.payment-method-options.customer-balance.bank-transfer.eu-bank-transfer.country"], value = "required" }
+options.payment_settings_payment_method_options_customer_balance_bank_transfer_type = { flag = ["--payment-settings.payment-method-options.customer-balance.bank-transfer.type"], value = "required" }
+options.payment_settings_payment_method_options_customer_balance_funding_type = { flag = ["--payment-settings.payment-method-options.customer-balance.funding-type"], value = "required" }
+options.payment_settings_payment_method_options_payto_mandate_options_amount = { flag = ["--payment-settings.payment-method-options.payto.mandate-options.amount"], value = "required" }
+options.payment_settings_payment_method_options_payto_mandate_options_purpose = { flag = ["--payment-settings.payment-method-options.payto.mandate-options.purpose"], value = "required" }
+options.payment_settings_payment_method_options_pix_amount_includes_iof = { flag = ["--payment-settings.payment-method-options.pix.amount-includes-iof"], value = "required" }
+options.payment_settings_payment_method_options_pix_expires_after_seconds = { flag = ["--payment-settings.payment-method-options.pix.expires-after-seconds"], value = "required" }
+options.payment_settings_payment_method_options_upi_mandate_options_amount = { flag = ["--payment-settings.payment-method-options.upi.mandate-options.amount"], value = "required" }
+options.payment_settings_payment_method_options_upi_mandate_options_amount_type = { flag = ["--payment-settings.payment-method-options.upi.mandate-options.amount-type"], value = "required" }
+options.payment_settings_payment_method_options_upi_mandate_options_description = { flag = ["--payment-settings.payment-method-options.upi.mandate-options.description"], value = "required" }
+options.payment_settings_payment_method_options_upi_mandate_options_end_date = { flag = ["--payment-settings.payment-method-options.upi.mandate-options.end-date"], value = "required" }
+options.payment_settings_payment_method_options_us_bank_account_financial_connections_filters_account_subcategories = { flag = ["--payment-settings.payment-method-options.us-bank-account.financial-connections.filters.account-subcategories"], value = "required", repeated = true }
+options.payment_settings_payment_method_options_us_bank_account_financial_connections_permissions = { flag = ["--payment-settings.payment-method-options.us-bank-account.financial-connections.permissions"], value = "required", repeated = true }
+options.payment_settings_payment_method_options_us_bank_account_financial_connections_prefetch = { flag = ["--payment-settings.payment-method-options.us-bank-account.financial-connections.prefetch"], value = "required", repeated = true }
+options.payment_settings_payment_method_options_us_bank_account_verification_method = { flag = ["--payment-settings.payment-method-options.us-bank-account.verification-method"], value = "required" }
+options.payment_settings_payment_method_types = { flag = ["--payment-settings.payment-method-types"], value = "required", repeated = true }
+options.pending_invoice_items_behavior = { flag = ["--pending-invoice-items-behavior"], value = "required" }
+options.rendering_amount_tax_display = { flag = ["--rendering.amount-tax-display"], value = "required" }
+options.rendering_pdf_page_size = { flag = ["--rendering.pdf.page-size"], value = "required" }
+options.rendering_template = { flag = ["--rendering.template"], value = "required" }
+options.rendering_template_version = { flag = ["--rendering.template-version"], value = "required" }
+options.shipping_cost_shipping_rate = { flag = ["--shipping-cost.shipping-rate"], value = "required" }
+options.shipping_cost_shipping_rate_data_delivery_estimate_maximum_unit = { flag = ["--shipping-cost.shipping-rate-data.delivery-estimate.maximum.unit"], value = "required" }
+options.shipping_cost_shipping_rate_data_delivery_estimate_maximum_value = { flag = ["--shipping-cost.shipping-rate-data.delivery-estimate.maximum.value"], value = "required" }
+options.shipping_cost_shipping_rate_data_delivery_estimate_minimum_unit = { flag = ["--shipping-cost.shipping-rate-data.delivery-estimate.minimum.unit"], value = "required" }
+options.shipping_cost_shipping_rate_data_delivery_estimate_minimum_value = { flag = ["--shipping-cost.shipping-rate-data.delivery-estimate.minimum.value"], value = "required" }
+options.shipping_cost_shipping_rate_data_display_name = { flag = ["--shipping-cost.shipping-rate-data.display-name"], value = "required" }
+options.shipping_cost_shipping_rate_data_fixed_amount_amount = { flag = ["--shipping-cost.shipping-rate-data.fixed-amount.amount"], value = "required" }
+options.shipping_cost_shipping_rate_data_fixed_amount_currency = { flag = ["--shipping-cost.shipping-rate-data.fixed-amount.currency"], value = "required" }
+options.shipping_cost_shipping_rate_data_tax_behavior = { flag = ["--shipping-cost.shipping-rate-data.tax-behavior"], value = "required" }
+options.shipping_cost_shipping_rate_data_tax_code = { flag = ["--shipping-cost.shipping-rate-data.tax-code"], value = "required" }
+options.shipping_cost_shipping_rate_data_type = { flag = ["--shipping-cost.shipping-rate-data.type"], value = "required" }
+options.shipping_details_address_city = { flag = ["--shipping-details.address.city"], value = "required" }
+options.shipping_details_address_country = { flag = ["--shipping-details.address.country"], value = "required" }
+options.shipping_details_address_line1 = { flag = ["--shipping-details.address.line1"], value = "required" }
+options.shipping_details_address_line2 = { flag = ["--shipping-details.address.line2"], value = "required" }
+options.shipping_details_address_postal_code = { flag = ["--shipping-details.address.postal-code"], value = "required" }
+options.shipping_details_address_state = { flag = ["--shipping-details.address.state"], value = "required" }
+options.shipping_details_name = { flag = ["--shipping-details.name"], value = "required" }
+options.shipping_details_phone = { flag = ["--shipping-details.phone"], value = "required" }
+options.show_headers = { flag = ["-s", "--show-headers"] }
+options.statement_descriptor = { flag = ["--statement-descriptor"], value = "required" }
+options.stripe_account = { flag = ["--stripe-account"], value = "required", adds = ["connected_account"] }
+options.stripe_context = { flag = ["--stripe-context"], value = "required", adds = ["connected_account"] }
+options.stripe_version = { flag = ["-v", "--stripe-version"], value = "required" }
+options.subscription = { flag = ["--subscription"], value = "required" }
+options.transfer_data_amount = { flag = ["--transfer-data.amount"], value = "required" }
+options.transfer_data_destination = { flag = ["--transfer-data.destination"], value = "required" }
+
+# DELETE /v1/invoices/{invoice}
+[shell.invoices_delete]
+usage = "stripe [global options] invoices delete [options] <invoice>"
+adds  = ["delete_data", "network"]
+options.confirm = { flag = ["-c", "--confirm"], adds = ["skip_prompt"] }
+options.dark_style = { flag = ["--dark-style"] }
+options.data = { flag = ["-d", "--data"], value = "required", repeated = true }
+options.dry_run = { flag = ["--dry-run"], removes = ["delete_data", "move_money", "write_data"] }
+options.expand = { flag = ["-e", "--expand"], value = "required", repeated = true }
+options.idempotency = { flag = ["-i", "--idempotency"], value = "required" }
+options.live = { flag = ["--live"], adds = ["live_mode"] }
+options.show_headers = { flag = ["-s", "--show-headers"] }
+options.stripe_account = { flag = ["--stripe-account"], value = "required", adds = ["connected_account"] }
+options.stripe_context = { flag = ["--stripe-context"], value = "required", adds = ["connected_account"] }
+options.stripe_version = { flag = ["-v", "--stripe-version"], value = "required" }
+
+# GET /v1/invoices
+[shell.invoices_list]
+usage = "stripe [global options] invoices list [options]"
+adds  = ["network"]
+options.collection_method = { flag = ["--collection-method"], value = "required" }
+options.confirm = { flag = ["-c", "--confirm"] }
+options.created = { flag = ["--created"], value = "required" }
+options.customer = { flag = ["--customer"], value = "required" }
+options.customer_account = { flag = ["--customer-account"], value = "required" }
+options.dark_style = { flag = ["--dark-style"] }
+options.data = { flag = ["-d", "--data"], value = "required", repeated = true }
+options.dry_run = { flag = ["--dry-run"], removes = ["delete_data", "move_money", "write_data"] }
+options.due_date = { flag = ["--due-date"], value = "required" }
+options.ending_before = { flag = ["--ending-before"], value = "required" }
+options.expand = { flag = ["-e", "--expand"], value = "required", repeated = true }
+options.idempotency = { flag = ["-i", "--idempotency"], value = "required" }
+options.limit = { flag = ["--limit"], value = "required" }
+options.live = { flag = ["--live"], adds = ["live_mode"] }
+options.show_headers = { flag = ["-s", "--show-headers"] }
+options.starting_after = { flag = ["--starting-after"], value = "required" }
+options.status = { flag = ["--status"], value = "required" }
+options.stripe_account = { flag = ["--stripe-account"], value = "required", adds = ["connected_account"] }
+options.stripe_context = { flag = ["--stripe-context"], value = "required", adds = ["connected_account"] }
+options.stripe_version = { flag = ["-v", "--stripe-version"], value = "required" }
+options.subscription = { flag = ["--subscription"], value = "required" }
+
+# POST /v1/invoices/{invoice}/pay
+[shell.invoices_pay]
+usage = "stripe [global options] invoices pay [options] <invoice>"
+adds  = ["move_money", "network", "write_data"]
+options.confirm = { flag = ["-c", "--confirm"] }
+options.dark_style = { flag = ["--dark-style"] }
+options.data = { flag = ["-d", "--data"], value = "required", repeated = true }
+options.dry_run = { flag = ["--dry-run"], removes = ["delete_data", "move_money", "write_data"] }
+options.expand = { flag = ["-e", "--expand"], value = "required", repeated = true }
+options.forgive = { flag = ["--forgive"], value = "optional" }
+options.idempotency = { flag = ["-i", "--idempotency"], value = "required" }
+options.live = { flag = ["--live"], adds = ["live_mode"] }
+options.mandate = { flag = ["--mandate"], value = "required" }
+options.off_session = { flag = ["--off-session"], value = "optional" }
+options.paid_out_of_band = { flag = ["--paid-out-of-band"], value = "optional" }
+options.payment_method = { flag = ["--payment-method"], value = "required" }
+options.show_headers = { flag = ["-s", "--show-headers"] }
+options.source = { flag = ["--source"], value = "required" }
+options.stripe_account = { flag = ["--stripe-account"], value = "required", adds = ["connected_account"] }
+options.stripe_context = { flag = ["--stripe-context"], value = "required", adds = ["connected_account"] }
+options.stripe_version = { flag = ["-v", "--stripe-version"], value = "required" }
+
+# GET /v1/invoices/{invoice}
+[shell.invoices_retrieve]
+usage = "stripe [global options] invoices retrieve [options] <invoice>"
+adds  = ["network"]
+options.confirm = { flag = ["-c", "--confirm"] }
+options.dark_style = { flag = ["--dark-style"] }
+options.data = { flag = ["-d", "--data"], value = "required", repeated = true }
+options.dry_run = { flag = ["--dry-run"], removes = ["delete_data", "move_money", "write_data"] }
+options.ending_before = { flag = ["-b", "--ending-before"], value = "required" }
+options.expand = { flag = ["-e", "--expand"], value = "required", repeated = true }
+options.idempotency = { flag = ["-i", "--idempotency"], value = "required" }
+options.limit = { flag = ["-l", "--limit"], value = "required" }
+options.live = { flag = ["--live"], adds = ["live_mode"] }
+options.show_headers = { flag = ["-s", "--show-headers"] }
+options.starting_after = { flag = ["-a", "--starting-after"], value = "required" }
+options.stripe_account = { flag = ["--stripe-account"], value = "required", adds = ["connected_account"] }
+options.stripe_context = { flag = ["--stripe-context"], value = "required", adds = ["connected_account"] }
+options.stripe_version = { flag = ["-v", "--stripe-version"], value = "required" }
+
+# GET /v1/invoices/search
+[shell.invoices_search]
+usage = "stripe [global options] invoices search [options]"
+adds  = ["network"]
+options.confirm = { flag = ["-c", "--confirm"] }
+options.dark_style = { flag = ["--dark-style"] }
+options.data = { flag = ["-d", "--data"], value = "required", repeated = true }
+options.dry_run = { flag = ["--dry-run"], removes = ["delete_data", "move_money", "write_data"] }
+options.ending_before = { flag = ["-b", "--ending-before"], value = "required" }
+options.expand = { flag = ["-e", "--expand"], value = "required", repeated = true }
+options.idempotency = { flag = ["-i", "--idempotency"], value = "required" }
+options.limit = { flag = ["--limit"], value = "required" }
+options.live = { flag = ["--live"], adds = ["live_mode"] }
+options.page = { flag = ["--page"], value = "required" }
+options.query = { flag = ["--query"], value = "required" }
+options.show_headers = { flag = ["-s", "--show-headers"] }
+options.starting_after = { flag = ["-a", "--starting-after"], value = "required" }
+options.stripe_account = { flag = ["--stripe-account"], value = "required", adds = ["connected_account"] }
+options.stripe_context = { flag = ["--stripe-context"], value = "required", adds = ["connected_account"] }
+options.stripe_version = { flag = ["-v", "--stripe-version"], value = "required" }
+
+# POST /v1/invoices/{invoice}
+[shell.invoices_update]
+usage = "stripe [global options] invoices update [options] <invoice>"
+adds  = ["network", "write_data"]
+options.account_tax_ids = { flag = ["--account-tax-ids"], value = "required", repeated = true }
+options.application_fee_amount = { flag = ["--application-fee-amount"], value = "required" }
+options.auto_advance = { flag = ["--auto-advance"], value = "optional", adds = ["move_money"] }
+options.automatic_tax_enabled = { flag = ["--automatic-tax.enabled"], value = "optional" }
+options.automatic_tax_liability_account = { flag = ["--automatic-tax.liability.account"], value = "required" }
+options.automatic_tax_liability_type = { flag = ["--automatic-tax.liability.type"], value = "required" }
+options.automatically_finalizes_at = { flag = ["--automatically-finalizes-at"], value = "required" }
+options.collection_method = { flag = ["--collection-method"], value = "required" }
+options.confirm = { flag = ["-c", "--confirm"] }
+options.dark_style = { flag = ["--dark-style"] }
+options.data = { flag = ["-d", "--data"], value = "required", repeated = true }
+options.days_until_due = { flag = ["--days-until-due"], value = "required" }
+options.default_payment_method = { flag = ["--default-payment-method"], value = "required" }
+options.default_source = { flag = ["--default-source"], value = "required" }
+options.default_tax_rates = { flag = ["--default-tax-rates"], value = "required", repeated = true }
+options.description = { flag = ["--description"], value = "required" }
+options.dry_run = { flag = ["--dry-run"], removes = ["delete_data", "move_money", "write_data"] }
+options.due_date = { flag = ["--due-date"], value = "required" }
+options.effective_at = { flag = ["--effective-at"], value = "required" }
+options.expand = { flag = ["-e", "--expand"], value = "required", repeated = true }
+options.footer = { flag = ["--footer"], value = "required" }
+options.idempotency = { flag = ["-i", "--idempotency"], value = "required" }
+options.issuer_account = { flag = ["--issuer.account"], value = "required" }
+options.issuer_type = { flag = ["--issuer.type"], value = "required" }
+options.live = { flag = ["--live"], adds = ["live_mode"] }
+options.number = { flag = ["--number"], value = "required" }
+options.on_behalf_of = { flag = ["--on-behalf-of"], value = "required" }
+options.payment_settings_default_mandate = { flag = ["--payment-settings.default-mandate"], value = "required" }
+options.payment_settings_payment_method_options_acss_debit_mandate_options_transaction_type = { flag = ["--payment-settings.payment-method-options.acss-debit.mandate-options.transaction-type"], value = "required" }
+options.payment_settings_payment_method_options_acss_debit_verification_method = { flag = ["--payment-settings.payment-method-options.acss-debit.verification-method"], value = "required" }
+options.payment_settings_payment_method_options_bancontact_preferred_language = { flag = ["--payment-settings.payment-method-options.bancontact.preferred-language"], value = "required" }
+options.payment_settings_payment_method_options_billie_company_details_registered_address_city = { flag = ["--payment-settings.payment-method-options.billie.company-details.registered-address.city"], value = "required" }
+options.payment_settings_payment_method_options_billie_company_details_registered_address_country = { flag = ["--payment-settings.payment-method-options.billie.company-details.registered-address.country"], value = "required" }
+options.payment_settings_payment_method_options_billie_company_details_registered_address_line1 = { flag = ["--payment-settings.payment-method-options.billie.company-details.registered-address.line1"], value = "required" }
+options.payment_settings_payment_method_options_billie_company_details_registered_address_line2 = { flag = ["--payment-settings.payment-method-options.billie.company-details.registered-address.line2"], value = "required" }
+options.payment_settings_payment_method_options_billie_company_details_registered_address_postal_code = { flag = ["--payment-settings.payment-method-options.billie.company-details.registered-address.postal-code"], value = "required" }
+options.payment_settings_payment_method_options_billie_company_details_registered_address_state = { flag = ["--payment-settings.payment-method-options.billie.company-details.registered-address.state"], value = "required" }
+options.payment_settings_payment_method_options_billie_company_details_registered_name = { flag = ["--payment-settings.payment-method-options.billie.company-details.registered-name"], value = "required" }
+options.payment_settings_payment_method_options_billie_company_details_registration_number = { flag = ["--payment-settings.payment-method-options.billie.company-details.registration-number"], value = "required" }
+options.payment_settings_payment_method_options_billie_company_details_registration_type = { flag = ["--payment-settings.payment-method-options.billie.company-details.registration-type"], value = "required" }
+options.payment_settings_payment_method_options_billie_company_details_vat = { flag = ["--payment-settings.payment-method-options.billie.company-details.vat"], value = "required" }
+options.payment_settings_payment_method_options_billie_reference = { flag = ["--payment-settings.payment-method-options.billie.reference"], value = "required" }
+options.payment_settings_payment_method_options_card_installments_enabled = { flag = ["--payment-settings.payment-method-options.card.installments.enabled"], value = "optional" }
+options.payment_settings_payment_method_options_card_installments_plan_count = { flag = ["--payment-settings.payment-method-options.card.installments.plan.count"], value = "required" }
+options.payment_settings_payment_method_options_card_installments_plan_interval = { flag = ["--payment-settings.payment-method-options.card.installments.plan.interval"], value = "required" }
+options.payment_settings_payment_method_options_card_installments_plan_type = { flag = ["--payment-settings.payment-method-options.card.installments.plan.type"], value = "required" }
+options.payment_settings_payment_method_options_card_request_three_d_secure = { flag = ["--payment-settings.payment-method-options.card.request-three-d-secure"], value = "required" }
+options.payment_settings_payment_method_options_customer_balance_bank_transfer_eu_bank_transfer_country = { flag = ["--payment-settings.payment-method-options.customer-balance.bank-transfer.eu-bank-transfer.country"], value = "required" }
+options.payment_settings_payment_method_options_customer_balance_bank_transfer_type = { flag = ["--payment-settings.payment-method-options.customer-balance.bank-transfer.type"], value = "required" }
+options.payment_settings_payment_method_options_customer_balance_funding_type = { flag = ["--payment-settings.payment-method-options.customer-balance.funding-type"], value = "required" }
+options.payment_settings_payment_method_options_payto_mandate_options_amount = { flag = ["--payment-settings.payment-method-options.payto.mandate-options.amount"], value = "required" }
+options.payment_settings_payment_method_options_payto_mandate_options_purpose = { flag = ["--payment-settings.payment-method-options.payto.mandate-options.purpose"], value = "required" }
+options.payment_settings_payment_method_options_pix_amount_includes_iof = { flag = ["--payment-settings.payment-method-options.pix.amount-includes-iof"], value = "required" }
+options.payment_settings_payment_method_options_pix_expires_after_seconds = { flag = ["--payment-settings.payment-method-options.pix.expires-after-seconds"], value = "required" }
+options.payment_settings_payment_method_options_upi_mandate_options_amount = { flag = ["--payment-settings.payment-method-options.upi.mandate-options.amount"], value = "required" }
+options.payment_settings_payment_method_options_upi_mandate_options_amount_type = { flag = ["--payment-settings.payment-method-options.upi.mandate-options.amount-type"], value = "required" }
+options.payment_settings_payment_method_options_upi_mandate_options_description = { flag = ["--payment-settings.payment-method-options.upi.mandate-options.description"], value = "required" }
+options.payment_settings_payment_method_options_upi_mandate_options_end_date = { flag = ["--payment-settings.payment-method-options.upi.mandate-options.end-date"], value = "required" }
+options.payment_settings_payment_method_options_us_bank_account_financial_connections_filters_account_subcategories = { flag = ["--payment-settings.payment-method-options.us-bank-account.financial-connections.filters.account-subcategories"], value = "required", repeated = true }
+options.payment_settings_payment_method_options_us_bank_account_financial_connections_permissions = { flag = ["--payment-settings.payment-method-options.us-bank-account.financial-connections.permissions"], value = "required", repeated = true }
+options.payment_settings_payment_method_options_us_bank_account_financial_connections_prefetch = { flag = ["--payment-settings.payment-method-options.us-bank-account.financial-connections.prefetch"], value = "required", repeated = true }
+options.payment_settings_payment_method_options_us_bank_account_verification_method = { flag = ["--payment-settings.payment-method-options.us-bank-account.verification-method"], value = "required" }
+options.payment_settings_payment_method_types = { flag = ["--payment-settings.payment-method-types"], value = "required", repeated = true }
+options.rendering_amount_tax_display = { flag = ["--rendering.amount-tax-display"], value = "required" }
+options.rendering_pdf_page_size = { flag = ["--rendering.pdf.page-size"], value = "required" }
+options.rendering_template = { flag = ["--rendering.template"], value = "required" }
+options.rendering_template_version = { flag = ["--rendering.template-version"], value = "required" }
+options.shipping_cost = { flag = ["--shipping-cost"], value = "required" }
+options.shipping_cost_shipping_rate = { flag = ["--shipping-cost.shipping-rate"], value = "required" }
+options.shipping_cost_shipping_rate_data_delivery_estimate_maximum_unit = { flag = ["--shipping-cost.shipping-rate-data.delivery-estimate.maximum.unit"], value = "required" }
+options.shipping_cost_shipping_rate_data_delivery_estimate_maximum_value = { flag = ["--shipping-cost.shipping-rate-data.delivery-estimate.maximum.value"], value = "required" }
+options.shipping_cost_shipping_rate_data_delivery_estimate_minimum_unit = { flag = ["--shipping-cost.shipping-rate-data.delivery-estimate.minimum.unit"], value = "required" }
+options.shipping_cost_shipping_rate_data_delivery_estimate_minimum_value = { flag = ["--shipping-cost.shipping-rate-data.delivery-estimate.minimum.value"], value = "required" }
+options.shipping_cost_shipping_rate_data_display_name = { flag = ["--shipping-cost.shipping-rate-data.display-name"], value = "required" }
+options.shipping_cost_shipping_rate_data_fixed_amount_amount = { flag = ["--shipping-cost.shipping-rate-data.fixed-amount.amount"], value = "required" }
+options.shipping_cost_shipping_rate_data_fixed_amount_currency = { flag = ["--shipping-cost.shipping-rate-data.fixed-amount.currency"], value = "required" }
+options.shipping_cost_shipping_rate_data_tax_behavior = { flag = ["--shipping-cost.shipping-rate-data.tax-behavior"], value = "required" }
+options.shipping_cost_shipping_rate_data_tax_code = { flag = ["--shipping-cost.shipping-rate-data.tax-code"], value = "required" }
+options.shipping_cost_shipping_rate_data_type = { flag = ["--shipping-cost.shipping-rate-data.type"], value = "required" }
+options.shipping_details = { flag = ["--shipping-details"], value = "required" }
+options.shipping_details_address_city = { flag = ["--shipping-details.address.city"], value = "required" }
+options.shipping_details_address_country = { flag = ["--shipping-details.address.country"], value = "required" }
+options.shipping_details_address_line1 = { flag = ["--shipping-details.address.line1"], value = "required" }
+options.shipping_details_address_line2 = { flag = ["--shipping-details.address.line2"], value = "required" }
+options.shipping_details_address_postal_code = { flag = ["--shipping-details.address.postal-code"], value = "required" }
+options.shipping_details_address_state = { flag = ["--shipping-details.address.state"], value = "required" }
+options.shipping_details_name = { flag = ["--shipping-details.name"], value = "required" }
+options.shipping_details_phone = { flag = ["--shipping-details.phone"], value = "required" }
+options.show_headers = { flag = ["-s", "--show-headers"] }
+options.statement_descriptor = { flag = ["--statement-descriptor"], value = "required" }
+options.stripe_account = { flag = ["--stripe-account"], value = "required", adds = ["connected_account"] }
+options.stripe_context = { flag = ["--stripe-context"], value = "required", adds = ["connected_account"] }
+options.stripe_version = { flag = ["-v", "--stripe-version"], value = "required" }
+options.transfer_data = { flag = ["--transfer-data"], value = "required" }
+options.transfer_data_amount = { flag = ["--transfer-data.amount"], value = "required" }
+options.transfer_data_destination = { flag = ["--transfer-data.destination"], value = "required" }
+
+# POST /v1/products
+[shell.products_create]
+usage = "stripe [global options] products create [options]"
+adds  = ["network", "write_data"]
+options.active = { flag = ["--active"], value = "optional" }
+options.confirm = { flag = ["-c", "--confirm"] }
+options.dark_style = { flag = ["--dark-style"] }
+options.data = { flag = ["-d", "--data"], value = "required", repeated = true }
+options.default_price_data_currency = { flag = ["--default-price-data.currency"], value = "required" }
+options.default_price_data_custom_unit_amount_enabled = { flag = ["--default-price-data.custom-unit-amount.enabled"], value = "optional" }
+options.default_price_data_custom_unit_amount_maximum = { flag = ["--default-price-data.custom-unit-amount.maximum"], value = "required" }
+options.default_price_data_custom_unit_amount_minimum = { flag = ["--default-price-data.custom-unit-amount.minimum"], value = "required" }
+options.default_price_data_custom_unit_amount_preset = { flag = ["--default-price-data.custom-unit-amount.preset"], value = "required" }
+options.default_price_data_recurring_interval = { flag = ["--default-price-data.recurring.interval"], value = "required" }
+options.default_price_data_recurring_interval_count = { flag = ["--default-price-data.recurring.interval-count"], value = "required" }
+options.default_price_data_tax_behavior = { flag = ["--default-price-data.tax-behavior"], value = "required" }
+options.default_price_data_unit_amount = { flag = ["--default-price-data.unit-amount"], value = "required" }
+options.default_price_data_unit_amount_decimal = { flag = ["--default-price-data.unit-amount-decimal"], value = "required" }
+options.description = { flag = ["--description"], value = "required" }
+options.dry_run = { flag = ["--dry-run"], removes = ["delete_data", "move_money", "write_data"] }
+options.expand = { flag = ["-e", "--expand"], value = "required", repeated = true }
+options.id = { flag = ["--id"], value = "required" }
+options.idempotency = { flag = ["-i", "--idempotency"], value = "required" }
+options.images = { flag = ["--images"], value = "required", repeated = true }
+options.live = { flag = ["--live"], adds = ["live_mode"] }
+options.name = { flag = ["--name"], value = "required" }
+options.package_dimensions_height = { flag = ["--package-dimensions.height"], value = "required" }
+options.package_dimensions_length = { flag = ["--package-dimensions.length"], value = "required" }
+options.package_dimensions_weight = { flag = ["--package-dimensions.weight"], value = "required" }
+options.package_dimensions_width = { flag = ["--package-dimensions.width"], value = "required" }
+options.shippable = { flag = ["--shippable"], value = "optional" }
+options.show_headers = { flag = ["-s", "--show-headers"] }
+options.statement_descriptor = { flag = ["--statement-descriptor"], value = "required" }
+options.stripe_account = { flag = ["--stripe-account"], value = "required", adds = ["connected_account"] }
+options.stripe_context = { flag = ["--stripe-context"], value = "required", adds = ["connected_account"] }
+options.stripe_version = { flag = ["-v", "--stripe-version"], value = "required" }
+options.tax_code = { flag = ["--tax-code"], value = "required" }
+options.tax_details_performance_location = { flag = ["--tax-details.performance-location"], value = "required" }
+options.tax_details_tax_code = { flag = ["--tax-details.tax-code"], value = "required" }
+options.type = { flag = ["--type"], value = "required" }
+options.unit_label = { flag = ["--unit-label"], value = "required" }
+options.url = { flag = ["--url"], value = "required" }
+
+# DELETE /v1/products/{id}
+[shell.products_delete]
+usage = "stripe [global options] products delete [options] <id>"
+adds  = ["delete_data", "network"]
+options.confirm = { flag = ["-c", "--confirm"], adds = ["skip_prompt"] }
+options.dark_style = { flag = ["--dark-style"] }
+options.data = { flag = ["-d", "--data"], value = "required", repeated = true }
+options.dry_run = { flag = ["--dry-run"], removes = ["delete_data", "move_money", "write_data"] }
+options.expand = { flag = ["-e", "--expand"], value = "required", repeated = true }
+options.idempotency = { flag = ["-i", "--idempotency"], value = "required" }
+options.live = { flag = ["--live"], adds = ["live_mode"] }
+options.show_headers = { flag = ["-s", "--show-headers"] }
+options.stripe_account = { flag = ["--stripe-account"], value = "required", adds = ["connected_account"] }
+options.stripe_context = { flag = ["--stripe-context"], value = "required", adds = ["connected_account"] }
+options.stripe_version = { flag = ["-v", "--stripe-version"], value = "required" }
+
+# GET /v1/products
+[shell.products_list]
+usage = "stripe [global options] products list [options]"
+adds  = ["network"]
+options.active = { flag = ["--active"], value = "optional" }
+options.confirm = { flag = ["-c", "--confirm"] }
+options.created = { flag = ["--created"], value = "required" }
+options.dark_style = { flag = ["--dark-style"] }
+options.data = { flag = ["-d", "--data"], value = "required", repeated = true }
+options.dry_run = { flag = ["--dry-run"], removes = ["delete_data", "move_money", "write_data"] }
+options.ending_before = { flag = ["--ending-before"], value = "required" }
+options.expand = { flag = ["-e", "--expand"], value = "required", repeated = true }
+options.idempotency = { flag = ["-i", "--idempotency"], value = "required" }
+options.ids = { flag = ["--ids"], value = "required", repeated = true }
+options.limit = { flag = ["--limit"], value = "required" }
+options.live = { flag = ["--live"], adds = ["live_mode"] }
+options.shippable = { flag = ["--shippable"], value = "optional" }
+options.show_headers = { flag = ["-s", "--show-headers"] }
+options.starting_after = { flag = ["--starting-after"], value = "required" }
+options.stripe_account = { flag = ["--stripe-account"], value = "required", adds = ["connected_account"] }
+options.stripe_context = { flag = ["--stripe-context"], value = "required", adds = ["connected_account"] }
+options.stripe_version = { flag = ["-v", "--stripe-version"], value = "required" }
+options.type = { flag = ["--type"], value = "required" }
+options.url = { flag = ["--url"], value = "required" }
+
+# GET /v1/products/{id}
+[shell.products_retrieve]
+usage = "stripe [global options] products retrieve [options] <id>"
+adds  = ["network"]
+options.confirm = { flag = ["-c", "--confirm"] }
+options.dark_style = { flag = ["--dark-style"] }
+options.data = { flag = ["-d", "--data"], value = "required", repeated = true }
+options.dry_run = { flag = ["--dry-run"], removes = ["delete_data", "move_money", "write_data"] }
+options.ending_before = { flag = ["-b", "--ending-before"], value = "required" }
+options.expand = { flag = ["-e", "--expand"], value = "required", repeated = true }
+options.idempotency = { flag = ["-i", "--idempotency"], value = "required" }
+options.limit = { flag = ["-l", "--limit"], value = "required" }
+options.live = { flag = ["--live"], adds = ["live_mode"] }
+options.show_headers = { flag = ["-s", "--show-headers"] }
+options.starting_after = { flag = ["-a", "--starting-after"], value = "required" }
+options.stripe_account = { flag = ["--stripe-account"], value = "required", adds = ["connected_account"] }
+options.stripe_context = { flag = ["--stripe-context"], value = "required", adds = ["connected_account"] }
+options.stripe_version = { flag = ["-v", "--stripe-version"], value = "required" }
+
+# GET /v1/products/search
+[shell.products_search]
+usage = "stripe [global options] products search [options]"
+adds  = ["network"]
+options.confirm = { flag = ["-c", "--confirm"] }
+options.dark_style = { flag = ["--dark-style"] }
+options.data = { flag = ["-d", "--data"], value = "required", repeated = true }
+options.dry_run = { flag = ["--dry-run"], removes = ["delete_data", "move_money", "write_data"] }
+options.ending_before = { flag = ["-b", "--ending-before"], value = "required" }
+options.expand = { flag = ["-e", "--expand"], value = "required", repeated = true }
+options.idempotency = { flag = ["-i", "--idempotency"], value = "required" }
+options.limit = { flag = ["--limit"], value = "required" }
+options.live = { flag = ["--live"], adds = ["live_mode"] }
+options.page = { flag = ["--page"], value = "required" }
+options.query = { flag = ["--query"], value = "required" }
+options.show_headers = { flag = ["-s", "--show-headers"] }
+options.starting_after = { flag = ["-a", "--starting-after"], value = "required" }
+options.stripe_account = { flag = ["--stripe-account"], value = "required", adds = ["connected_account"] }
+options.stripe_context = { flag = ["--stripe-context"], value = "required", adds = ["connected_account"] }
+options.stripe_version = { flag = ["-v", "--stripe-version"], value = "required" }
+
+# POST /v1/products/{id}
+[shell.products_update]
+usage = "stripe [global options] products update [options] <id>"
+adds  = ["network", "write_data"]
+options.active = { flag = ["--active"], value = "optional" }
+options.confirm = { flag = ["-c", "--confirm"] }
+options.dark_style = { flag = ["--dark-style"] }
+options.data = { flag = ["-d", "--data"], value = "required", repeated = true }
+options.default_price = { flag = ["--default-price"], value = "required" }
+options.description = { flag = ["--description"], value = "required" }
+options.dry_run = { flag = ["--dry-run"], removes = ["delete_data", "move_money", "write_data"] }
+options.expand = { flag = ["-e", "--expand"], value = "required", repeated = true }
+options.idempotency = { flag = ["-i", "--idempotency"], value = "required" }
+options.images = { flag = ["--images"], value = "required", repeated = true }
+options.live = { flag = ["--live"], adds = ["live_mode"] }
+options.name = { flag = ["--name"], value = "required" }
+options.package_dimensions = { flag = ["--package-dimensions"], value = "required" }
+options.package_dimensions_height = { flag = ["--package-dimensions.height"], value = "required" }
+options.package_dimensions_length = { flag = ["--package-dimensions.length"], value = "required" }
+options.package_dimensions_weight = { flag = ["--package-dimensions.weight"], value = "required" }
+options.package_dimensions_width = { flag = ["--package-dimensions.width"], value = "required" }
+options.shippable = { flag = ["--shippable"], value = "optional" }
+options.show_headers = { flag = ["-s", "--show-headers"] }
+options.statement_descriptor = { flag = ["--statement-descriptor"], value = "required" }
+options.stripe_account = { flag = ["--stripe-account"], value = "required", adds = ["connected_account"] }
+options.stripe_context = { flag = ["--stripe-context"], value = "required", adds = ["connected_account"] }
+options.stripe_version = { flag = ["-v", "--stripe-version"], value = "required" }
+options.tax_code = { flag = ["--tax-code"], value = "required" }
+options.tax_details = { flag = ["--tax-details"], value = "required" }
+options.tax_details_performance_location = { flag = ["--tax-details.performance-location"], value = "required" }
+options.tax_details_tax_code = { flag = ["--tax-details.tax-code"], value = "required" }
+options.unit_label = { flag = ["--unit-label"], value = "required" }
+options.url = { flag = ["--url"], value = "required" }
+
+# POST /v1/prices
+[shell.prices_create]
+usage = "stripe [global options] prices create [options]"
+adds  = ["network", "write_data"]
+options.active = { flag = ["--active"], value = "optional" }
+options.billing_scheme = { flag = ["--billing-scheme"], value = "required" }
+options.confirm = { flag = ["-c", "--confirm"] }
+options.currency = { flag = ["--currency"], value = "required" }
+options.custom_unit_amount_enabled = { flag = ["--custom-unit-amount.enabled"], value = "optional" }
+options.custom_unit_amount_maximum = { flag = ["--custom-unit-amount.maximum"], value = "required" }
+options.custom_unit_amount_minimum = { flag = ["--custom-unit-amount.minimum"], value = "required" }
+options.custom_unit_amount_preset = { flag = ["--custom-unit-amount.preset"], value = "required" }
+options.dark_style = { flag = ["--dark-style"] }
+options.data = { flag = ["-d", "--data"], value = "required", repeated = true }
+options.dry_run = { flag = ["--dry-run"], removes = ["delete_data", "move_money", "write_data"] }
+options.expand = { flag = ["-e", "--expand"], value = "required", repeated = true }
+options.idempotency = { flag = ["-i", "--idempotency"], value = "required" }
+options.live = { flag = ["--live"], adds = ["live_mode"] }
+options.lookup_key = { flag = ["--lookup-key"], value = "required" }
+options.nickname = { flag = ["--nickname"], value = "required" }
+options.product = { flag = ["--product"], value = "required" }
+options.product_data_active = { flag = ["--product-data.active"], value = "optional" }
+options.product_data_id = { flag = ["--product-data.id"], value = "required" }
+options.product_data_name = { flag = ["--product-data.name"], value = "required" }
+options.product_data_statement_descriptor = { flag = ["--product-data.statement-descriptor"], value = "required" }
+options.product_data_tax_code = { flag = ["--product-data.tax-code"], value = "required" }
+options.product_data_tax_details_performance_location = { flag = ["--product-data.tax-details.performance-location"], value = "required" }
+options.product_data_tax_details_tax_code = { flag = ["--product-data.tax-details.tax-code"], value = "required" }
+options.product_data_unit_label = { flag = ["--product-data.unit-label"], value = "required" }
+options.recurring_interval = { flag = ["--recurring.interval"], value = "required" }
+options.recurring_interval_count = { flag = ["--recurring.interval-count"], value = "required" }
+options.recurring_meter = { flag = ["--recurring.meter"], value = "required" }
+options.recurring_trial_period_days = { flag = ["--recurring.trial-period-days"], value = "required" }
+options.recurring_usage_type = { flag = ["--recurring.usage-type"], value = "required" }
+options.show_headers = { flag = ["-s", "--show-headers"] }
+options.stripe_account = { flag = ["--stripe-account"], value = "required", adds = ["connected_account"] }
+options.stripe_context = { flag = ["--stripe-context"], value = "required", adds = ["connected_account"] }
+options.stripe_version = { flag = ["-v", "--stripe-version"], value = "required" }
+options.tax_behavior = { flag = ["--tax-behavior"], value = "required" }
+options.tiers_mode = { flag = ["--tiers-mode"], value = "required" }
+options.transfer_lookup_key = { flag = ["--transfer-lookup-key"], value = "optional" }
+options.transform_quantity_divide_by = { flag = ["--transform-quantity.divide-by"], value = "required" }
+options.transform_quantity_round = { flag = ["--transform-quantity.round"], value = "required" }
+options.unit_amount = { flag = ["--unit-amount"], value = "required" }
+options.unit_amount_decimal = { flag = ["--unit-amount-decimal"], value = "required" }
+
+# GET /v1/prices
+[shell.prices_list]
+usage = "stripe [global options] prices list [options]"
+adds  = ["network"]
+options.active = { flag = ["--active"], value = "optional" }
+options.confirm = { flag = ["-c", "--confirm"] }
+options.created = { flag = ["--created"], value = "required" }
+options.currency = { flag = ["--currency"], value = "required" }
+options.dark_style = { flag = ["--dark-style"] }
+options.data = { flag = ["-d", "--data"], value = "required", repeated = true }
+options.dry_run = { flag = ["--dry-run"], removes = ["delete_data", "move_money", "write_data"] }
+options.ending_before = { flag = ["--ending-before"], value = "required" }
+options.expand = { flag = ["-e", "--expand"], value = "required", repeated = true }
+options.idempotency = { flag = ["-i", "--idempotency"], value = "required" }
+options.limit = { flag = ["--limit"], value = "required" }
+options.live = { flag = ["--live"], adds = ["live_mode"] }
+options.lookup_keys = { flag = ["--lookup-keys"], value = "required", repeated = true }
+options.product = { flag = ["--product"], value = "required" }
+options.show_headers = { flag = ["-s", "--show-headers"] }
+options.starting_after = { flag = ["--starting-after"], value = "required" }
+options.stripe_account = { flag = ["--stripe-account"], value = "required", adds = ["connected_account"] }
+options.stripe_context = { flag = ["--stripe-context"], value = "required", adds = ["connected_account"] }
+options.stripe_version = { flag = ["-v", "--stripe-version"], value = "required" }
+options.type = { flag = ["--type"], value = "required" }
+
+# GET /v1/prices/{price}
+[shell.prices_retrieve]
+usage = "stripe [global options] prices retrieve [options] <price>"
+adds  = ["network"]
+options.confirm = { flag = ["-c", "--confirm"] }
+options.dark_style = { flag = ["--dark-style"] }
+options.data = { flag = ["-d", "--data"], value = "required", repeated = true }
+options.dry_run = { flag = ["--dry-run"], removes = ["delete_data", "move_money", "write_data"] }
+options.ending_before = { flag = ["-b", "--ending-before"], value = "required" }
+options.expand = { flag = ["-e", "--expand"], value = "required", repeated = true }
+options.idempotency = { flag = ["-i", "--idempotency"], value = "required" }
+options.limit = { flag = ["-l", "--limit"], value = "required" }
+options.live = { flag = ["--live"], adds = ["live_mode"] }
+options.show_headers = { flag = ["-s", "--show-headers"] }
+options.starting_after = { flag = ["-a", "--starting-after"], value = "required" }
+options.stripe_account = { flag = ["--stripe-account"], value = "required", adds = ["connected_account"] }
+options.stripe_context = { flag = ["--stripe-context"], value = "required", adds = ["connected_account"] }
+options.stripe_version = { flag = ["-v", "--stripe-version"], value = "required" }
+
+# GET /v1/prices/search
+[shell.prices_search]
+usage = "stripe [global options] prices search [options]"
+adds  = ["network"]
+options.confirm = { flag = ["-c", "--confirm"] }
+options.dark_style = { flag = ["--dark-style"] }
+options.data = { flag = ["-d", "--data"], value = "required", repeated = true }
+options.dry_run = { flag = ["--dry-run"], removes = ["delete_data", "move_money", "write_data"] }
+options.ending_before = { flag = ["-b", "--ending-before"], value = "required" }
+options.expand = { flag = ["-e", "--expand"], value = "required", repeated = true }
+options.idempotency = { flag = ["-i", "--idempotency"], value = "required" }
+options.limit = { flag = ["--limit"], value = "required" }
+options.live = { flag = ["--live"], adds = ["live_mode"] }
+options.page = { flag = ["--page"], value = "required" }
+options.query = { flag = ["--query"], value = "required" }
+options.show_headers = { flag = ["-s", "--show-headers"] }
+options.starting_after = { flag = ["-a", "--starting-after"], value = "required" }
+options.stripe_account = { flag = ["--stripe-account"], value = "required", adds = ["connected_account"] }
+options.stripe_context = { flag = ["--stripe-context"], value = "required", adds = ["connected_account"] }
+options.stripe_version = { flag = ["-v", "--stripe-version"], value = "required" }
+
+# POST /v1/prices/{price}
+[shell.prices_update]
+usage = "stripe [global options] prices update [options] <price>"
+adds  = ["network", "write_data"]
+options.active = { flag = ["--active"], value = "optional" }
+options.confirm = { flag = ["-c", "--confirm"] }
+options.currency_options = { flag = ["--currency-options"], value = "required" }
+options.dark_style = { flag = ["--dark-style"] }
+options.data = { flag = ["-d", "--data"], value = "required", repeated = true }
+options.dry_run = { flag = ["--dry-run"], removes = ["delete_data", "move_money", "write_data"] }
+options.expand = { flag = ["-e", "--expand"], value = "required", repeated = true }
+options.idempotency = { flag = ["-i", "--idempotency"], value = "required" }
+options.live = { flag = ["--live"], adds = ["live_mode"] }
+options.lookup_key = { flag = ["--lookup-key"], value = "required" }
+options.nickname = { flag = ["--nickname"], value = "required" }
+options.show_headers = { flag = ["-s", "--show-headers"] }
+options.stripe_account = { flag = ["--stripe-account"], value = "required", adds = ["connected_account"] }
+options.stripe_context = { flag = ["--stripe-context"], value = "required", adds = ["connected_account"] }
+options.stripe_version = { flag = ["-v", "--stripe-version"], value = "required" }
+options.tax_behavior = { flag = ["--tax-behavior"], value = "required" }
+options.transfer_lookup_key = { flag = ["--transfer-lookup-key"], value = "optional" }
+
+# POST /v1/checkout/sessions
+[shell.checkout_sessions_create]
+usage = "stripe [global options] checkout sessions create [options]"
+adds  = ["network", "write_data"]
+options.adaptive_pricing_enabled = { flag = ["--adaptive-pricing.enabled"], value = "optional" }
+options.after_expiration_recovery_allow_promotion_codes = { flag = ["--after-expiration.recovery.allow-promotion-codes"], value = "optional" }
+options.after_expiration_recovery_enabled = { flag = ["--after-expiration.recovery.enabled"], value = "optional" }
+options.allow_promotion_codes = { flag = ["--allow-promotion-codes"], value = "optional" }
+options.allowed_payment_method_types = { flag = ["--allowed-payment-method-types"], value = "required", repeated = true }
+options.automatic_tax_enabled = { flag = ["--automatic-tax.enabled"], value = "optional" }
+options.automatic_tax_liability_account = { flag = ["--automatic-tax.liability.account"], value = "required" }
+options.automatic_tax_liability_type = { flag = ["--automatic-tax.liability.type"], value = "required" }
+options.billing_address_collection = { flag = ["--billing-address-collection"], value = "required" }
+options.branding_settings_background_color = { flag = ["--branding-settings.background-color"], value = "required" }
+options.branding_settings_border_style = { flag = ["--branding-settings.border-style"], value = "required" }
+options.branding_settings_button_color = { flag = ["--branding-settings.button-color"], value = "required" }
+options.branding_settings_display_name = { flag = ["--branding-settings.display-name"], value = "required" }
+options.branding_settings_font_family = { flag = ["--branding-settings.font-family"], value = "required" }
+options.branding_settings_icon_file = { flag = ["--branding-settings.icon.file"], value = "required" }
+options.branding_settings_icon_type = { flag = ["--branding-settings.icon.type"], value = "required" }
+options.branding_settings_icon_url = { flag = ["--branding-settings.icon.url"], value = "required" }
+options.branding_settings_logo_file = { flag = ["--branding-settings.logo.file"], value = "required" }
+options.branding_settings_logo_type = { flag = ["--branding-settings.logo.type"], value = "required" }
+options.branding_settings_logo_url = { flag = ["--branding-settings.logo.url"], value = "required" }
+options.cancel_url = { flag = ["--cancel-url"], value = "required" }
+options.client_reference_id = { flag = ["--client-reference-id"], value = "required" }
+options.confirm = { flag = ["-c", "--confirm"] }
+options.consent_collection_payment_method_reuse_agreement_position = { flag = ["--consent-collection.payment-method-reuse-agreement.position"], value = "required" }
+options.consent_collection_promotions = { flag = ["--consent-collection.promotions"], value = "required" }
+options.consent_collection_terms_of_service = { flag = ["--consent-collection.terms-of-service"], value = "required" }
+options.currency = { flag = ["--currency"], value = "required" }
+options.custom_text_after_submit_message = { flag = ["--custom-text.after-submit.message"], value = "required" }
+options.custom_text_shipping_address_message = { flag = ["--custom-text.shipping-address.message"], value = "required" }
+options.custom_text_submit_message = { flag = ["--custom-text.submit.message"], value = "required" }
+options.custom_text_terms_of_service_acceptance_message = { flag = ["--custom-text.terms-of-service-acceptance.message"], value = "required" }
+options.customer = { flag = ["--customer"], value = "required" }
+options.customer_account = { flag = ["--customer-account"], value = "required" }
+options.customer_creation = { flag = ["--customer-creation"], value = "required" }
+options.customer_email = { flag = ["--customer-email"], value = "required" }
+options.customer_update_address = { flag = ["--customer-update.address"], value = "required" }
+options.customer_update_name = { flag = ["--customer-update.name"], value = "required" }
+options.customer_update_shipping = { flag = ["--customer-update.shipping"], value = "required" }
+options.dark_style = { flag = ["--dark-style"] }
+options.data = { flag = ["-d", "--data"], value = "required", repeated = true }
+options.dry_run = { flag = ["--dry-run"], removes = ["delete_data", "move_money", "write_data"] }
+options.excluded_payment_method_types = { flag = ["--excluded-payment-method-types"], value = "required", repeated = true }
+options.expand = { flag = ["-e", "--expand"], value = "required", repeated = true }
+options.expires_at = { flag = ["--expires-at"], value = "required" }
+options.idempotency = { flag = ["-i", "--idempotency"], value = "required" }
+options.integration_identifier = { flag = ["--integration-identifier"], value = "required" }
+options.invoice_creation_enabled = { flag = ["--invoice-creation.enabled"], value = "optional" }
+options.invoice_creation_invoice_data_account_tax_ids = { flag = ["--invoice-creation.invoice-data.account-tax-ids"], value = "required", repeated = true }
+options.invoice_creation_invoice_data_description = { flag = ["--invoice-creation.invoice-data.description"], value = "required" }
+options.invoice_creation_invoice_data_footer = { flag = ["--invoice-creation.invoice-data.footer"], value = "required" }
+options.invoice_creation_invoice_data_issuer_account = { flag = ["--invoice-creation.invoice-data.issuer.account"], value = "required" }
+options.invoice_creation_invoice_data_issuer_type = { flag = ["--invoice-creation.invoice-data.issuer.type"], value = "required" }
+options.invoice_creation_invoice_data_rendering_options_amount_tax_display = { flag = ["--invoice-creation.invoice-data.rendering-options.amount-tax-display"], value = "required" }
+options.invoice_creation_invoice_data_rendering_options_template = { flag = ["--invoice-creation.invoice-data.rendering-options.template"], value = "required" }
+options.live = { flag = ["--live"], adds = ["live_mode"] }
+options.locale = { flag = ["--locale"], value = "required" }
+options.managed_payments_enabled = { flag = ["--managed-payments.enabled"], value = "optional" }
+options.mode = { flag = ["--mode"], value = "required" }
+options.name_collection_business_enabled = { flag = ["--name-collection.business.enabled"], value = "optional" }
+options.name_collection_business_optional = { flag = ["--name-collection.business.optional"], value = "optional" }
+options.name_collection_individual_enabled = { flag = ["--name-collection.individual.enabled"], value = "optional" }
+options.name_collection_individual_optional = { flag = ["--name-collection.individual.optional"], value = "optional" }
+options.origin_context = { flag = ["--origin-context"], value = "required" }
+options.payment_intent_data_application_fee_amount = { flag = ["--payment-intent-data.application-fee-amount"], value = "required" }
+options.payment_intent_data_capture_method = { flag = ["--payment-intent-data.capture-method"], value = "required" }
+options.payment_intent_data_description = { flag = ["--payment-intent-data.description"], value = "required" }
+options.payment_intent_data_on_behalf_of = { flag = ["--payment-intent-data.on-behalf-of"], value = "required" }
+options.payment_intent_data_receipt_email = { flag = ["--payment-intent-data.receipt-email"], value = "required" }
+options.payment_intent_data_setup_future_usage = { flag = ["--payment-intent-data.setup-future-usage"], value = "required" }
+options.payment_intent_data_shipping_address_city = { flag = ["--payment-intent-data.shipping.address.city"], value = "required" }
+options.payment_intent_data_shipping_address_country = { flag = ["--payment-intent-data.shipping.address.country"], value = "required" }
+options.payment_intent_data_shipping_address_line1 = { flag = ["--payment-intent-data.shipping.address.line1"], value = "required" }
+options.payment_intent_data_shipping_address_line2 = { flag = ["--payment-intent-data.shipping.address.line2"], value = "required" }
+options.payment_intent_data_shipping_address_postal_code = { flag = ["--payment-intent-data.shipping.address.postal-code"], value = "required" }
+options.payment_intent_data_shipping_address_state = { flag = ["--payment-intent-data.shipping.address.state"], value = "required" }
+options.payment_intent_data_shipping_carrier = { flag = ["--payment-intent-data.shipping.carrier"], value = "required" }
+options.payment_intent_data_shipping_name = { flag = ["--payment-intent-data.shipping.name"], value = "required" }
+options.payment_intent_data_shipping_phone = { flag = ["--payment-intent-data.shipping.phone"], value = "required" }
+options.payment_intent_data_shipping_tracking_number = { flag = ["--payment-intent-data.shipping.tracking-number"], value = "required" }
+options.payment_intent_data_statement_descriptor = { flag = ["--payment-intent-data.statement-descriptor"], value = "required" }
+options.payment_intent_data_statement_descriptor_suffix = { flag = ["--payment-intent-data.statement-descriptor-suffix"], value = "required" }
+options.payment_intent_data_transfer_data_amount = { flag = ["--payment-intent-data.transfer-data.amount"], value = "required" }
+options.payment_intent_data_transfer_data_destination = { flag = ["--payment-intent-data.transfer-data.destination"], value = "required" }
+options.payment_intent_data_transfer_group = { flag = ["--payment-intent-data.transfer-group"], value = "required" }
+options.payment_method_collection = { flag = ["--payment-method-collection"], value = "required" }
+options.payment_method_configuration = { flag = ["--payment-method-configuration"], value = "required" }
+options.payment_method_data_allow_redisplay = { flag = ["--payment-method-data.allow-redisplay"], value = "required" }
+options.payment_method_options_acss_debit_currency = { flag = ["--payment-method-options.acss-debit.currency"], value = "required" }
+options.payment_method_options_acss_debit_mandate_options_custom_mandate_url = { flag = ["--payment-method-options.acss-debit.mandate-options.custom-mandate-url"], value = "required" }
+options.payment_method_options_acss_debit_mandate_options_default_for = { flag = ["--payment-method-options.acss-debit.mandate-options.default-for"], value = "required", repeated = true }
+options.payment_method_options_acss_debit_mandate_options_interval_description = { flag = ["--payment-method-options.acss-debit.mandate-options.interval-description"], value = "required" }
+options.payment_method_options_acss_debit_mandate_options_payment_schedule = { flag = ["--payment-method-options.acss-debit.mandate-options.payment-schedule"], value = "required" }
+options.payment_method_options_acss_debit_mandate_options_transaction_type = { flag = ["--payment-method-options.acss-debit.mandate-options.transaction-type"], value = "required" }
+options.payment_method_options_acss_debit_setup_future_usage = { flag = ["--payment-method-options.acss-debit.setup-future-usage"], value = "required" }
+options.payment_method_options_acss_debit_target_date = { flag = ["--payment-method-options.acss-debit.target-date"], value = "required" }
+options.payment_method_options_acss_debit_verification_method = { flag = ["--payment-method-options.acss-debit.verification-method"], value = "required" }
+options.payment_method_options_affirm_capture_method = { flag = ["--payment-method-options.affirm.capture-method"], value = "required" }
+options.payment_method_options_affirm_setup_future_usage = { flag = ["--payment-method-options.affirm.setup-future-usage"], value = "required" }
+options.payment_method_options_afterpay_clearpay_capture_method = { flag = ["--payment-method-options.afterpay-clearpay.capture-method"], value = "required" }
+options.payment_method_options_afterpay_clearpay_setup_future_usage = { flag = ["--payment-method-options.afterpay-clearpay.setup-future-usage"], value = "required" }
+options.payment_method_options_alipay_setup_future_usage = { flag = ["--payment-method-options.alipay.setup-future-usage"], value = "required" }
+options.payment_method_options_alma_capture_method = { flag = ["--payment-method-options.alma.capture-method"], value = "required" }
+options.payment_method_options_amazon_pay_capture_method = { flag = ["--payment-method-options.amazon-pay.capture-method"], value = "required" }
+options.payment_method_options_amazon_pay_setup_future_usage = { flag = ["--payment-method-options.amazon-pay.setup-future-usage"], value = "required" }
+options.payment_method_options_au_becs_debit_setup_future_usage = { flag = ["--payment-method-options.au-becs-debit.setup-future-usage"], value = "required" }
+options.payment_method_options_au_becs_debit_target_date = { flag = ["--payment-method-options.au-becs-debit.target-date"], value = "required" }
+options.payment_method_options_bacs_debit_mandate_options_reference_prefix = { flag = ["--payment-method-options.bacs-debit.mandate-options.reference-prefix"], value = "required" }
+options.payment_method_options_bacs_debit_setup_future_usage = { flag = ["--payment-method-options.bacs-debit.setup-future-usage"], value = "required" }
+options.payment_method_options_bacs_debit_target_date = { flag = ["--payment-method-options.bacs-debit.target-date"], value = "required" }
+options.payment_method_options_bancontact_setup_future_usage = { flag = ["--payment-method-options.bancontact.setup-future-usage"], value = "required" }
+options.payment_method_options_billie_capture_method = { flag = ["--payment-method-options.billie.capture-method"], value = "required" }
+options.payment_method_options_blik_mandate_options_expires_at = { flag = ["--payment-method-options.blik.mandate-options.expires-at"], value = "required" }
+options.payment_method_options_blik_setup_future_usage = { flag = ["--payment-method-options.blik.setup-future-usage"], value = "required" }
+options.payment_method_options_boleto_expires_after_days = { flag = ["--payment-method-options.boleto.expires-after-days"], value = "required" }
+options.payment_method_options_boleto_setup_future_usage = { flag = ["--payment-method-options.boleto.setup-future-usage"], value = "required" }
+options.payment_method_options_card_capture_method = { flag = ["--payment-method-options.card.capture-method"], value = "required" }
+options.payment_method_options_card_installments_enabled = { flag = ["--payment-method-options.card.installments.enabled"], value = "optional" }
+options.payment_method_options_card_request_extended_authorization = { flag = ["--payment-method-options.card.request-extended-authorization"], value = "required" }
+options.payment_method_options_card_request_incremental_authorization = { flag = ["--payment-method-options.card.request-incremental-authorization"], value = "required" }
+options.payment_method_options_card_request_multicapture = { flag = ["--payment-method-options.card.request-multicapture"], value = "required" }
+options.payment_method_options_card_request_overcapture = { flag = ["--payment-method-options.card.request-overcapture"], value = "required" }
+options.payment_method_options_card_request_three_d_secure = { flag = ["--payment-method-options.card.request-three-d-secure"], value = "required" }
+options.payment_method_options_card_restrictions_brands_blocked = { flag = ["--payment-method-options.card.restrictions.brands-blocked"], value = "required", repeated = true }
+options.payment_method_options_card_restrictions_funding_types_blocked = { flag = ["--payment-method-options.card.restrictions.funding-types-blocked"], value = "required", repeated = true }
+options.payment_method_options_card_setup_future_usage = { flag = ["--payment-method-options.card.setup-future-usage"], value = "required" }
+options.payment_method_options_card_statement_descriptor_suffix_kana = { flag = ["--payment-method-options.card.statement-descriptor-suffix-kana"], value = "required" }
+options.payment_method_options_card_statement_descriptor_suffix_kanji = { flag = ["--payment-method-options.card.statement-descriptor-suffix-kanji"], value = "required" }
+options.payment_method_options_cashapp_capture_method = { flag = ["--payment-method-options.cashapp.capture-method"], value = "required" }
+options.payment_method_options_cashapp_setup_future_usage = { flag = ["--payment-method-options.cashapp.setup-future-usage"], value = "required" }
+options.payment_method_options_crypto_setup_future_usage = { flag = ["--payment-method-options.crypto.setup-future-usage"], value = "required" }
+options.payment_method_options_customer_balance_bank_transfer_eu_bank_transfer_country = { flag = ["--payment-method-options.customer-balance.bank-transfer.eu-bank-transfer.country"], value = "required" }
+options.payment_method_options_customer_balance_bank_transfer_requested_address_types = { flag = ["--payment-method-options.customer-balance.bank-transfer.requested-address-types"], value = "required", repeated = true }
+options.payment_method_options_customer_balance_bank_transfer_type = { flag = ["--payment-method-options.customer-balance.bank-transfer.type"], value = "required" }
+options.payment_method_options_customer_balance_funding_type = { flag = ["--payment-method-options.customer-balance.funding-type"], value = "required" }
+options.payment_method_options_customer_balance_setup_future_usage = { flag = ["--payment-method-options.customer-balance.setup-future-usage"], value = "required" }
+options.payment_method_options_demo_pay_setup_future_usage = { flag = ["--payment-method-options.demo-pay.setup-future-usage"], value = "required" }
+options.payment_method_options_eps_setup_future_usage = { flag = ["--payment-method-options.eps.setup-future-usage"], value = "required" }
+options.payment_method_options_fpx_setup_future_usage = { flag = ["--payment-method-options.fpx.setup-future-usage"], value = "required" }
+options.payment_method_options_giropay_setup_future_usage = { flag = ["--payment-method-options.giropay.setup-future-usage"], value = "required" }
+options.payment_method_options_grabpay_setup_future_usage = { flag = ["--payment-method-options.grabpay.setup-future-usage"], value = "required" }
+options.payment_method_options_ideal_setup_future_usage = { flag = ["--payment-method-options.ideal.setup-future-usage"], value = "required" }
+options.payment_method_options_kakao_pay_capture_method = { flag = ["--payment-method-options.kakao-pay.capture-method"], value = "required" }
+options.payment_method_options_kakao_pay_setup_future_usage = { flag = ["--payment-method-options.kakao-pay.setup-future-usage"], value = "required" }
+options.payment_method_options_klarna_capture_method = { flag = ["--payment-method-options.klarna.capture-method"], value = "required" }
+options.payment_method_options_klarna_setup_future_usage = { flag = ["--payment-method-options.klarna.setup-future-usage"], value = "required" }
+options.payment_method_options_konbini_expires_after_days = { flag = ["--payment-method-options.konbini.expires-after-days"], value = "required" }
+options.payment_method_options_konbini_setup_future_usage = { flag = ["--payment-method-options.konbini.setup-future-usage"], value = "required" }
+options.payment_method_options_kr_card_capture_method = { flag = ["--payment-method-options.kr-card.capture-method"], value = "required" }
+options.payment_method_options_kr_card_setup_future_usage = { flag = ["--payment-method-options.kr-card.setup-future-usage"], value = "required" }
+options.payment_method_options_link_capture_method = { flag = ["--payment-method-options.link.capture-method"], value = "required" }
+options.payment_method_options_link_setup_future_usage = { flag = ["--payment-method-options.link.setup-future-usage"], value = "required" }
+options.payment_method_options_mobilepay_capture_method = { flag = ["--payment-method-options.mobilepay.capture-method"], value = "required" }
+options.payment_method_options_mobilepay_setup_future_usage = { flag = ["--payment-method-options.mobilepay.setup-future-usage"], value = "required" }
+options.payment_method_options_multibanco_setup_future_usage = { flag = ["--payment-method-options.multibanco.setup-future-usage"], value = "required" }
+options.payment_method_options_naver_pay_capture_method = { flag = ["--payment-method-options.naver-pay.capture-method"], value = "required" }
+options.payment_method_options_naver_pay_setup_future_usage = { flag = ["--payment-method-options.naver-pay.setup-future-usage"], value = "required" }
+options.payment_method_options_oxxo_expires_after_days = { flag = ["--payment-method-options.oxxo.expires-after-days"], value = "required" }
+options.payment_method_options_oxxo_setup_future_usage = { flag = ["--payment-method-options.oxxo.setup-future-usage"], value = "required" }
+options.payment_method_options_p24_setup_future_usage = { flag = ["--payment-method-options.p24.setup-future-usage"], value = "required" }
+options.payment_method_options_p24_tos_shown_and_accepted = { flag = ["--payment-method-options.p24.tos-shown-and-accepted"], value = "optional" }
+options.payment_method_options_payco_capture_method = { flag = ["--payment-method-options.payco.capture-method"], value = "required" }
+options.payment_method_options_payco_setup_future_usage = { flag = ["--payment-method-options.payco.setup-future-usage"], value = "required" }
+options.payment_method_options_paynow_setup_future_usage = { flag = ["--payment-method-options.paynow.setup-future-usage"], value = "required" }
+options.payment_method_options_paypal_capture_method = { flag = ["--payment-method-options.paypal.capture-method"], value = "required" }
+options.payment_method_options_paypal_preferred_locale = { flag = ["--payment-method-options.paypal.preferred-locale"], value = "required" }
+options.payment_method_options_paypal_reference = { flag = ["--payment-method-options.paypal.reference"], value = "required" }
+options.payment_method_options_paypal_risk_correlation_id = { flag = ["--payment-method-options.paypal.risk-correlation-id"], value = "required" }
+options.payment_method_options_paypal_setup_future_usage = { flag = ["--payment-method-options.paypal.setup-future-usage"], value = "required" }
+options.payment_method_options_payto_mandate_options_amount = { flag = ["--payment-method-options.payto.mandate-options.amount"], value = "required" }
+options.payment_method_options_payto_mandate_options_amount_type = { flag = ["--payment-method-options.payto.mandate-options.amount-type"], value = "required" }
+options.payment_method_options_payto_mandate_options_end_date = { flag = ["--payment-method-options.payto.mandate-options.end-date"], value = "required" }
+options.payment_method_options_payto_mandate_options_payment_schedule = { flag = ["--payment-method-options.payto.mandate-options.payment-schedule"], value = "required" }
+options.payment_method_options_payto_mandate_options_payments_per_period = { flag = ["--payment-method-options.payto.mandate-options.payments-per-period"], value = "required" }
+options.payment_method_options_payto_mandate_options_purpose = { flag = ["--payment-method-options.payto.mandate-options.purpose"], value = "required" }
+options.payment_method_options_payto_mandate_options_start_date = { flag = ["--payment-method-options.payto.mandate-options.start-date"], value = "required" }
+options.payment_method_options_payto_setup_future_usage = { flag = ["--payment-method-options.payto.setup-future-usage"], value = "required" }
+options.payment_method_options_pix_amount_includes_iof = { flag = ["--payment-method-options.pix.amount-includes-iof"], value = "required" }
+options.payment_method_options_pix_expires_after_seconds = { flag = ["--payment-method-options.pix.expires-after-seconds"], value = "required" }
+options.payment_method_options_pix_mandate_options_amount = { flag = ["--payment-method-options.pix.mandate-options.amount"], value = "required" }
+options.payment_method_options_pix_mandate_options_amount_includes_iof = { flag = ["--payment-method-options.pix.mandate-options.amount-includes-iof"], value = "required" }
+options.payment_method_options_pix_mandate_options_amount_type = { flag = ["--payment-method-options.pix.mandate-options.amount-type"], value = "required" }
+options.payment_method_options_pix_mandate_options_currency = { flag = ["--payment-method-options.pix.mandate-options.currency"], value = "required" }
+options.payment_method_options_pix_mandate_options_end_date = { flag = ["--payment-method-options.pix.mandate-options.end-date"], value = "required" }
+options.payment_method_options_pix_mandate_options_payment_schedule = { flag = ["--payment-method-options.pix.mandate-options.payment-schedule"], value = "required" }
+options.payment_method_options_pix_mandate_options_reference = { flag = ["--payment-method-options.pix.mandate-options.reference"], value = "required" }
+options.payment_method_options_pix_mandate_options_start_date = { flag = ["--payment-method-options.pix.mandate-options.start-date"], value = "required" }
+options.payment_method_options_pix_setup_future_usage = { flag = ["--payment-method-options.pix.setup-future-usage"], value = "required" }
+options.payment_method_options_revolut_pay_capture_method = { flag = ["--payment-method-options.revolut-pay.capture-method"], value = "required" }
+options.payment_method_options_revolut_pay_setup_future_usage = { flag = ["--payment-method-options.revolut-pay.setup-future-usage"], value = "required" }
+options.payment_method_options_samsung_pay_capture_method = { flag = ["--payment-method-options.samsung-pay.capture-method"], value = "required" }
+options.payment_method_options_samsung_pay_setup_future_usage = { flag = ["--payment-method-options.samsung-pay.setup-future-usage"], value = "required" }
+options.payment_method_options_satispay_capture_method = { flag = ["--payment-method-options.satispay.capture-method"], value = "required" }
+options.payment_method_options_scalapay_capture_method = { flag = ["--payment-method-options.scalapay.capture-method"], value = "required" }
+options.payment_method_options_sepa_debit_mandate_options_reference_prefix = { flag = ["--payment-method-options.sepa-debit.mandate-options.reference-prefix"], value = "required" }
+options.payment_method_options_sepa_debit_setup_future_usage = { flag = ["--payment-method-options.sepa-debit.setup-future-usage"], value = "required" }
+options.payment_method_options_sepa_debit_target_date = { flag = ["--payment-method-options.sepa-debit.target-date"], value = "required" }
+options.payment_method_options_sequra_capture_method = { flag = ["--payment-method-options.sequra.capture-method"], value = "required" }
+options.payment_method_options_sofort_setup_future_usage = { flag = ["--payment-method-options.sofort.setup-future-usage"], value = "required" }
+options.payment_method_options_sunbit_capture_method = { flag = ["--payment-method-options.sunbit.capture-method"], value = "required" }
+options.payment_method_options_sunbit_setup_future_usage = { flag = ["--payment-method-options.sunbit.setup-future-usage"], value = "required" }
+options.payment_method_options_swish_reference = { flag = ["--payment-method-options.swish.reference"], value = "required" }
+options.payment_method_options_twint_setup_future_usage = { flag = ["--payment-method-options.twint.setup-future-usage"], value = "required" }
+options.payment_method_options_upi_mandate_options_amount = { flag = ["--payment-method-options.upi.mandate-options.amount"], value = "required" }
+options.payment_method_options_upi_mandate_options_amount_type = { flag = ["--payment-method-options.upi.mandate-options.amount-type"], value = "required" }
+options.payment_method_options_upi_mandate_options_description = { flag = ["--payment-method-options.upi.mandate-options.description"], value = "required" }
+options.payment_method_options_upi_mandate_options_end_date = { flag = ["--payment-method-options.upi.mandate-options.end-date"], value = "required" }
+options.payment_method_options_upi_setup_future_usage = { flag = ["--payment-method-options.upi.setup-future-usage"], value = "required" }
+options.payment_method_options_us_bank_account_financial_connections_permissions = { flag = ["--payment-method-options.us-bank-account.financial-connections.permissions"], value = "required", repeated = true }
+options.payment_method_options_us_bank_account_financial_connections_prefetch = { flag = ["--payment-method-options.us-bank-account.financial-connections.prefetch"], value = "required", repeated = true }
+options.payment_method_options_us_bank_account_setup_future_usage = { flag = ["--payment-method-options.us-bank-account.setup-future-usage"], value = "required" }
+options.payment_method_options_us_bank_account_target_date = { flag = ["--payment-method-options.us-bank-account.target-date"], value = "required" }
+options.payment_method_options_us_bank_account_verification_method = { flag = ["--payment-method-options.us-bank-account.verification-method"], value = "required" }
+options.payment_method_options_wechat_pay_app_id = { flag = ["--payment-method-options.wechat-pay.app-id"], value = "required" }
+options.payment_method_options_wechat_pay_client = { flag = ["--payment-method-options.wechat-pay.client"], value = "required" }
+options.payment_method_options_wechat_pay_setup_future_usage = { flag = ["--payment-method-options.wechat-pay.setup-future-usage"], value = "required" }
+options.permissions_update_shipping_details = { flag = ["--permissions.update-shipping-details"], value = "required" }
+options.phone_number_collection_enabled = { flag = ["--phone-number-collection.enabled"], value = "optional" }
+options.redirect_on_completion = { flag = ["--redirect-on-completion"], value = "required" }
+options.return_url = { flag = ["--return-url"], value = "required" }
+options.saved_payment_method_options_allow_redisplay_filters = { flag = ["--saved-payment-method-options.allow-redisplay-filters"], value = "required", repeated = true }
+options.saved_payment_method_options_payment_method_remove = { flag = ["--saved-payment-method-options.payment-method-remove"], value = "required" }
+options.saved_payment_method_options_payment_method_save = { flag = ["--saved-payment-method-options.payment-method-save"], value = "required" }
+options.setup_intent_data_description = { flag = ["--setup-intent-data.description"], value = "required" }
+options.setup_intent_data_on_behalf_of = { flag = ["--setup-intent-data.on-behalf-of"], value = "required" }
+options.shipping_address_collection_allowed_countries = { flag = ["--shipping-address-collection.allowed-countries"], value = "required", repeated = true }
+options.show_headers = { flag = ["-s", "--show-headers"] }
+options.stripe_account = { flag = ["--stripe-account"], value = "required", adds = ["connected_account"] }
+options.stripe_context = { flag = ["--stripe-context"], value = "required", adds = ["connected_account"] }
+options.stripe_version = { flag = ["-v", "--stripe-version"], value = "required" }
+options.submit_type = { flag = ["--submit-type"], value = "required" }
+options.subscription_data_application_fee_percent = { flag = ["--subscription-data.application-fee-percent"], value = "required" }
+options.subscription_data_billing_cycle_anchor = { flag = ["--subscription-data.billing-cycle-anchor"], value = "required" }
+options.subscription_data_billing_cycle_anchor_config_day_of_month = { flag = ["--subscription-data.billing-cycle-anchor-config.day-of-month"], value = "required" }
+options.subscription_data_billing_cycle_anchor_config_hour = { flag = ["--subscription-data.billing-cycle-anchor-config.hour"], value = "required" }
+options.subscription_data_billing_cycle_anchor_config_minute = { flag = ["--subscription-data.billing-cycle-anchor-config.minute"], value = "required" }
+options.subscription_data_billing_cycle_anchor_config_month = { flag = ["--subscription-data.billing-cycle-anchor-config.month"], value = "required" }
+options.subscription_data_billing_cycle_anchor_config_second = { flag = ["--subscription-data.billing-cycle-anchor-config.second"], value = "required" }
+options.subscription_data_billing_mode_flexible_proration_discounts = { flag = ["--subscription-data.billing-mode.flexible.proration-discounts"], value = "required" }
+options.subscription_data_billing_mode_type = { flag = ["--subscription-data.billing-mode.type"], value = "required" }
+options.subscription_data_default_tax_rates = { flag = ["--subscription-data.default-tax-rates"], value = "required", repeated = true }
+options.subscription_data_description = { flag = ["--subscription-data.description"], value = "required" }
+options.subscription_data_invoice_settings_account_tax_ids = { flag = ["--subscription-data.invoice-settings.account-tax-ids"], value = "required", repeated = true }
+options.subscription_data_invoice_settings_description = { flag = ["--subscription-data.invoice-settings.description"], value = "required" }
+options.subscription_data_invoice_settings_footer = { flag = ["--subscription-data.invoice-settings.footer"], value = "required" }
+options.subscription_data_invoice_settings_issuer_account = { flag = ["--subscription-data.invoice-settings.issuer.account"], value = "required" }
+options.subscription_data_invoice_settings_issuer_type = { flag = ["--subscription-data.invoice-settings.issuer.type"], value = "required" }
+options.subscription_data_on_behalf_of = { flag = ["--subscription-data.on-behalf-of"], value = "required" }
+options.subscription_data_pending_invoice_item_interval_interval = { flag = ["--subscription-data.pending-invoice-item-interval.interval"], value = "required" }
+options.subscription_data_pending_invoice_item_interval_interval_count = { flag = ["--subscription-data.pending-invoice-item-interval.interval-count"], value = "required" }
+options.subscription_data_proration_behavior = { flag = ["--subscription-data.proration-behavior"], value = "required" }
+options.subscription_data_transfer_data_amount_percent = { flag = ["--subscription-data.transfer-data.amount-percent"], value = "required" }
+options.subscription_data_transfer_data_destination = { flag = ["--subscription-data.transfer-data.destination"], value = "required" }
+options.subscription_data_trial_end = { flag = ["--subscription-data.trial-end"], value = "required" }
+options.subscription_data_trial_period_days = { flag = ["--subscription-data.trial-period-days"], value = "required" }
+options.subscription_data_trial_settings_end_behavior_missing_payment_method = { flag = ["--subscription-data.trial-settings.end-behavior.missing-payment-method"], value = "required" }
+options.success_url = { flag = ["--success-url"], value = "required" }
+options.tax_id_collection_enabled = { flag = ["--tax-id-collection.enabled"], value = "optional" }
+options.tax_id_collection_required = { flag = ["--tax-id-collection.required"], value = "required" }
+options.ui_mode = { flag = ["--ui-mode"], value = "required" }
+options.wallet_options_link_display = { flag = ["--wallet-options.link.display"], value = "required" }
+
+# POST /v1/checkout/sessions/{session}/expire
+[shell.checkout_sessions_expire]
+usage = "stripe [global options] checkout sessions expire [options] <session>"
+adds  = ["network", "write_data"]
+options.confirm = { flag = ["-c", "--confirm"] }
+options.dark_style = { flag = ["--dark-style"] }
+options.data = { flag = ["-d", "--data"], value = "required", repeated = true }
+options.dry_run = { flag = ["--dry-run"], removes = ["delete_data", "move_money", "write_data"] }
+options.expand = { flag = ["-e", "--expand"], value = "required", repeated = true }
+options.idempotency = { flag = ["-i", "--idempotency"], value = "required" }
+options.live = { flag = ["--live"], adds = ["live_mode"] }
+options.show_headers = { flag = ["-s", "--show-headers"] }
+options.stripe_account = { flag = ["--stripe-account"], value = "required", adds = ["connected_account"] }
+options.stripe_context = { flag = ["--stripe-context"], value = "required", adds = ["connected_account"] }
+options.stripe_version = { flag = ["-v", "--stripe-version"], value = "required" }
+
+# GET /v1/checkout/sessions
+[shell.checkout_sessions_list]
+usage = "stripe [global options] checkout sessions list [options]"
+adds  = ["network"]
+options.confirm = { flag = ["-c", "--confirm"] }
+options.created = { flag = ["--created"], value = "required" }
+options.customer = { flag = ["--customer"], value = "required" }
+options.customer_account = { flag = ["--customer-account"], value = "required" }
+options.dark_style = { flag = ["--dark-style"] }
+options.data = { flag = ["-d", "--data"], value = "required", repeated = true }
+options.dry_run = { flag = ["--dry-run"], removes = ["delete_data", "move_money", "write_data"] }
+options.ending_before = { flag = ["--ending-before"], value = "required" }
+options.expand = { flag = ["-e", "--expand"], value = "required", repeated = true }
+options.idempotency = { flag = ["-i", "--idempotency"], value = "required" }
+options.limit = { flag = ["--limit"], value = "required" }
+options.live = { flag = ["--live"], adds = ["live_mode"] }
+options.payment_intent = { flag = ["--payment-intent"], value = "required" }
+options.payment_link = { flag = ["--payment-link"], value = "required" }
+options.show_headers = { flag = ["-s", "--show-headers"] }
+options.starting_after = { flag = ["--starting-after"], value = "required" }
+options.status = { flag = ["--status"], value = "required" }
+options.stripe_account = { flag = ["--stripe-account"], value = "required", adds = ["connected_account"] }
+options.stripe_context = { flag = ["--stripe-context"], value = "required", adds = ["connected_account"] }
+options.stripe_version = { flag = ["-v", "--stripe-version"], value = "required" }
+options.subscription = { flag = ["--subscription"], value = "required" }
+
+# GET /v1/checkout/sessions/{session}
+[shell.checkout_sessions_retrieve]
+usage = "stripe [global options] checkout sessions retrieve [options] <session>"
+adds  = ["network"]
+options.confirm = { flag = ["-c", "--confirm"] }
+options.dark_style = { flag = ["--dark-style"] }
+options.data = { flag = ["-d", "--data"], value = "required", repeated = true }
+options.dry_run = { flag = ["--dry-run"], removes = ["delete_data", "move_money", "write_data"] }
+options.ending_before = { flag = ["-b", "--ending-before"], value = "required" }
+options.expand = { flag = ["-e", "--expand"], value = "required", repeated = true }
+options.idempotency = { flag = ["-i", "--idempotency"], value = "required" }
+options.limit = { flag = ["-l", "--limit"], value = "required" }
+options.live = { flag = ["--live"], adds = ["live_mode"] }
+options.show_headers = { flag = ["-s", "--show-headers"] }
+options.starting_after = { flag = ["-a", "--starting-after"], value = "required" }
+options.stripe_account = { flag = ["--stripe-account"], value = "required", adds = ["connected_account"] }
+options.stripe_context = { flag = ["--stripe-context"], value = "required", adds = ["connected_account"] }
+options.stripe_version = { flag = ["-v", "--stripe-version"], value = "required" }
+
+# POST /v1/checkout/sessions/{session}
+[shell.checkout_sessions_update]
+usage = "stripe [global options] checkout sessions update [options] <session>"
+adds  = ["network", "write_data"]
+options.collected_information_shipping_details_address_city = { flag = ["--collected-information.shipping-details.address.city"], value = "required" }
+options.collected_information_shipping_details_address_country = { flag = ["--collected-information.shipping-details.address.country"], value = "required" }
+options.collected_information_shipping_details_address_line1 = { flag = ["--collected-information.shipping-details.address.line1"], value = "required" }
+options.collected_information_shipping_details_address_line2 = { flag = ["--collected-information.shipping-details.address.line2"], value = "required" }
+options.collected_information_shipping_details_address_postal_code = { flag = ["--collected-information.shipping-details.address.postal-code"], value = "required" }
+options.collected_information_shipping_details_address_state = { flag = ["--collected-information.shipping-details.address.state"], value = "required" }
+options.collected_information_shipping_details_name = { flag = ["--collected-information.shipping-details.name"], value = "required" }
+options.confirm = { flag = ["-c", "--confirm"] }
+options.dark_style = { flag = ["--dark-style"] }
+options.data = { flag = ["-d", "--data"], value = "required", repeated = true }
+options.dry_run = { flag = ["--dry-run"], removes = ["delete_data", "move_money", "write_data"] }
+options.expand = { flag = ["-e", "--expand"], value = "required", repeated = true }
+options.idempotency = { flag = ["-i", "--idempotency"], value = "required" }
+options.live = { flag = ["--live"], adds = ["live_mode"] }
+options.payment_intent_data_description = { flag = ["--payment-intent-data.description"], value = "required" }
+options.payment_intent_data_setup_future_usage = { flag = ["--payment-intent-data.setup-future-usage"], value = "required" }
+options.payment_intent_data_statement_descriptor = { flag = ["--payment-intent-data.statement-descriptor"], value = "required" }
+options.payment_intent_data_statement_descriptor_suffix = { flag = ["--payment-intent-data.statement-descriptor-suffix"], value = "required" }
+options.show_headers = { flag = ["-s", "--show-headers"] }
+options.stripe_account = { flag = ["--stripe-account"], value = "required", adds = ["connected_account"] }
+options.stripe_context = { flag = ["--stripe-context"], value = "required", adds = ["connected_account"] }
+options.stripe_version = { flag = ["-v", "--stripe-version"], value = "required" }
+
+# GET /v1/events
+[shell.events_list]
+usage = "stripe [global options] events list [options]"
+adds  = ["network"]
+options.confirm = { flag = ["-c", "--confirm"] }
+options.created = { flag = ["--created"], value = "required" }
+options.dark_style = { flag = ["--dark-style"] }
+options.data = { flag = ["-d", "--data"], value = "required", repeated = true }
+options.delivery_success = { flag = ["--delivery-success"], value = "optional" }
+options.dry_run = { flag = ["--dry-run"], removes = ["delete_data", "move_money", "write_data"] }
+options.ending_before = { flag = ["--ending-before"], value = "required" }
+options.expand = { flag = ["-e", "--expand"], value = "required", repeated = true }
+options.idempotency = { flag = ["-i", "--idempotency"], value = "required" }
+options.limit = { flag = ["--limit"], value = "required" }
+options.live = { flag = ["--live"], adds = ["live_mode"] }
+options.show_headers = { flag = ["-s", "--show-headers"] }
+options.starting_after = { flag = ["--starting-after"], value = "required" }
+options.stripe_account = { flag = ["--stripe-account"], value = "required", adds = ["connected_account"] }
+options.stripe_context = { flag = ["--stripe-context"], value = "required", adds = ["connected_account"] }
+options.stripe_version = { flag = ["-v", "--stripe-version"], value = "required" }
+options.type = { flag = ["--type"], value = "required" }
+options.types = { flag = ["--types"], value = "required", repeated = true }
+
+# GET /v1/events/{id}
+[shell.events_retrieve]
+usage = "stripe [global options] events retrieve [options] <id>"
+adds  = ["network"]
+options.confirm = { flag = ["-c", "--confirm"] }
+options.dark_style = { flag = ["--dark-style"] }
+options.data = { flag = ["-d", "--data"], value = "required", repeated = true }
+options.dry_run = { flag = ["--dry-run"], removes = ["delete_data", "move_money", "write_data"] }
+options.ending_before = { flag = ["-b", "--ending-before"], value = "required" }
+options.expand = { flag = ["-e", "--expand"], value = "required", repeated = true }
+options.idempotency = { flag = ["-i", "--idempotency"], value = "required" }
+options.limit = { flag = ["-l", "--limit"], value = "required" }
+options.live = { flag = ["--live"], adds = ["live_mode"] }
+options.show_headers = { flag = ["-s", "--show-headers"] }
+options.starting_after = { flag = ["-a", "--starting-after"], value = "required" }
+options.stripe_account = { flag = ["--stripe-account"], value = "required", adds = ["connected_account"] }
+options.stripe_context = { flag = ["--stripe-context"], value = "required", adds = ["connected_account"] }
+options.stripe_version = { flag = ["-v", "--stripe-version"], value = "required" }
+
+# POST /v1/events/{event}/retry
+[shell.events_resend]
+usage = "stripe [global options] events resend [options] <event>"
+adds  = ["network", "write_data"]
+options.account = { flag = ["--account"], value = "required" }
+options.confirm = { flag = ["-c", "--confirm"] }
+options.dark_style = { flag = ["--dark-style"] }
+options.data = { flag = ["-d", "--data"], value = "required", repeated = true }
+options.dry_run = { flag = ["--dry-run"], removes = ["delete_data", "move_money", "write_data"] }
+options.expand = { flag = ["-e", "--expand"], value = "required", repeated = true }
+options.idempotency = { flag = ["-i", "--idempotency"], value = "required" }
+options.live = { flag = ["--live"], adds = ["live_mode"] }
+options.show_headers = { flag = ["-s", "--show-headers"] }
+options.stripe_account = { flag = ["--stripe-account"], value = "required", adds = ["connected_account"] }
+options.stripe_context = { flag = ["--stripe-context"], value = "required", adds = ["connected_account"] }
+options.stripe_version = { flag = ["-v", "--stripe-version"], value = "required" }
+options.webhook_endpoint = { flag = ["--webhook-endpoint"], value = "required" }
