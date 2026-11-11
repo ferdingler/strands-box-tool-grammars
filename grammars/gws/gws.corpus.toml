@@ -1325,9 +1325,9 @@ effects = ["read_data"]
 
 # Drive "anyone": a JSON \u escape, whitespace, upper case, and the `=` form are all caught.
 [[case]]
-argv = ["gws", "drive", "permissions", "create", "--params", '{"fileId":"f1"}', "--json", '{"role":"reader","type":"anyone"}']
+argv = ["gws", "drive", "permissions", "create", "--params", '{"fileId":"f1"}', "--json", '{"role":"reader","type":"\u0061nyone"}']
 action = "drive_permissions_create"
-fields = { params = '{"fileId":"f1"}', json = '{"role":"reader","type":"anyone"}' }
+fields = { params = '{"fileId":"f1"}', json = '{"role":"reader","type":"\u0061nyone"}' }
 effects = ["share_external", "make_public", "send_email"]
 
 [[case]]
@@ -1358,9 +1358,9 @@ fields = { params = '{"calendarId":"primary","sendUpdates":"all"}', json = '{"su
 effects = ["write_data", "send_email"]
 
 [[case]]
-argv = ["gws", "calendar", "events", "delete", "--params", '{"calendarId":"primary","eventId":"e","sendUpdates":"all"}']
+argv = ["gws", "calendar", "events", "delete", "--params", '{"calendarId":"primary","eventId":"e","\u0073endUpdates":"all"}']
 action = "calendar_events_delete"
-fields = { params = '{"calendarId":"primary","eventId":"e","sendUpdates":"all"}' }
+fields = { params = '{"calendarId":"primary","eventId":"e","\u0073endUpdates":"all"}' }
 effects = ["delete_data", "send_email"]
 
 [[case]]
@@ -1431,9 +1431,9 @@ fields = { params = '{"fileId":"f1","revisionId":"head"}', json = '{ "PUBLISHED"
 effects = ["write_data", "make_public", "share_external"]
 
 [[case]]
-argv = ["gws", "drive", "revisions", "update", "--json", '{"published":true}']
+argv = ["gws", "drive", "revisions", "update", "--json", '{"\u0070ublished":true}']
 action = "drive_revisions_update"
-fields = { json = '{"published":true}' }
+fields = { json = '{"\u0070ublished":true}' }
 effects = ["write_data", "make_public", "share_external"]
 
 [[case]]
@@ -1478,10 +1478,10 @@ fields = { params = '{"fileId":"f1"}', json = '{"name":"c","Parents":["pub"]}' }
 effects = ["write_data", "share_external"]
 
 [[case]]
-argv = ["gws", "drive", "files", "create", "--upload", "a.txt", "--json", '{"name":"a","parents":["pub"]}']
+argv = ["gws", "drive", "files", "create", "--upload", "a.txt", "--json", '{"name":"a","\u0070arents":["pub"]}']
 action = "drive_files_create"
-fields = { upload = "a.txt", json = '{"name":"a","parents":["pub"]}' }
-effects = ["write_data", "share_external", "upload_file"]
+fields = { upload = "a.txt", json = '{"name":"a","\u0070arents":["pub"]}' }
+effects = ["write_data", "share_external", "change_sharing_rules", "upload_file"]
 
 # A create with no parents stays write_data.
 [[case]]
@@ -1542,3 +1542,72 @@ argv = ["gws", "drive", "files", "update", "--params", '{"fileId":"f1"}', "--jso
 action = "drive_files_update"
 fields = { params = '{"fileId":"f1"}', json = '{"inheritedPermissionsDisabled":false}' }
 effects = ["write_data", "share_external"]
+
+# --- independent verifier cases, round 3 (against 006c260) ---
+
+# R2-1 fix: inheritedPermissionsDisabled in upper case and in a copy body.
+[[case]]
+argv = ["gws", "drive", "files", "update", "--params", '{"fileId":"f1"}', "--json", '{"INHERITEDPERMISSIONSDISABLED":false}']
+action = "drive_files_update"
+fields = { params = '{"fileId":"f1"}', json = '{"INHERITEDPERMISSIONSDISABLED":false}' }
+effects = ["write_data", "share_external"]
+
+[[case]]
+argv = ["gws", "drive", "files", "copy", "--params", '{"fileId":"f1"}', "--json", '{"inheritedPermissionsDisabled":false}', "--dry-run"]
+action = "drive_files_copy"
+fields = { params = '{"fileId":"f1"}', json = '{"inheritedPermissionsDisabled":false}', dry_run = true }
+effects = []
+
+# change_sharing_rules: copyRequiresWriterPermission alone, a \u key, and a shared drive create.
+[[case]]
+argv = ["gws", "drive", "files", "create", "--json", '{"name":"a","copyRequiresWriterPermission":false}']
+action = "drive_files_create"
+fields = { json = '{"name":"a","copyRequiresWriterPermission":false}' }
+effects = ["write_data", "change_sharing_rules"]
+
+[[case]]
+argv = ["gws", "drive", "files", "update", "--params", '{"fileId":"f1"}', "--json", '{"\u0077ritersCanShare":true}']
+action = "drive_files_update"
+fields = { params = '{"fileId":"f1"}', json = '{"\u0077ritersCanShare":true}' }
+effects = ["write_data", "share_external", "change_sharing_rules"]
+
+[[case]]
+argv = ["gws", "drive", "drives", "create", "--params", '{"requestId":"r1"}', "--json", '{"name":"d","Restrictions":{"domainUsersOnly":false}}']
+action = "drive_drives_create"
+fields = { params = '{"requestId":"r1"}', json = '{"name":"d","Restrictions":{"domainUsersOnly":false}}' }
+effects = ["write_data", "change_sharing_rules"]
+
+# R2-5 fix: transferOwnership in --params adds send_email.
+[[case]]
+argv = ["gws", "drive", "permissions", "update", '--params={"fileId":"f1","permissionId":"p1","TransferOwnership":true}', "--json", '{"role":"owner"}']
+action = "drive_permissions_update"
+fields = { params = '{"fileId":"f1","permissionId":"p1","TransferOwnership":true}', json = '{"role":"owner"}' }
+effects = ["share_external", "make_public", "send_email"]
+
+# R2-4 fix: every move adds share_external, also with no destination named in a send key.
+[[case]]
+argv = ["gws", "calendar", "events", "move", "--params", '{"calendarId":"primary","eventId":"e","destination":"c2"}']
+action = "calendar_events_move"
+fields = { params = '{"calendarId":"primary","eventId":"e","destination":"c2"}' }
+effects = ["write_data", "share_external"]
+
+# Plain writes stay plain (no over-flag regressions).
+[[case]]
+argv = ["gws", "drive", "files", "update", "--params", '{"fileId":"f1"}', "--json", '{"name":"renamed"}']
+action = "drive_files_update"
+fields = { params = '{"fileId":"f1"}', json = '{"name":"renamed"}' }
+effects = ["write_data"]
+
+[[case]]
+argv = ["gws", "drive", "drives", "update", "--params", '{"driveId":"d1"}', "--json", '{"name":"n"}']
+action = "drive_drives_update"
+fields = { params = '{"driveId":"d1"}', json = '{"name":"n"}' }
+effects = ["write_data"]
+
+# Noted, not failed (MINOR R3-1): File.downloadRestrictions changes who may download a file, which
+# change_sharing_rules describes, but no pattern names it.
+[[case]]
+argv = ["gws", "drive", "files", "update", "--params", '{"fileId":"f1"}', "--json", '{"downloadRestrictions":{"itemDownloadRestriction":{"restrictedForReaders":false}}}']
+action = "drive_files_update"
+fields = { params = '{"fileId":"f1"}', json = '{"downloadRestrictions":{"itemDownloadRestriction":{"restrictedForReaders":false}}}' }
+effects = ["write_data"]
