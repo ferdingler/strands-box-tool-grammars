@@ -688,3 +688,234 @@ action = "unmodeled"
 [[case]]
 argv = ["pip", "config", "set", "--editor", "vi", "global.timeout", "60"]
 action = "unmodeled"
+
+# --- independent verifier cases ---
+# Written by the verifier from pip 26.3 help and source (tag 26.3), not from the grammar output.
+# Ground truth for parsing: pip's own optparse parsers (cli/main_parser.py::parse_command and each
+# command's parser), run on each argv with no command executed.
+
+# PEP 508 direct reference to a VCS URL (req/constructors.py::parse_req_from_line; the Link of
+# `name @ url` has scheme `git+https`, so vcs/git.py runs git). Expected run_vcs.
+[[case]]
+argv = ["pip", "install", "pkg @ git+https://example.com/r.git"]
+action = "install"
+fields = { spec = ["pkg @ git+https://example.com/r.git"] }
+effects = ["install_packages", "network", "run_build_backend", "run_vcs"]
+
+# Same, with no spaces around `@`; pip parses it to the same git+https link.
+[[case]]
+argv = ["pip", "install", "pkg@git+https://example.com/r.git"]
+action = "install"
+fields = { spec = ["pkg@git+https://example.com/r.git"] }
+effects = ["install_packages", "network", "run_build_backend", "run_vcs"]
+
+# URL schemes are case-insensitive (urlsplit lowercases them, then Link.is_vcs is true).
+[[case]]
+argv = ["pip", "install", "GIT+https://example.com/r.git#egg=pkg"]
+action = "install"
+fields = { spec = ["GIT+https://example.com/r.git#egg=pkg"] }
+effects = ["install_packages", "network", "run_build_backend", "run_vcs"]
+
+# `-e` with an upper-case VCS scheme, value attached to the short flag.
+[[case]]
+argv = ["pip", "install", "-eGit+ssh://git@example.com/r.git#egg=pkg"]
+action = "install"
+fields = { editable = ["Git+ssh://git@example.com/r.git#egg=pkg"] }
+effects = ["install_packages", "network", "run_build_backend", "run_vcs"]
+
+# wheel with a PEP 508 hg reference.
+[[case]]
+argv = ["pip", "wheel", "-w", "out", "pkg[x] @ hg+https://example.com/r"]
+action = "wheel"
+fields = { wheel_dir = "out", spec = ["pkg[x] @ hg+https://example.com/r"] }
+effects = ["network", "run_build_backend", "run_vcs"]
+
+# A direct archive URL names a package source on the command line, which the README rule
+# "Install only from the default index" relies on. Expected override_index.
+[[case]]
+argv = ["pip", "install", "https://evil.example/pkg-1.0.tar.gz"]
+action = "install"
+fields = { spec = ["https://evil.example/pkg-1.0.tar.gz"] }
+effects = ["install_packages", "network", "override_index", "run_build_backend"]
+
+# pip resolves a unique long-option prefix (optparse _match_abbrev); `--upgr` is ambiguous in pip.
+[[case]]
+argv = ["pip", "install", "--upgr", "requests"]
+action = "unmodeled"
+
+[[case]]
+argv = ["pip", "install", "--force-rein", "requests"]
+action = "unmodeled"
+
+# `--python` after the command: pip exits with "must be placed before the pip subcommand name".
+[[case]]
+argv = ["pip", "install", "--python", "/usr/bin/python3", "x"]
+action = "unmodeled"
+
+# `--python=` before the command re-runs pip under that interpreter (main_parser.py::parse_command).
+[[case]]
+argv = ["pip", "--python=/opt/py/bin/python", "install", "x"]
+action = "install"
+fields = { python = "/opt/py/bin/python", spec = ["x"] }
+effects = ["install_packages", "network", "other_interpreter", "run_build_backend"]
+
+# A general option after the operand (the command parser keeps interspersed args).
+[[case]]
+argv = ["pip", "install", "x", "--trusted-host", "evil.example"]
+action = "install"
+fields = { spec = ["x"], trusted_host = ["evil.example"] }
+effects = ["disable_tls_verification", "install_packages", "network", "run_build_backend"]
+
+# `--trusted-host` before and after the command: pip appends both (["a", "b"]).
+[[case]]
+argv = ["pip", "--trusted-host", "a", "install", "--trusted-host", "b", "x"]
+action = "install"
+fields = { spec = ["x"], trusted_host = ["a", "b"] }
+effects = ["disable_tls_verification", "install_packages", "network", "run_build_backend"]
+
+# Attached short value: pip reads index_url = "https://idx.example/simple".
+[[case]]
+argv = ["pip", "install", "-ihttps://idx.example/simple", "x"]
+action = "install"
+fields = { index_url = "https://idx.example/simple", spec = ["x"] }
+effects = ["install_packages", "network", "override_index", "run_build_backend"]
+
+# `-i=v`: pip reads the value "=v"; the grammar refuses the form.
+[[case]]
+argv = ["pip", "install", "-i=https://idx.example/simple", "x"]
+action = "unmodeled"
+
+# Cluster of a command flag and a general flag.
+[[case]]
+argv = ["pip", "install", "-Uq", "x"]
+action = "install"
+fields = { upgrade = true, quiet = true, spec = ["x"] }
+effects = ["install_packages", "network", "run_build_backend"]
+
+# `-i` twice: pip keeps the last one. Not modeled.
+[[case]]
+argv = ["pip", "install", "-i", "a", "-i", "b", "x"]
+action = "unmodeled"
+
+# After `--`, a look-alike option is a requirement word, not an index option.
+[[case]]
+argv = ["pip", "install", "--", "--index-url=x"]
+action = "install"
+fields = { spec = ["--index-url=x"] }
+effects = ["install_packages", "network", "run_build_backend"]
+
+# `--dry-run` returns before the install step (install.py, `if options.dry_run: ... return SUCCESS`).
+[[case]]
+argv = ["pip", "install", "--dry-run", "--user", "--report", "-", "x"]
+action = "install"
+fields = { dry_run = true, user = true, report = "-", spec = ["x"] }
+effects = ["network", "run_build_backend"]
+
+# Uninstall cluster: -y and the general -q.
+[[case]]
+argv = ["pip", "uninstall", "-yq", "x"]
+action = "uninstall"
+fields = { yes = true, quiet = true, package = ["x"] }
+effects = ["remove_packages", "skip_prompt"]
+
+# pip: "--yes option does not take a value".
+[[case]]
+argv = ["pip", "uninstall", "--yes=1", "x"]
+action = "unmodeled"
+
+# A config write to the global file.
+[[case]]
+argv = ["pip", "config", "set", "--global", "global.index-url", "https://evil.example/simple"]
+action = "config_set"
+fields = { global = true, name = "global.index-url", value = "https://evil.example/simple" }
+effects = ["override_config"]
+
+# pip accepts an option before the config subcommand word; the grammar does not.
+[[case]]
+argv = ["pip", "config", "--global", "set", "a", "b"]
+action = "unmodeled"
+
+# `cache remove '*'` removes every wheel (cache.py::remove_cache_items).
+[[case]]
+argv = ["pip", "cache", "remove", "*"]
+action = "cache_remove"
+fields = { pattern = "*" }
+effects = ["delete_cache"]
+
+# pip: "Too many arguments".
+[[case]]
+argv = ["pip", "cache", "remove", "a", "b"]
+action = "unmodeled"
+
+# pip: "You need to specify exactly one argument".
+[[case]]
+argv = ["pip", "index", "versions", "a", "b"]
+action = "unmodeled"
+
+# download has no -e (pip: "no such option: -e").
+[[case]]
+argv = ["pip", "download", "-d", "/tmp/x", "-e", "."]
+action = "unmodeled"
+
+# list cluster -o -l; -o queries the index.
+[[case]]
+argv = ["pip", "list", "-ol", "--format=json"]
+action = "list"
+fields = { outdated = true, local = true, format = "json" }
+effects = ["network"]
+
+# pip: "--no-cache-dir option does not take a value".
+[[case]]
+argv = ["pip", "install", "--no-cache-dir=1", "x"]
+action = "unmodeled"
+
+[[case]]
+argv = ["pip", "install", "-t/tmp/t", "x"]
+action = "install"
+fields = { target = "/tmp/t", spec = ["x"] }
+effects = ["install_packages", "network", "run_build_backend", "write_outside_env"]
+
+# A general option value equal to the command name (main_parser.py removes the first equal word;
+# the meaning is the same: cache_dir = "install", command install).
+[[case]]
+argv = ["pip", "--cache-dir", "install", "install", "x"]
+action = "install"
+fields = { cache_dir = "install", spec = ["x"] }
+effects = ["install_packages", "network", "run_build_backend"]
+
+# pip has no command prefixes: "unknown command".
+[[case]]
+argv = ["pip", "inst", "x"]
+action = "unmodeled"
+
+[[case]]
+argv = ["pip", "INSTALL", "x"]
+action = "unmodeled"
+
+# A count flag repeated and clustered.
+[[case]]
+argv = ["pip", "install", "-v", "-v", "-vvv", "x"]
+action = "install"
+fields = { verbose = true, spec = ["x"] }
+effects = ["install_packages", "network", "run_build_backend"]
+
+# The editor runs (configuration.py::open_in_editor).
+[[case]]
+argv = ["pip", "config", "edit", "--editor=vim", "--user"]
+action = "config_edit"
+fields = { editor = "vim", user = true }
+effects = ["override_config", "run_program"]
+
+# lock writes to stdout with `-o -`.
+[[case]]
+argv = ["pip", "lock", "-o", "-", "x"]
+action = "lock"
+fields = { output = "-", spec = ["x"] }
+effects = ["network", "run_build_backend"]
+
+# `--proxy` after the command.
+[[case]]
+argv = ["pip", "download", "x", "--proxy=http://p.example:8080"]
+action = "download"
+fields = { proxy = "http://p.example:8080", spec = ["x"] }
+effects = ["network", "override_proxy", "run_build_backend"]
