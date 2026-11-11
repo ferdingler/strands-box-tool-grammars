@@ -1,0 +1,636 @@
+# Tool grammar for kubectl, the Kubernetes command-line client.
+#
+# Project:    kubernetes/kubernetes (kubectl source in the staging repo kubernetes/kubectl)
+# Executable: kubectl (a native Go binary)
+# Checked:    kubectl v1.37.2 (gitCommit c50e5395f1ae2d4a2c05f28fdcc38c0916cc1a32; kubectl staging
+#             tag v0.37.2, cobra v1.10.2, pflag v1.0.10), from `kubectl <cmd> --help` and the source.
+#
+# What this grammar cannot see:
+# - The kubeconfig file (KUBECONFIG, ~/.kube/config): which cluster, user, and namespace the
+#   current context names, and credential `exec` plugins (such as `aws eks get-token`) that kubectl
+#   runs as child processes to get a token. Those children are not decided by the policy.
+# - The kuberc file (~/.kube/kuberc, KUBECTL_KUBERC, --kuberc): its `defaults` can set flag values
+#   on built-in commands (for example `--server-side` or `--prune` on `apply`), and its `aliases`
+#   add new command names. A kuberc alias cannot shadow a built-in command, so an alias line is
+#   `unmodeled`. Set `KUBECTL_KUBERC=false` in the tool's env to turn kuberc off.
+# - Environment variables, such as KUBECONFIG, KUBECTL_KUBERC, and HTTPS_PROXY.
+# - kubectl plugins (`kubectl-<name>` on PATH). A plugin line is `unmodeled`.
+# - The contents of a file, directory, URL, or kustomization given with -f, -k, or --patch-file.
+#   The `manifest_input` effect marks each such line.
+#
+# Value spellings: kubectl uses pflag. pflag also accepts `-n=value` and `--all_namespaces`
+# (an underscore for a hyphen). This grammar reads both as `unmodeled`. A boolean flag that has a
+# short form (`-A`, `-R`, `-i`, `-t`, `-f`, `-p`, `-w`, `-q`) is a plain flag here, so
+# `--all-namespaces=true` is `unmodeled`. A long-only boolean flag is `value = "optional"`, because
+# pflag reads `--flag=false` and never takes the next word as its value. Its effects apply only
+# when the value is a pflag true value (bare, `true`, `1`, `t`, `T`, `TRUE`, `True`).
+
+format  = 1
+version = 1
+name    = "kubectl"
+program = "kubectl"
+
+[effects]
+cluster_read      = "Reads objects or state from the cluster API server"
+cluster_write     = "Creates or changes objects in the cluster"
+cluster_delete    = "Deletes objects in the cluster"
+broad_delete      = "Can delete many objects at once: --all, --all-namespaces, a selector, or --prune"
+read_secrets      = "Reads Secret objects, or kubeconfig credentials without redaction"
+write_secrets     = "Creates or changes a Secret"
+run_program       = "Runs a program inside a container"
+network_listen    = "Opens a listening port on this host that forwards to the cluster"
+listen_address    = "Sets the listen address; a value other than localhost exposes the port to other hosts"
+upload_files      = "Sends the contents of local files to the cluster"
+write_local_files = "Writes files on this host"
+manifest_input    = "Reads objects or changes from a file, directory, URL, or kustomization the grammar cannot see"
+impersonate       = "Acts as another user, group, or UID (--as, --as-group, --as-uid)"
+change_target     = "Names a cluster, context, user, server, or kubeconfig on the command line"
+override_config   = "Changes the kubeconfig file on disk"
+credentials       = "Passes a credential on the command line (--token, --username, --password)"
+insecure_tls      = "Turns off the server certificate check"
+
+# Persistent flags from `kubectl options`. kubectl accepts each before, between, and after the
+# command words.
+[global]
+options.namespace  = { flag = ["-n", "--namespace"], value = "required", anywhere = true }
+options.context    = { flag = ["--context"], value = "required", anywhere = true, adds = ["change_target"] }
+options.kubeconfig = { flag = ["--kubeconfig"], value = "required", anywhere = true, adds = ["change_target"] }
+options.cluster    = { flag = ["--cluster"], value = "required", anywhere = true, adds = ["change_target"] }
+options.user       = { flag = ["--user"], value = "required", anywhere = true, adds = ["change_target"] }
+options.server     = { flag = ["-s", "--server"], value = "required", anywhere = true, adds = ["change_target"] }
+options.as         = { flag = ["--as"], value = "required", anywhere = true, adds = ["impersonate"] }
+options.as_group   = { flag = ["--as-group"], value = "required", repeated = true, anywhere = true, adds = ["impersonate"] }
+options.as_uid     = { flag = ["--as-uid"], value = "required", anywhere = true, adds = ["impersonate"] }
+options.token      = { flag = ["--token"], value = "required", anywhere = true, adds = ["credentials"] }
+options.username   = { flag = ["--username"], value = "required", anywhere = true, adds = ["credentials"] }
+options.password   = { flag = ["--password"], value = "required", anywhere = true, adds = ["credentials"] }
+options.insecure_skip_tls_verify = { flag = ["--insecure-skip-tls-verify"], value = "optional", anywhere = true, like = ["", "true", "True", "TRUE", "t", "T", "1"], adds = ["insecure_tls"] }
+options.request_timeout      = { flag = ["--request-timeout"], value = "required", anywhere = true }
+options.v                    = { flag = ["-v", "--v"], value = "required", anywhere = true }
+options.warnings_as_errors   = { flag = ["--warnings-as-errors"], value = "optional", anywhere = true }
+options.match_server_version = { flag = ["--match-server-version"], value = "optional", anywhere = true }
+
+# ---------------------------------------------------------------------------------------------
+# Reads
+# ---------------------------------------------------------------------------------------------
+
+# kubectl get [TYPE[.VERSION][.GROUP] [NAME...] | TYPE/NAME...]. A Secret type (any case, because
+# the RESTMapper lowercases the resource) adds `read_secrets`. --raw is not modeled.
+[shell.get]
+usage = "kubectl [global options] get [options] [<type>] [<name>...]"
+adds  = ["cluster_read"]
+options.all_namespaces = { flag = ["-A", "--all-namespaces"] }
+options.allow_missing_template_keys = { flag = ["--allow-missing-template-keys"], value = "optional" }
+options.chunk_size     = { flag = ["--chunk-size"], value = "required" }
+options.field_selector = { flag = ["--field-selector"], value = "required" }
+options.filename       = { flag = ["-f", "--filename"], value = "required", repeated = true, adds = ["manifest_input"] }
+options.ignore_not_found = { flag = ["--ignore-not-found"], value = "optional" }
+options.kustomize      = { flag = ["-k", "--kustomize"], value = "required", adds = ["manifest_input"] }
+options.label_columns  = { flag = ["-L", "--label-columns"], value = "required", repeated = true }
+options.no_headers     = { flag = ["--no-headers"], value = "optional" }
+options.output         = { flag = ["-o", "--output"], value = "required" }
+options.output_watch_events = { flag = ["--output-watch-events"], value = "optional" }
+options.recursive      = { flag = ["-R", "--recursive"] }
+options.selector       = { flag = ["-l", "--selector"], value = "required" }
+options.server_print   = { flag = ["--server-print"], value = "optional" }
+options.show_kind      = { flag = ["--show-kind"], value = "optional" }
+options.show_labels    = { flag = ["--show-labels"], value = "optional" }
+options.show_managed_fields = { flag = ["--show-managed-fields"], value = "optional" }
+options.sort_by        = { flag = ["--sort-by"], value = "required" }
+options.subresource    = { flag = ["--subresource"], value = "required" }
+options.template       = { flag = ["--template"], value = "required" }
+options.watch          = { flag = ["-w", "--watch"] }
+options.watch_only     = { flag = ["--watch-only"], value = "optional" }
+
+[shell.get.operands.type]
+adds = ["read_secrets"]
+# Every upper and lower case spelling of `secret`.
+like = [
+  "*secret*", "*secreT*", "*secrEt*", "*secrET*", "*secRet*", "*secReT*",
+  "*secREt*", "*secRET*", "*seCret*", "*seCreT*", "*seCrEt*", "*seCrET*",
+  "*seCRet*", "*seCReT*", "*seCREt*", "*seCRET*", "*sEcret*", "*sEcreT*",
+  "*sEcrEt*", "*sEcrET*", "*sEcRet*", "*sEcReT*", "*sEcREt*", "*sEcRET*",
+  "*sECret*", "*sECreT*", "*sECrEt*", "*sECrET*", "*sECRet*", "*sECReT*",
+  "*sECREt*", "*sECRET*", "*Secret*", "*SecreT*", "*SecrEt*", "*SecrET*",
+  "*SecRet*", "*SecReT*", "*SecREt*", "*SecRET*", "*SeCret*", "*SeCreT*",
+  "*SeCrEt*", "*SeCrET*", "*SeCRet*", "*SeCReT*", "*SeCREt*", "*SeCRET*",
+  "*SEcret*", "*SEcreT*", "*SEcrEt*", "*SEcrET*", "*SEcRet*", "*SEcReT*",
+  "*SEcREt*", "*SEcRET*", "*SECret*", "*SECreT*", "*SECrEt*", "*SECrET*",
+  "*SECRet*", "*SECReT*", "*SECREt*", "*SECRET*",
+]
+
+[shell.get.operands.name]
+adds = ["read_secrets"]
+# A TYPE/NAME word whose type is a Secret, in any case.
+like = [
+  "*secret*/*", "*secreT*/*", "*secrEt*/*", "*secrET*/*", "*secRet*/*", "*secReT*/*",
+  "*secREt*/*", "*secRET*/*", "*seCret*/*", "*seCreT*/*", "*seCrEt*/*", "*seCrET*/*",
+  "*seCRet*/*", "*seCReT*/*", "*seCREt*/*", "*seCRET*/*", "*sEcret*/*", "*sEcreT*/*",
+  "*sEcrEt*/*", "*sEcrET*/*", "*sEcRet*/*", "*sEcReT*/*", "*sEcREt*/*", "*sEcRET*/*",
+  "*sECret*/*", "*sECreT*/*", "*sECrEt*/*", "*sECrET*/*", "*sECRet*/*", "*sECReT*/*",
+  "*sECREt*/*", "*sECRET*/*", "*Secret*/*", "*SecreT*/*", "*SecrEt*/*", "*SecrET*/*",
+  "*SecRet*/*", "*SecReT*/*", "*SecREt*/*", "*SecRET*/*", "*SeCret*/*", "*SeCreT*/*",
+  "*SeCrEt*/*", "*SeCrET*/*", "*SeCRet*/*", "*SeCReT*/*", "*SeCREt*/*", "*SeCRET*/*",
+  "*SEcret*/*", "*SEcreT*/*", "*SEcrEt*/*", "*SEcrET*/*", "*SEcRet*/*", "*SEcReT*/*",
+  "*SEcREt*/*", "*SEcRET*/*", "*SECret*/*", "*SECreT*/*", "*SECrEt*/*", "*SECrET*/*",
+  "*SECRet*/*", "*SECReT*/*", "*SECREt*/*", "*SECRET*/*",
+]
+
+# kubectl describe. It prints the keys and sizes of a Secret's data, not the values.
+[shell.describe]
+usage = "kubectl [global options] describe [options] [<type>] [<name>...]"
+adds  = ["cluster_read"]
+options.all_namespaces = { flag = ["-A", "--all-namespaces"] }
+options.chunk_size     = { flag = ["--chunk-size"], value = "required" }
+options.filename       = { flag = ["-f", "--filename"], value = "required", repeated = true, adds = ["manifest_input"] }
+options.kustomize      = { flag = ["-k", "--kustomize"], value = "required", adds = ["manifest_input"] }
+options.recursive      = { flag = ["-R", "--recursive"] }
+options.selector       = { flag = ["-l", "--selector"], value = "required" }
+options.show_events    = { flag = ["--show-events"], value = "optional" }
+
+# kubectl logs [-f] [-p] (POD | TYPE/NAME) [CONTAINER]. Zero operands needs -l.
+[shell.logs]
+usage = "kubectl [global options] logs [options] [<pod>] [<container>]"
+adds  = ["cluster_read"]
+options.all_containers = { flag = ["--all-containers"], value = "optional" }
+options.all_pods       = { flag = ["--all-pods"], value = "optional" }
+options.container_option = { flag = ["-c", "--container"], value = "required" }  # `container` is the operand
+options.follow         = { flag = ["-f", "--follow"] }
+options.ignore_errors  = { flag = ["--ignore-errors"], value = "optional" }
+options.insecure_skip_tls_verify_backend = { flag = ["--insecure-skip-tls-verify-backend"], value = "optional", like = ["", "true", "True", "TRUE", "t", "T", "1"], adds = ["insecure_tls"] }
+options.limit_bytes    = { flag = ["--limit-bytes"], value = "required" }
+options.max_log_requests = { flag = ["--max-log-requests"], value = "required" }
+options.pod_running_timeout = { flag = ["--pod-running-timeout"], value = "required" }
+options.prefix         = { flag = ["--prefix"], value = "optional" }
+options.previous       = { flag = ["-p", "--previous"] }
+options.selector       = { flag = ["-l", "--selector"], value = "required" }
+options.since          = { flag = ["--since"], value = "required" }
+options.since_time     = { flag = ["--since-time"], value = "required" }
+options.tail           = { flag = ["--tail"], value = "required" }
+options.timestamps     = { flag = ["--timestamps"], value = "optional" }
+
+# kubectl explain TYPE. It reads the OpenAPI schema from the server.
+[shell.explain]
+usage = "kubectl [global options] explain [options] <type>"
+adds  = ["cluster_read"]
+options.api_version = { flag = ["--api-version"], value = "required" }
+options.max_depth   = { flag = ["--max-depth"], value = "required" }
+options.output      = { flag = ["-o", "--output"], value = "required" }
+options.recursive   = { flag = ["-R", "--recursive"] }
+
+[shell.api_resources]
+usage = "kubectl [global options] api-resources [options]"
+adds  = ["cluster_read"]
+options.api_group   = { flag = ["--api-group"], value = "required" }
+options.cached      = { flag = ["--cached"], value = "optional" }
+options.categories  = { flag = ["--categories"], value = "required", repeated = true }
+options.namespaced  = { flag = ["--namespaced"], value = "optional" }
+options.no_headers  = { flag = ["--no-headers"], value = "optional" }
+options.output      = { flag = ["-o", "--output"], value = "required" }
+options.show_managed_fields = { flag = ["--show-managed-fields"], value = "optional" }
+options.sort_by     = { flag = ["--sort-by"], value = "required" }
+options.verbs       = { flag = ["--verbs"], value = "required", repeated = true }
+
+[shell.api_versions]
+usage = "kubectl [global options] api-versions"
+adds  = ["cluster_read"]
+
+# kubectl version contacts the server unless --client is true.
+[shell.version]
+usage = "kubectl [global options] version [options]"
+adds  = ["cluster_read"]
+options.client = { flag = ["--client"], value = "optional", like = ["", "true", "True", "TRUE", "t", "T", "1"], removes = ["cluster_read"] }
+options.output = { flag = ["-o", "--output"], value = "required" }
+
+# kubectl cluster-info. `cluster-info dump` is not modeled.
+[shell.cluster_info]
+usage = "kubectl [global options] cluster-info"
+adds  = ["cluster_read"]
+
+[shell.top_pod]
+usage   = "kubectl [global options] top pod [options] [<name>]"
+aliases = ["top pods", "top po"]
+adds    = ["cluster_read"]
+options.all_namespaces = { flag = ["-A", "--all-namespaces"] }
+options.containers     = { flag = ["--containers"], value = "optional" }
+options.field_selector = { flag = ["--field-selector"], value = "required" }
+options.no_headers     = { flag = ["--no-headers"], value = "optional" }
+options.selector       = { flag = ["-l", "--selector"], value = "required" }
+options.show_swap      = { flag = ["--show-swap"], value = "optional" }
+options.sort_by        = { flag = ["--sort-by"], value = "required" }
+options.sum            = { flag = ["--sum"], value = "optional" }
+options.use_protocol_buffers = { flag = ["--use-protocol-buffers"], value = "optional" }
+
+[shell.top_node]
+usage   = "kubectl [global options] top node [options] [<name>]"
+aliases = ["top nodes", "top no"]
+adds    = ["cluster_read"]
+options.no_headers     = { flag = ["--no-headers"], value = "optional" }
+options.selector       = { flag = ["-l", "--selector"], value = "required" }
+options.show_capacity  = { flag = ["--show-capacity"], value = "optional" }
+options.show_swap      = { flag = ["--show-swap"], value = "optional" }
+options.sort_by        = { flag = ["--sort-by"], value = "required" }
+options.use_protocol_buffers = { flag = ["--use-protocol-buffers"], value = "optional" }
+
+# kubectl auth can-i VERB [TYPE | TYPE/NAME | NONRESOURCEURL], or --list with no VERB.
+[shell.auth_can_i]
+usage = "kubectl [global options] auth can-i [options] [<verb>] [<type>]"
+adds  = ["cluster_read"]
+options.all_namespaces = { flag = ["-A", "--all-namespaces"] }
+options.list           = { flag = ["--list"], value = "optional" }
+options.no_headers     = { flag = ["--no-headers"], value = "optional" }
+options.quiet          = { flag = ["-q", "--quiet"] }
+options.subresource    = { flag = ["--subresource"], value = "required" }
+
+[shell.auth_whoami]
+usage = "kubectl [global options] auth whoami [options]"
+adds  = ["cluster_read"]
+options.output   = { flag = ["-o", "--output"], value = "required" }
+options.template = { flag = ["--template"], value = "required" }
+
+[shell.rollout_status]
+usage = "kubectl [global options] rollout status [options] [<type>] [<name>...]"
+adds  = ["cluster_read"]
+options.filename  = { flag = ["-f", "--filename"], value = "required", repeated = true, adds = ["manifest_input"] }
+options.kustomize = { flag = ["-k", "--kustomize"], value = "required", adds = ["manifest_input"] }
+options.recursive = { flag = ["-R", "--recursive"] }
+options.revision  = { flag = ["--revision"], value = "required" }
+options.selector  = { flag = ["-l", "--selector"], value = "required" }
+options.timeout   = { flag = ["--timeout"], value = "required" }
+options.watch     = { flag = ["-w", "--watch"] }
+
+[shell.rollout_history]
+usage = "kubectl [global options] rollout history [options] [<type>] [<name>...]"
+adds  = ["cluster_read"]
+options.filename  = { flag = ["-f", "--filename"], value = "required", repeated = true, adds = ["manifest_input"] }
+options.kustomize = { flag = ["-k", "--kustomize"], value = "required", adds = ["manifest_input"] }
+options.output    = { flag = ["-o", "--output"], value = "required" }
+options.recursive = { flag = ["-R", "--recursive"] }
+options.revision  = { flag = ["--revision"], value = "required" }
+options.selector  = { flag = ["-l", "--selector"], value = "required" }
+options.template  = { flag = ["--template"], value = "required" }
+
+# ---------------------------------------------------------------------------------------------
+# Local kubeconfig. These do not contact the cluster.
+# ---------------------------------------------------------------------------------------------
+
+# kubectl config view redacts credentials unless --raw or --flatten is true.
+[shell.config_view]
+usage = "kubectl [global options] config view [options]"
+options.flatten  = { flag = ["--flatten"], value = "optional", like = ["", "true", "True", "TRUE", "t", "T", "1"], adds = ["read_secrets"] }
+options.minify   = { flag = ["--minify"], value = "optional" }
+options.output   = { flag = ["-o", "--output"], value = "required" }
+options.raw      = { flag = ["--raw"], value = "optional", like = ["", "true", "True", "TRUE", "t", "T", "1"], adds = ["read_secrets"] }
+options.template = { flag = ["--template"], value = "required" }
+
+[shell.config_get_contexts]
+usage = "kubectl [global options] config get-contexts [options] [<context_name>]"
+options.no_headers = { flag = ["--no-headers"], value = "optional" }
+options.output     = { flag = ["-o", "--output"], value = "required" }
+
+[shell.config_current_context]
+usage = "kubectl [global options] config current-context"
+
+# `context_name`, because the global option `--context` holds the field `context`.
+[shell.config_use_context]
+usage   = "kubectl [global options] config use-context <context_name>"
+aliases = ["config use"]
+adds    = ["override_config"]
+
+# ---------------------------------------------------------------------------------------------
+# Writes. --dry-run is `value = "optional"`: pflag sets NoOptDefVal "unchanged", so a bare
+# --dry-run is client dry-run and `--dry-run server` is a bare --dry-run and an operand. Each true
+# boolean, `unchanged`, `client`, and `server` removes the write effects; `none` and false keep them.
+# ---------------------------------------------------------------------------------------------
+
+[shell.apply]
+usage = "kubectl [global options] apply [options]"
+adds  = ["cluster_write"]
+options.all       = { flag = ["--all"], value = "optional" }
+options.allow_missing_template_keys = { flag = ["--allow-missing-template-keys"], value = "optional" }
+options.cascade   = { flag = ["--cascade"], value = "optional" }
+options.dry_run   = { flag = ["--dry-run"], value = "optional", like = ["", "unchanged", "client", "server", "true", "True", "TRUE", "t", "T", "1"], removes = ["cluster_write", "cluster_delete", "broad_delete", "write_secrets"] }
+options.field_manager = { flag = ["--field-manager"], value = "required" }
+options.filename  = { flag = ["-f", "--filename"], value = "required", repeated = true, adds = ["manifest_input"] }
+options.force     = { flag = ["--force"], value = "optional", like = ["", "true", "True", "TRUE", "t", "T", "1"], adds = ["cluster_delete"] }
+options.force_conflicts = { flag = ["--force-conflicts"], value = "optional" }
+options.grace_period = { flag = ["--grace-period"], value = "required" }
+options.kustomize = { flag = ["-k", "--kustomize"], value = "required", adds = ["manifest_input"] }
+options.output    = { flag = ["-o", "--output"], value = "required" }
+options.overwrite = { flag = ["--overwrite"], value = "optional" }
+options.prune     = { flag = ["--prune"], value = "optional", like = ["", "true", "True", "TRUE", "t", "T", "1"], adds = ["cluster_delete", "broad_delete"] }
+options.prune_allowlist = { flag = ["--prune-allowlist"], value = "required", repeated = true }
+options.recursive = { flag = ["-R", "--recursive"] }
+options.selector  = { flag = ["-l", "--selector"], value = "required" }
+options.server_side = { flag = ["--server-side"], value = "optional" }
+options.show_managed_fields = { flag = ["--show-managed-fields"], value = "optional" }
+options.template  = { flag = ["--template"], value = "required" }
+options.timeout   = { flag = ["--timeout"], value = "required" }
+options.validate  = { flag = ["--validate"], value = "optional" }
+options.wait      = { flag = ["--wait"], value = "optional" }
+
+# kubectl create -f FILENAME. --edit (opens an editor) and --raw are not modeled.
+[shell.create]
+usage = "kubectl [global options] create [options]"
+adds  = ["cluster_write"]
+options.allow_missing_template_keys = { flag = ["--allow-missing-template-keys"], value = "optional" }
+options.dry_run   = { flag = ["--dry-run"], value = "optional", like = ["", "unchanged", "client", "server", "true", "True", "TRUE", "t", "T", "1"], removes = ["cluster_write"] }
+options.field_manager = { flag = ["--field-manager"], value = "required" }
+options.filename  = { flag = ["-f", "--filename"], value = "required", repeated = true, adds = ["manifest_input"] }
+options.kustomize = { flag = ["-k", "--kustomize"], value = "required", adds = ["manifest_input"] }
+options.output    = { flag = ["-o", "--output"], value = "required" }
+options.recursive = { flag = ["-R", "--recursive"] }
+options.save_config = { flag = ["--save-config"], value = "optional" }
+options.selector  = { flag = ["-l", "--selector"], value = "required" }
+options.show_managed_fields = { flag = ["--show-managed-fields"], value = "optional" }
+options.template  = { flag = ["--template"], value = "required" }
+options.validate  = { flag = ["--validate"], value = "optional" }
+
+[shell.create_namespace]
+usage   = "kubectl [global options] create namespace [options] <name>"
+aliases = ["create ns"]
+adds    = ["cluster_write"]
+options.allow_missing_template_keys = { flag = ["--allow-missing-template-keys"], value = "optional" }
+options.dry_run   = { flag = ["--dry-run"], value = "optional", like = ["", "unchanged", "client", "server", "true", "True", "TRUE", "t", "T", "1"], removes = ["cluster_write"] }
+options.field_manager = { flag = ["--field-manager"], value = "required" }
+options.output    = { flag = ["-o", "--output"], value = "required" }
+options.save_config = { flag = ["--save-config"], value = "optional" }
+options.show_managed_fields = { flag = ["--show-managed-fields"], value = "optional" }
+options.template  = { flag = ["--template"], value = "required" }
+options.validate  = { flag = ["--validate"], value = "optional" }
+
+# A client dry run reads the --from-file data but does not send it, so it also removes
+# `upload_files`; a server dry run sends it.
+[shell.create_secret_generic]
+usage = "kubectl [global options] create secret generic [options] <name>"
+adds  = ["cluster_write", "write_secrets"]
+options.allow_missing_template_keys = { flag = ["--allow-missing-template-keys"], value = "optional" }
+options.append_hash = { flag = ["--append-hash"], value = "optional" }
+options.dry_run   = { flag = ["--dry-run"], value = "optional", like = ["", "unchanged", "client", "server", "true", "True", "TRUE", "t", "T", "1"], removes = ["cluster_write", "write_secrets"], when = [{ like = ["", "unchanged", "client", "true", "True", "TRUE", "t", "T", "1"], removes = ["upload_files"] }] }
+options.field_manager = { flag = ["--field-manager"], value = "required" }
+options.from_env_file = { flag = ["--from-env-file"], value = "required", repeated = true, adds = ["upload_files"] }
+options.from_file = { flag = ["--from-file"], value = "required", repeated = true, adds = ["upload_files"] }
+options.from_literal = { flag = ["--from-literal"], value = "required", repeated = true }
+options.output    = { flag = ["-o", "--output"], value = "required" }
+options.save_config = { flag = ["--save-config"], value = "optional" }
+options.show_managed_fields = { flag = ["--show-managed-fields"], value = "optional" }
+options.template  = { flag = ["--template"], value = "required" }
+options.type      = { flag = ["--type"], value = "required" }
+options.validate  = { flag = ["--validate"], value = "optional" }
+
+[shell.create_configmap]
+usage   = "kubectl [global options] create configmap [options] <name>"
+aliases = ["create cm"]
+adds    = ["cluster_write"]
+options.allow_missing_template_keys = { flag = ["--allow-missing-template-keys"], value = "optional" }
+options.append_hash = { flag = ["--append-hash"], value = "optional" }
+options.dry_run   = { flag = ["--dry-run"], value = "optional", like = ["", "unchanged", "client", "server", "true", "True", "TRUE", "t", "T", "1"], removes = ["cluster_write"], when = [{ like = ["", "unchanged", "client", "true", "True", "TRUE", "t", "T", "1"], removes = ["upload_files"] }] }
+options.field_manager = { flag = ["--field-manager"], value = "required" }
+options.from_env_file = { flag = ["--from-env-file"], value = "required", repeated = true, adds = ["upload_files"] }
+options.from_file = { flag = ["--from-file"], value = "required", repeated = true, adds = ["upload_files"] }
+options.from_literal = { flag = ["--from-literal"], value = "required", repeated = true }
+options.output    = { flag = ["-o", "--output"], value = "required" }
+options.save_config = { flag = ["--save-config"], value = "optional" }
+options.show_managed_fields = { flag = ["--show-managed-fields"], value = "optional" }
+options.template  = { flag = ["--template"], value = "required" }
+options.validate  = { flag = ["--validate"], value = "optional" }
+
+# kubectl create deployment NAME --image=image [-- COMMAND [args...]]. The command runs in the
+# new pods, so it is a field, not `run_program` on this line.
+[shell.create_deployment]
+usage   = "kubectl [global options] create deployment [options] <name> [-- <command>...]"
+aliases = ["create deploy"]
+adds    = ["cluster_write"]
+options.allow_missing_template_keys = { flag = ["--allow-missing-template-keys"], value = "optional" }
+options.dry_run   = { flag = ["--dry-run"], value = "optional", like = ["", "unchanged", "client", "server", "true", "True", "TRUE", "t", "T", "1"], removes = ["cluster_write"] }
+options.field_manager = { flag = ["--field-manager"], value = "required" }
+options.image     = { flag = ["--image"], value = "required", repeated = true }
+options.output    = { flag = ["-o", "--output"], value = "required" }
+options.port      = { flag = ["--port"], value = "required" }
+options.replicas  = { flag = ["-r", "--replicas"], value = "required" }
+options.save_config = { flag = ["--save-config"], value = "optional" }
+options.show_managed_fields = { flag = ["--show-managed-fields"], value = "optional" }
+options.template  = { flag = ["--template"], value = "required" }
+options.validate  = { flag = ["--validate"], value = "optional" }
+
+# kubectl delete ([-f FILENAME] | [-k DIRECTORY] | TYPE [(NAME | -l label | --all)]).
+# --raw and --interactive (a prompt) are not modeled.
+[shell.delete]
+usage = "kubectl [global options] delete [options] [<type>] [<name>...]"
+adds  = ["cluster_delete"]
+options.all       = { flag = ["--all"], value = "optional", like = ["", "true", "True", "TRUE", "t", "T", "1"], adds = ["broad_delete"] }
+options.all_namespaces = { flag = ["-A", "--all-namespaces"], adds = ["broad_delete"] }
+options.cascade   = { flag = ["--cascade"], value = "optional" }
+options.dry_run   = { flag = ["--dry-run"], value = "optional", like = ["", "unchanged", "client", "server", "true", "True", "TRUE", "t", "T", "1"], removes = ["cluster_delete", "broad_delete"] }
+options.field_selector = { flag = ["--field-selector"], value = "required", adds = ["broad_delete"] }
+options.filename  = { flag = ["-f", "--filename"], value = "required", repeated = true, adds = ["manifest_input"] }
+options.force     = { flag = ["--force"], value = "optional" }
+options.grace_period = { flag = ["--grace-period"], value = "required" }
+options.ignore_not_found = { flag = ["--ignore-not-found"], value = "optional" }
+options.kustomize = { flag = ["-k", "--kustomize"], value = "required", adds = ["manifest_input"] }
+options.now       = { flag = ["--now"], value = "optional" }
+options.output    = { flag = ["-o", "--output"], value = "required" }
+options.recursive = { flag = ["-R", "--recursive"] }
+options.selector  = { flag = ["-l", "--selector"], value = "required", adds = ["broad_delete"] }
+options.timeout   = { flag = ["--timeout"], value = "required" }
+options.wait      = { flag = ["--wait"], value = "optional" }
+
+# kubectl patch (-f FILENAME | TYPE NAME | TYPE/NAME). A patch to a Secret adds `write_secrets`.
+# --local only prints the patched object, so it removes the write effects.
+[shell.patch]
+usage = "kubectl [global options] patch [options] [<type>] [<name>]"
+adds  = ["cluster_write"]
+options.allow_missing_template_keys = { flag = ["--allow-missing-template-keys"], value = "optional" }
+options.dry_run   = { flag = ["--dry-run"], value = "optional", like = ["", "unchanged", "client", "server", "true", "True", "TRUE", "t", "T", "1"], removes = ["cluster_write", "write_secrets"] }
+options.field_manager = { flag = ["--field-manager"], value = "required" }
+options.filename  = { flag = ["-f", "--filename"], value = "required", repeated = true, adds = ["manifest_input"] }
+options.kustomize = { flag = ["-k", "--kustomize"], value = "required", adds = ["manifest_input"] }
+options.local     = { flag = ["--local"], value = "optional", like = ["", "true", "True", "TRUE", "t", "T", "1"], removes = ["cluster_write", "write_secrets"] }
+options.output    = { flag = ["-o", "--output"], value = "required" }
+options.patch     = { flag = ["-p", "--patch"], value = "required" }
+options.patch_file = { flag = ["--patch-file"], value = "required", adds = ["manifest_input"] }
+options.recursive = { flag = ["-R", "--recursive"] }
+options.show_managed_fields = { flag = ["--show-managed-fields"], value = "optional" }
+options.subresource = { flag = ["--subresource"], value = "required" }
+options.template  = { flag = ["--template"], value = "required" }
+options.type_option = { flag = ["--type"], value = "required" }  # `type` is the operand
+
+[shell.patch.operands.type]
+adds = ["write_secrets"]
+# Every upper and lower case spelling of `secret`.
+like = [
+  "*secret*", "*secreT*", "*secrEt*", "*secrET*", "*secRet*", "*secReT*",
+  "*secREt*", "*secRET*", "*seCret*", "*seCreT*", "*seCrEt*", "*seCrET*",
+  "*seCRet*", "*seCReT*", "*seCREt*", "*seCRET*", "*sEcret*", "*sEcreT*",
+  "*sEcrEt*", "*sEcrET*", "*sEcRet*", "*sEcReT*", "*sEcREt*", "*sEcRET*",
+  "*sECret*", "*sECreT*", "*sECrEt*", "*sECrET*", "*sECRet*", "*sECReT*",
+  "*sECREt*", "*sECRET*", "*Secret*", "*SecreT*", "*SecrEt*", "*SecrET*",
+  "*SecRet*", "*SecReT*", "*SecREt*", "*SecRET*", "*SeCret*", "*SeCreT*",
+  "*SeCrEt*", "*SeCrET*", "*SeCRet*", "*SeCReT*", "*SeCREt*", "*SeCRET*",
+  "*SEcret*", "*SEcreT*", "*SEcrEt*", "*SEcrET*", "*SEcRet*", "*SEcReT*",
+  "*SEcREt*", "*SEcRET*", "*SECret*", "*SECreT*", "*SECrEt*", "*SECrET*",
+  "*SECRet*", "*SECReT*", "*SECREt*", "*SECRET*",
+]
+
+[shell.patch.operands.name]
+adds = ["write_secrets"]
+# A TYPE/NAME word whose type is a Secret, in any case.
+like = [
+  "*secret*/*", "*secreT*/*", "*secrEt*/*", "*secrET*/*", "*secRet*/*", "*secReT*/*",
+  "*secREt*/*", "*secRET*/*", "*seCret*/*", "*seCreT*/*", "*seCrEt*/*", "*seCrET*/*",
+  "*seCRet*/*", "*seCReT*/*", "*seCREt*/*", "*seCRET*/*", "*sEcret*/*", "*sEcreT*/*",
+  "*sEcrEt*/*", "*sEcrET*/*", "*sEcRet*/*", "*sEcReT*/*", "*sEcREt*/*", "*sEcRET*/*",
+  "*sECret*/*", "*sECreT*/*", "*sECrEt*/*", "*sECrET*/*", "*sECRet*/*", "*sECReT*/*",
+  "*sECREt*/*", "*sECRET*/*", "*Secret*/*", "*SecreT*/*", "*SecrEt*/*", "*SecrET*/*",
+  "*SecRet*/*", "*SecReT*/*", "*SecREt*/*", "*SecRET*/*", "*SeCret*/*", "*SeCreT*/*",
+  "*SeCrEt*/*", "*SeCrET*/*", "*SeCRet*/*", "*SeCReT*/*", "*SeCREt*/*", "*SeCRET*/*",
+  "*SEcret*/*", "*SEcreT*/*", "*SEcrEt*/*", "*SEcrET*/*", "*SEcRet*/*", "*SEcReT*/*",
+  "*SEcREt*/*", "*SEcRET*/*", "*SECret*/*", "*SECreT*/*", "*SECrEt*/*", "*SECrET*/*",
+  "*SECRet*/*", "*SECReT*/*", "*SECREt*/*", "*SECRET*/*",
+]
+
+# kubectl label and annotate take TYPE NAME... KEY=VAL... KEY-... as one list of operands, which
+# the grammar cannot split. --list is not modeled.
+[shell.label]
+usage = "kubectl [global options] label [options] [<operands>...]"
+adds  = ["cluster_write"]
+options.all       = { flag = ["--all"], value = "optional" }
+options.all_namespaces = { flag = ["-A", "--all-namespaces"] }
+options.allow_missing_template_keys = { flag = ["--allow-missing-template-keys"], value = "optional" }
+options.dry_run   = { flag = ["--dry-run"], value = "optional", like = ["", "unchanged", "client", "server", "true", "True", "TRUE", "t", "T", "1"], removes = ["cluster_write"] }
+options.field_manager = { flag = ["--field-manager"], value = "required" }
+options.field_selector = { flag = ["--field-selector"], value = "required" }
+options.filename  = { flag = ["-f", "--filename"], value = "required", repeated = true, adds = ["manifest_input"] }
+options.kustomize = { flag = ["-k", "--kustomize"], value = "required", adds = ["manifest_input"] }
+options.local     = { flag = ["--local"], value = "optional", like = ["", "true", "True", "TRUE", "t", "T", "1"], removes = ["cluster_write"] }
+options.output    = { flag = ["-o", "--output"], value = "required" }
+options.overwrite = { flag = ["--overwrite"], value = "optional" }
+options.recursive = { flag = ["-R", "--recursive"] }
+options.resource_version = { flag = ["--resource-version"], value = "required" }
+options.selector  = { flag = ["-l", "--selector"], value = "required" }
+options.show_managed_fields = { flag = ["--show-managed-fields"], value = "optional" }
+options.template  = { flag = ["--template"], value = "required" }
+
+[shell.annotate]
+usage = "kubectl [global options] annotate [options] [<operands>...]"
+adds  = ["cluster_write"]
+options.all       = { flag = ["--all"], value = "optional" }
+options.all_namespaces = { flag = ["-A", "--all-namespaces"] }
+options.allow_missing_template_keys = { flag = ["--allow-missing-template-keys"], value = "optional" }
+options.dry_run   = { flag = ["--dry-run"], value = "optional", like = ["", "unchanged", "client", "server", "true", "True", "TRUE", "t", "T", "1"], removes = ["cluster_write"] }
+options.field_manager = { flag = ["--field-manager"], value = "required" }
+options.field_selector = { flag = ["--field-selector"], value = "required" }
+options.filename  = { flag = ["-f", "--filename"], value = "required", repeated = true, adds = ["manifest_input"] }
+options.kustomize = { flag = ["-k", "--kustomize"], value = "required", adds = ["manifest_input"] }
+options.local     = { flag = ["--local"], value = "optional", like = ["", "true", "True", "TRUE", "t", "T", "1"], removes = ["cluster_write"] }
+options.output    = { flag = ["-o", "--output"], value = "required" }
+options.overwrite = { flag = ["--overwrite"], value = "optional" }
+options.recursive = { flag = ["-R", "--recursive"] }
+options.resource_version = { flag = ["--resource-version"], value = "required" }
+options.selector  = { flag = ["-l", "--selector"], value = "required" }
+options.show_managed_fields = { flag = ["--show-managed-fields"], value = "optional" }
+options.template  = { flag = ["--template"], value = "required" }
+
+[shell.scale]
+usage = "kubectl [global options] scale [options] [<type>] [<name>...]"
+adds  = ["cluster_write"]
+options.all       = { flag = ["--all"], value = "optional" }
+options.allow_missing_template_keys = { flag = ["--allow-missing-template-keys"], value = "optional" }
+options.current_replicas = { flag = ["--current-replicas"], value = "required" }
+options.dry_run   = { flag = ["--dry-run"], value = "optional", like = ["", "unchanged", "client", "server", "true", "True", "TRUE", "t", "T", "1"], removes = ["cluster_write"] }
+options.filename  = { flag = ["-f", "--filename"], value = "required", repeated = true, adds = ["manifest_input"] }
+options.kustomize = { flag = ["-k", "--kustomize"], value = "required", adds = ["manifest_input"] }
+options.output    = { flag = ["-o", "--output"], value = "required" }
+options.recursive = { flag = ["-R", "--recursive"] }
+options.replicas  = { flag = ["--replicas"], value = "required" }
+options.resource_version = { flag = ["--resource-version"], value = "required" }
+options.selector  = { flag = ["-l", "--selector"], value = "required" }
+options.show_managed_fields = { flag = ["--show-managed-fields"], value = "optional" }
+options.template  = { flag = ["--template"], value = "required" }
+options.timeout   = { flag = ["--timeout"], value = "required" }
+
+[shell.rollout_restart]
+usage = "kubectl [global options] rollout restart [options] [<type>] [<name>...]"
+adds  = ["cluster_write"]
+options.allow_missing_template_keys = { flag = ["--allow-missing-template-keys"], value = "optional" }
+options.field_manager = { flag = ["--field-manager"], value = "required" }
+options.filename  = { flag = ["-f", "--filename"], value = "required", repeated = true, adds = ["manifest_input"] }
+options.kustomize = { flag = ["-k", "--kustomize"], value = "required", adds = ["manifest_input"] }
+options.output    = { flag = ["-o", "--output"], value = "required" }
+options.recursive = { flag = ["-R", "--recursive"] }
+options.selector  = { flag = ["-l", "--selector"], value = "required" }
+options.show_managed_fields = { flag = ["--show-managed-fields"], value = "optional" }
+options.template  = { flag = ["--template"], value = "required" }
+
+[shell.rollout_pause]
+usage = "kubectl [global options] rollout pause [options] [<type>] [<name>...]"
+adds  = ["cluster_write"]
+options.allow_missing_template_keys = { flag = ["--allow-missing-template-keys"], value = "optional" }
+options.field_manager = { flag = ["--field-manager"], value = "required" }
+options.filename  = { flag = ["-f", "--filename"], value = "required", repeated = true, adds = ["manifest_input"] }
+options.kustomize = { flag = ["-k", "--kustomize"], value = "required", adds = ["manifest_input"] }
+options.output    = { flag = ["-o", "--output"], value = "required" }
+options.recursive = { flag = ["-R", "--recursive"] }
+options.selector  = { flag = ["-l", "--selector"], value = "required" }
+options.show_managed_fields = { flag = ["--show-managed-fields"], value = "optional" }
+options.template  = { flag = ["--template"], value = "required" }
+
+[shell.rollout_resume]
+usage = "kubectl [global options] rollout resume [options] [<type>] [<name>...]"
+adds  = ["cluster_write"]
+options.allow_missing_template_keys = { flag = ["--allow-missing-template-keys"], value = "optional" }
+options.field_manager = { flag = ["--field-manager"], value = "required" }
+options.filename  = { flag = ["-f", "--filename"], value = "required", repeated = true, adds = ["manifest_input"] }
+options.kustomize = { flag = ["-k", "--kustomize"], value = "required", adds = ["manifest_input"] }
+options.output    = { flag = ["-o", "--output"], value = "required" }
+options.recursive = { flag = ["-R", "--recursive"] }
+options.selector  = { flag = ["-l", "--selector"], value = "required" }
+options.show_managed_fields = { flag = ["--show-managed-fields"], value = "optional" }
+options.template  = { flag = ["--template"], value = "required" }
+
+[shell.rollout_undo]
+usage = "kubectl [global options] rollout undo [options] [<type>] [<name>...]"
+adds  = ["cluster_write"]
+options.allow_missing_template_keys = { flag = ["--allow-missing-template-keys"], value = "optional" }
+options.dry_run   = { flag = ["--dry-run"], value = "optional", like = ["", "unchanged", "client", "server", "true", "True", "TRUE", "t", "T", "1"], removes = ["cluster_write"] }
+options.filename  = { flag = ["-f", "--filename"], value = "required", repeated = true, adds = ["manifest_input"] }
+options.kustomize = { flag = ["-k", "--kustomize"], value = "required", adds = ["manifest_input"] }
+options.output    = { flag = ["-o", "--output"], value = "required" }
+options.recursive = { flag = ["-R", "--recursive"] }
+options.selector  = { flag = ["-l", "--selector"], value = "required" }
+options.show_managed_fields = { flag = ["--show-managed-fields"], value = "optional" }
+options.template  = { flag = ["--template"], value = "required" }
+options.to_revision = { flag = ["--to-revision"], value = "required" }
+
+# ---------------------------------------------------------------------------------------------
+# Containers and this host
+# ---------------------------------------------------------------------------------------------
+
+# kubectl exec (POD | TYPE/NAME) -- COMMAND [args...]. kubectl v1.37 refuses a command without
+# `--`. The command words are a set, so their order is lost. -f is not modeled.
+[shell.exec]
+usage = "kubectl [global options] exec [options] <pod> -- <command>..."
+adds  = ["run_program"]
+options.container = { flag = ["-c", "--container"], value = "required" }
+options.pod_running_timeout = { flag = ["--pod-running-timeout"], value = "required" }
+options.quiet     = { flag = ["-q", "--quiet"] }
+options.stdin     = { flag = ["-i", "--stdin"] }
+options.tty       = { flag = ["-t", "--tty"] }
+
+# kubectl port-forward TYPE/NAME [LOCAL_PORT:]REMOTE_PORT...
+[shell.port_forward]
+usage = "kubectl [global options] port-forward [options] <target> <ports>..."
+adds  = ["network_listen"]
+options.address = { flag = ["--address"], value = "required", repeated = true, adds = ["listen_address"] }
+options.pod_running_timeout = { flag = ["--pod-running-timeout"], value = "required" }
+
+# kubectl cp <file-spec-src> <file-spec-dest>. A spec with `:` names a pod; kubectl runs `tar`
+# in that container to copy. From a pod writes local files; to a pod uploads them.
+[shell.cp]
+usage = "kubectl [global options] cp [options] <file_spec_src> <file_spec_dest>"
+adds  = ["run_program"]
+options.container   = { flag = ["-c", "--container"], value = "required" }
+options.no_preserve = { flag = ["--no-preserve"], value = "optional" }
+options.retries     = { flag = ["--retries"], value = "required" }
+operands.file_spec_src  = { like = ["*:*"], adds = ["write_local_files"] }
+operands.file_spec_dest = { like = ["*:*"], adds = ["upload_files"] }
