@@ -1,0 +1,1101 @@
+# Golden cases for aws.grammar.toml, checked against aws-cli 2.40.0.
+#
+# Sources: the `help` page of each command at 2.40.0 (`aws <service> <operation> help`), and the
+# source at tag 2.40.0: awscli/clidriver.py and awscli/argparser.py (how a line is parsed),
+# awscli/data/cli.json (the global options), awscli/paramfile.py (file:// and fileb:// values),
+# awscli/arguments.py (a list option takes words with nargs "*", a boolean has a --no- form), and
+# awscli/customizations/ (s3, logs tail, cloudformation deploy, configure).
+#
+# The expected action, fields, and effects come from that documented behaviour. A case with no
+# `effects` key expects no effect.
+
+# ==================================================================================================
+# Global options (aws help, GLOBAL OPTIONS; awscli/data/cli.json)
+# ==================================================================================================
+
+# The simplest read. get-caller-identity takes no parameter of its own.
+[[case]]
+argv = ["aws", "sts", "get-caller-identity"]
+action = "sts_get_caller_identity"
+effects = ["read_data"]
+
+# A global option before the service name, with `--x v`.
+[[case]]
+argv = ["aws", "--region", "us-east-1", "sts", "get-caller-identity"]
+action = "sts_get_caller_identity"
+fields = { region = "us-east-1" }
+effects = ["read_data"]
+
+# The `--x=v` spelling of a global option, after the operation.
+[[case]]
+argv = ["aws", "sts", "get-caller-identity", "--region=eu-west-1", "--output=json"]
+action = "sts_get_caller_identity"
+fields = { region = "eu-west-1", output = "json" }
+effects = ["read_data"]
+
+# The main parser reads global options anywhere, so one between the service and the command
+# counts. `--profile` selects other credentials, so it adds `change_account`.
+[[case]]
+argv = ["aws", "s3", "--profile", "prod", "ls"]
+action = "s3_ls"
+fields = { profile = "prod" }
+effects = ["change_account", "read_data"]
+
+# Every other global option that takes a value or is a flag. None of them adds an effect.
+[[case]]
+argv = ["aws", "ec2", "describe-vpcs", "--debug", "--no-paginate", "--query", "Vpcs[].VpcId", "--color", "off", "--no-sign-request", "--cli-read-timeout", "5", "--cli-connect-timeout", "5", "--cli-binary-format", "raw-in-base64-out", "--no-cli-pager", "--no-cli-auto-prompt", "--cli-error-format", "json"]
+action = "ec2_describe_vpcs"
+fields = { debug = true, no_paginate = true, query = "Vpcs[].VpcId", color = "off", no_sign_request = true, cli_read_timeout = "5", cli_connect_timeout = "5", cli_binary_format = "raw-in-base64-out", no_cli_pager = true, no_cli_auto_prompt = true, cli_error_format = "json" }
+effects = ["read_data"]
+
+# `--endpoint-url` sends signed requests to another URL. An http:// URL also has no TLS.
+[[case]]
+argv = ["aws", "--endpoint-url", "http://localhost:4566", "s3", "ls"]
+action = "s3_ls"
+fields = { endpoint_url = "http://localhost:4566" }
+effects = ["insecure_tls", "override_endpoint", "read_data"]
+
+[[case]]
+argv = ["aws", "s3", "ls", "--endpoint-url=https://s3.example.com"]
+action = "s3_ls"
+fields = { endpoint_url = "https://s3.example.com" }
+effects = ["override_endpoint", "read_data"]
+
+# `--no-verify-ssl` skips certificate checks, and `--ca-bundle` trusts a bundle the line names.
+[[case]]
+argv = ["aws", "sts", "get-caller-identity", "--no-verify-ssl"]
+action = "sts_get_caller_identity"
+fields = { no_verify_ssl = true }
+effects = ["insecure_tls", "read_data"]
+
+[[case]]
+argv = ["aws", "--ca-bundle", "./ca.pem", "sts", "get-caller-identity"]
+action = "sts_get_caller_identity"
+fields = { ca_bundle = "./ca.pem" }
+effects = ["insecure_tls", "read_data"]
+
+# A value that starts with `-` but is a number: argparse takes `-1` as the value of a required
+# option, and so does the grammar.
+[[case]]
+argv = ["aws", "sts", "get-caller-identity", "--cli-read-timeout", "-1"]
+action = "sts_get_caller_identity"
+fields = { cli_read_timeout = "-1" }
+effects = ["read_data"]
+
+# A global option given twice is unmodeled (argparse keeps the last one; the grammar refuses to
+# guess).
+[[case]]
+argv = ["aws", "--region", "us-east-1", "sts", "get-caller-identity", "--region", "eu-west-1"]
+action = "unmodeled"
+
+# A global option with no value.
+[[case]]
+argv = ["aws", "sts", "get-caller-identity", "--region"]
+action = "unmodeled"
+
+# argparse accepts a unique prefix (`--reg`). The grammar does not.
+[[case]]
+argv = ["aws", "--reg", "us-east-1", "sts", "get-caller-identity"]
+action = "unmodeled"
+
+# `--cli-auto-prompt` opens a prompt that can build any command, so it is not declared.
+[[case]]
+argv = ["aws", "--cli-auto-prompt", "s3", "ls"]
+action = "unmodeled"
+
+# `--version`, `--help`, and `help` are not modeled.
+[[case]]
+argv = ["aws", "--version"]
+action = "unmodeled"
+
+[[case]]
+argv = ["aws", "s3", "ls", "--version"]
+action = "unmodeled"
+
+[[case]]
+argv = ["aws", "sts", "get-caller-identity", "--help"]
+action = "unmodeled"
+
+[[case]]
+argv = ["aws", "help"]
+action = "unmodeled"
+
+[[case]]
+argv = ["aws", "s3", "help"]
+action = "unmodeled"
+
+# After an API operation, `help` is the operation parser's optional `help` positional
+# (clidriver.py, ServiceOperation._add_help). The grammar has no operand there, so it is unmodeled.
+[[case]]
+argv = ["aws", "sts", "get-caller-identity", "help"]
+action = "unmodeled"
+
+# The program alone, an unknown service, and a service with no operation.
+[[case]]
+argv = ["aws"]
+action = "unmodeled"
+
+[[case]]
+argv = ["aws", "ecs", "list-clusters"]
+action = "unmodeled"
+
+[[case]]
+argv = ["aws", "sts"]
+action = "unmodeled"
+
+# Command words are case sensitive.
+[[case]]
+argv = ["aws", "STS", "get-caller-identity"]
+action = "unmodeled"
+
+# `--cli-input-json` and `--cli-input-yaml` can set any parameter of the operation, so a line with
+# either one is unmodeled. So is `--generate-cli-skeleton`.
+[[case]]
+argv = ["aws", "ssm", "get-parameter", "--cli-input-json", "{\"Name\":\"/db\",\"WithDecryption\":true}"]
+action = "unmodeled"
+
+[[case]]
+argv = ["aws", "dynamodb", "put-item", "--cli-input-yaml", "file://item.yaml"]
+action = "unmodeled"
+
+[[case]]
+argv = ["aws", "ec2", "terminate-instances", "--generate-cli-skeleton"]
+action = "unmodeled"
+
+# ==================================================================================================
+# sts (aws sts assume-role help, get-session-token help)
+# ==================================================================================================
+
+[[case]]
+argv = ["aws", "sts", "assume-role", "--role-arn", "arn:aws:iam::123456789012:role/Deploy", "--role-session-name", "agent", "--duration-seconds", "900"]
+action = "sts_assume_role"
+fields = { role_arn = "arn:aws:iam::123456789012:role/Deploy", role_session_name = "agent", duration_seconds = "900" }
+effects = ["credentials"]
+
+# A session policy from a local file: the CLI sends the file content, which the rule cannot see.
+# `--policy-arns` is a list, so it takes several words.
+[[case]]
+argv = ["aws", "sts", "assume-role", "--role-arn=arn:aws:iam::123456789012:role/Deploy", "--role-session-name=agent", "--policy", "file://session-policy.json", "--policy-arns", "arn=arn:aws:iam::aws:policy/ReadOnlyAccess", "arn=arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess"]
+action = "sts_assume_role"
+fields = { role_arn = "arn:aws:iam::123456789012:role/Deploy", role_session_name = "agent", policy = "file://session-policy.json", policy_arns = ["arn=arn:aws:iam::aws:policy/ReadOnlyAccess", "arn=arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess"] }
+effects = ["credentials", "value_from_file"]
+
+[[case]]
+argv = ["aws", "sts", "get-session-token", "--serial-number", "arn:aws:iam::123456789012:mfa/me", "--token-code", "123456"]
+action = "sts_get_session_token"
+fields = { serial_number = "arn:aws:iam::123456789012:mfa/me", token_code = "123456" }
+effects = ["credentials"]
+
+# `--tags` is not declared, so the line is unmodeled.
+[[case]]
+argv = ["aws", "sts", "assume-role", "--role-arn", "arn:aws:iam::123456789012:role/Deploy", "--role-session-name", "a", "--tags", "Key=team,Value=x"]
+action = "unmodeled"
+
+# ==================================================================================================
+# s3 high-level commands (aws s3 <command> help; awscli/customizations/s3/subcommands.py)
+# ==================================================================================================
+
+# `aws s3 ls` with no path lists the buckets.
+[[case]]
+argv = ["aws", "s3", "ls"]
+action = "s3_ls"
+effects = ["read_data"]
+
+[[case]]
+argv = ["aws", "s3", "ls", "s3://logs/2026/", "--recursive", "--human-readable", "--summarize", "--page-size", "100"]
+action = "s3_ls"
+fields = { path = "s3://logs/2026/", recursive = true, human_readable = true, summarize = true, page_size = "100" }
+effects = ["read_data"]
+
+# The single path of ls is loaded from a file when it starts with file://.
+[[case]]
+argv = ["aws", "s3", "ls", "file://bucket.txt"]
+action = "s3_ls"
+fields = { path = "file://bucket.txt" }
+effects = ["read_data", "value_from_file"]
+
+# `aws s3 ls help` prints help (ArgTableArgParser reads a lone `help`). The grammar reads it as a
+# path, with the effects of a list. That is more than the CLI does, never less.
+[[case]]
+argv = ["aws", "s3", "ls", "help"]
+action = "s3_ls"
+fields = { path = "help" }
+effects = ["read_data"]
+
+# ls takes one path at most.
+[[case]]
+argv = ["aws", "s3", "ls", "s3://a", "s3://b"]
+action = "unmodeled"
+
+# Upload: a local source sends local files, and an s3:// destination writes to S3.
+[[case]]
+argv = ["aws", "s3", "cp", "./dist", "s3://site-bucket/", "--recursive"]
+action = "s3_cp"
+fields = { source = "./dist", destination = "s3://site-bucket/", recursive = true }
+effects = ["upload_local_file", "write_data"]
+
+# Download: an s3:// source reads, and a local destination writes a local file.
+[[case]]
+argv = ["aws", "s3", "cp", "s3://data/report.csv", "./report.csv"]
+action = "s3_cp"
+fields = { source = "s3://data/report.csv", destination = "./report.csv" }
+effects = ["read_data", "write_local_file"]
+
+# Copy between buckets, with options before the operands.
+[[case]]
+argv = ["aws", "s3", "cp", "--recursive", "--storage-class", "STANDARD_IA", "s3://a/x/", "s3://b/x/"]
+action = "s3_cp"
+fields = { recursive = true, storage_class = "STANDARD_IA", source = "s3://a/x/", destination = "s3://b/x/" }
+effects = ["read_data", "write_data"]
+
+# `-` as the source is standard input, and as the destination is standard output. A lone `-` is
+# an operand.
+[[case]]
+argv = ["aws", "s3", "cp", "-", "s3://b/stream.txt"]
+action = "s3_cp"
+fields = { source = "-", destination = "s3://b/stream.txt" }
+effects = ["upload_local_file", "write_data"]
+
+[[case]]
+argv = ["aws", "s3", "cp", "s3://b/stream.txt", "-"]
+action = "s3_cp"
+fields = { source = "s3://b/stream.txt", destination = "-" }
+effects = ["read_data", "write_local_file"]
+
+# A public canned ACL adds `make_public`. `authenticated-read` grants every AWS account.
+[[case]]
+argv = ["aws", "s3", "cp", "index.html", "s3://site/index.html", "--acl", "public-read"]
+action = "s3_cp"
+fields = { source = "index.html", destination = "s3://site/index.html", acl = "public-read" }
+effects = ["make_public", "upload_local_file", "write_data"]
+
+[[case]]
+argv = ["aws", "s3", "cp", "a.txt", "s3://b/a.txt", "--acl=authenticated-read"]
+action = "s3_cp"
+fields = { source = "a.txt", destination = "s3://b/a.txt", acl = "authenticated-read" }
+effects = ["make_public", "upload_local_file", "write_data"]
+
+[[case]]
+argv = ["aws", "s3", "cp", "a.txt", "s3://b/a.txt", "--acl", "bucket-owner-full-control"]
+action = "s3_cp"
+fields = { source = "a.txt", destination = "s3://b/a.txt", acl = "bucket-owner-full-control" }
+effects = ["upload_local_file", "write_data"]
+
+# `--grants` takes one or more grants. Each grant adds `grant_access`, and a grant to the AllUsers
+# group adds `make_public`.
+[[case]]
+argv = ["aws", "s3", "cp", "a.txt", "s3://b/a.txt", "--grants", "read=uri=http://acs.amazonaws.com/groups/global/AllUsers", "full=id=79a59df900b949e5"]
+action = "s3_cp"
+fields = { source = "a.txt", destination = "s3://b/a.txt", grants = ["read=uri=http://acs.amazonaws.com/groups/global/AllUsers", "full=id=79a59df900b949e5"] }
+effects = ["grant_access", "make_public", "upload_local_file", "write_data"]
+
+[[case]]
+argv = ["aws", "s3", "cp", "a.txt", "s3://b/a.txt", "--grants", "read=id=79a59df900b949e5"]
+action = "s3_cp"
+fields = { source = "a.txt", destination = "s3://b/a.txt", grants = ["read=id=79a59df900b949e5"] }
+effects = ["grant_access", "upload_local_file", "write_data"]
+
+# A one-item `--grants` list is loaded from a file, so its content is unknown: assume public.
+[[case]]
+argv = ["aws", "s3", "cp", "a.txt", "s3://b/a.txt", "--grants", "file://grants.txt"]
+action = "s3_cp"
+fields = { source = "a.txt", destination = "s3://b/a.txt", grants = ["file://grants.txt"] }
+effects = ["grant_access", "make_public", "upload_local_file", "value_from_file", "write_data"]
+
+# `--exclude` and `--include` repeat, and each value is kept.
+[[case]]
+argv = ["aws", "s3", "cp", ".", "s3://b/docs/", "--recursive", "--exclude", "*", "--include", "*.md", "--include=*.txt"]
+action = "s3_cp"
+fields = { source = ".", destination = "s3://b/docs/", recursive = true, exclude = ["*"], include = ["*.md", "*.txt"] }
+effects = ["upload_local_file", "write_data"]
+
+# `--dryrun` shows what would happen and changes nothing. A download still lists the source.
+[[case]]
+argv = ["aws", "s3", "cp", "s3://data/", "./data", "--recursive", "--dryrun"]
+action = "s3_cp"
+fields = { source = "s3://data/", destination = "./data", recursive = true, dryrun = true }
+effects = ["read_data"]
+
+# `removes` wins: a dry-run upload with a public ACL has no effect at all.
+[[case]]
+argv = ["aws", "s3", "cp", "--dryrun", "index.html", "s3://site/", "--acl", "public-read"]
+action = "s3_cp"
+fields = { dryrun = true, source = "index.html", destination = "s3://site/", acl = "public-read" }
+
+# `--sse` takes an optional value (nargs "?"), which the grammar cannot spell, so it is not declared.
+[[case]]
+argv = ["aws", "s3", "cp", "a.txt", "s3://b/a.txt", "--sse", "aws:kms"]
+action = "unmodeled"
+
+# A prefix of a long option, a missing operand, and an extra operand.
+[[case]]
+argv = ["aws", "s3", "cp", "a.txt", "s3://b/", "--recurs"]
+action = "unmodeled"
+
+[[case]]
+argv = ["aws", "s3", "cp", "a.txt"]
+action = "unmodeled"
+
+[[case]]
+argv = ["aws", "s3", "cp", "a.txt", "b.txt", "s3://b/"]
+action = "unmodeled"
+
+# `--` ends the options, so `-x` after it is the source. (The grammar reads it so; the effects are
+# those of an upload either way.)
+[[case]]
+argv = ["aws", "s3", "cp", "--", "-x", "s3://b/-x"]
+action = "s3_cp"
+fields = { source = "-x", destination = "s3://b/-x" }
+effects = ["upload_local_file", "write_data"]
+
+# mv deletes the source after the copy. From a local source, it deletes the local files.
+[[case]]
+argv = ["aws", "s3", "mv", "./out.log", "s3://logs/out.log"]
+action = "s3_mv"
+fields = { source = "./out.log", destination = "s3://logs/out.log" }
+effects = ["delete_data", "upload_local_file", "write_data"]
+
+[[case]]
+argv = ["aws", "s3", "mv", "s3://a/k", "s3://b/k", "--dryrun"]
+action = "s3_mv"
+fields = { source = "s3://a/k", destination = "s3://b/k", dryrun = true }
+effects = ["read_data"]
+
+[[case]]
+argv = ["aws", "s3", "mv", "s3://a/", "s3://b/", "--recursive", "--validate-same-s3-paths"]
+action = "s3_mv"
+fields = { source = "s3://a/", destination = "s3://b/", recursive = true, validate_same_s3_paths = true }
+effects = ["delete_data", "read_data", "write_data"]
+
+# sync is recursive. `--delete` removes destination files that the source does not have.
+[[case]]
+argv = ["aws", "s3", "sync", "./site", "s3://site-bucket", "--delete", "--exact-timestamps"]
+action = "s3_sync"
+fields = { source = "./site", destination = "s3://site-bucket", delete = true, exact_timestamps = true }
+effects = ["delete_data", "upload_local_file", "write_data"]
+
+[[case]]
+argv = ["aws", "s3", "sync", "s3://backup", "./restore", "--size-only"]
+action = "s3_sync"
+fields = { source = "s3://backup", destination = "./restore", size_only = true }
+effects = ["read_data", "write_local_file"]
+
+[[case]]
+argv = ["aws", "s3", "sync", "s3://backup", "./restore", "--delete", "--dryrun"]
+action = "s3_sync"
+fields = { source = "s3://backup", destination = "./restore", delete = true, dryrun = true }
+effects = ["read_data"]
+
+# sync has no `--recursive` option.
+[[case]]
+argv = ["aws", "s3", "sync", ".", "s3://b", "--recursive"]
+action = "unmodeled"
+
+[[case]]
+argv = ["aws", "s3", "rm", "s3://b/old.txt"]
+action = "s3_rm"
+fields = { path = "s3://b/old.txt" }
+effects = ["delete_data"]
+
+[[case]]
+argv = ["aws", "s3", "rm", "s3://b/logs/", "--recursive", "--exclude", "*", "--include", "*.tmp", "--quiet"]
+action = "s3_rm"
+fields = { path = "s3://b/logs/", recursive = true, exclude = ["*"], include = ["*.tmp"], quiet = true }
+effects = ["delete_data"]
+
+[[case]]
+argv = ["aws", "s3", "rm", "s3://b/", "--recursive", "--dryrun"]
+action = "s3_rm"
+fields = { path = "s3://b/", recursive = true, dryrun = true }
+
+# The path of rm comes from a file: the rule sees `file://...`, not the S3 path.
+[[case]]
+argv = ["aws", "s3", "rm", "file://target.txt"]
+action = "s3_rm"
+fields = { path = "file://target.txt" }
+effects = ["delete_data", "value_from_file"]
+
+[[case]]
+argv = ["aws", "s3", "rm"]
+action = "unmodeled"
+
+[[case]]
+argv = ["aws", "s3", "mb", "s3://new-bucket", "--region", "eu-west-1"]
+action = "s3_mb"
+fields = { path = "s3://new-bucket", region = "eu-west-1" }
+effects = ["write_data"]
+
+# `--tags <key> <value>` takes two words, which the grammar cannot spell.
+[[case]]
+argv = ["aws", "s3", "mb", "s3://new-bucket", "--tags", "team", "x"]
+action = "unmodeled"
+
+# rb `--force` deletes every object first.
+[[case]]
+argv = ["aws", "s3", "rb", "s3://old-bucket", "--force"]
+action = "s3_rb"
+fields = { path = "s3://old-bucket", force = true }
+effects = ["delete_data"]
+
+# presign makes a URL that lets whoever holds it read the object. It makes no request.
+[[case]]
+argv = ["aws", "s3", "presign", "s3://b/report.pdf", "--expires-in", "600"]
+action = "s3_presign"
+fields = { path = "s3://b/report.pdf", expires_in = "600" }
+effects = ["grant_access"]
+
+# ==================================================================================================
+# s3api (aws s3api <operation> help)
+# ==================================================================================================
+
+[[case]]
+argv = ["aws", "s3api", "list-buckets", "--prefix", "app-", "--max-items", "10"]
+action = "s3api_list_buckets"
+fields = { prefix = "app-", max_items = "10" }
+effects = ["read_data"]
+
+[[case]]
+argv = ["aws", "s3api", "list-objects-v2", "--bucket", "b", "--prefix", "logs/", "--page-size", "100", "--starting-token", "tok"]
+action = "s3api_list_objects_v2"
+fields = { bucket = "b", prefix = "logs/", page_size = "100", starting_token = "tok" }
+effects = ["read_data"]
+
+# A boolean parameter has a `--no-` form.
+[[case]]
+argv = ["aws", "s3api", "list-objects-v2", "--bucket=b", "--no-fetch-owner"]
+action = "s3api_list_objects_v2"
+fields = { bucket = "b", no_fetch_owner = true }
+effects = ["read_data"]
+
+[[case]]
+argv = ["aws", "s3api", "head-object", "--bucket", "b", "--key", "k", "--version-id", "v1"]
+action = "s3api_head_object"
+fields = { bucket = "b", key = "k", version_id = "v1" }
+effects = ["read_data"]
+
+# get-object writes the object to the <outfile> operand.
+[[case]]
+argv = ["aws", "s3api", "get-object", "--bucket", "b", "--key", "k", "out.bin", "--range", "bytes=0-99"]
+action = "s3api_get_object"
+fields = { bucket = "b", key = "k", outfile = "out.bin", range = "bytes=0-99" }
+effects = ["read_data", "write_local_file"]
+
+[[case]]
+argv = ["aws", "s3api", "get-object", "--bucket", "b", "--key", "k"]
+action = "unmodeled"
+
+[[case]]
+argv = ["aws", "s3api", "get-bucket-policy", "--bucket", "b"]
+action = "s3api_get_bucket_policy"
+fields = { bucket = "b" }
+effects = ["read_data"]
+
+# `--body` names a local file whose content is uploaded.
+[[case]]
+argv = ["aws", "s3api", "put-object", "--bucket", "b", "--key", "k", "--body", "./k.txt", "--content-type", "text/plain"]
+action = "s3api_put_object"
+fields = { bucket = "b", key = "k", body = "./k.txt", content_type = "text/plain" }
+effects = ["upload_local_file", "write_data"]
+
+[[case]]
+argv = ["aws", "s3api", "put-object", "--bucket", "b", "--key", "k", "--acl", "public-read-write"]
+action = "s3api_put_object"
+fields = { bucket = "b", key = "k", acl = "public-read-write" }
+effects = ["make_public", "write_data"]
+
+# An ACL from a file is unknown, so it is taken to be public.
+[[case]]
+argv = ["aws", "s3api", "put-object", "--bucket", "b", "--key", "k", "--acl", "file://acl.txt"]
+action = "s3api_put_object"
+fields = { bucket = "b", key = "k", acl = "file://acl.txt" }
+effects = ["make_public", "value_from_file", "write_data"]
+
+[[case]]
+argv = ["aws", "s3api", "put-object", "--bucket", "b", "--key", "k", "--grant-read", "uri=http://acs.amazonaws.com/groups/global/AllUsers"]
+action = "s3api_put_object"
+fields = { bucket = "b", key = "k", grant_read = "uri=http://acs.amazonaws.com/groups/global/AllUsers" }
+effects = ["grant_access", "make_public", "write_data"]
+
+[[case]]
+argv = ["aws", "s3api", "put-object", "--bucket", "b", "--key", "k", "--grant-full-control", "id=79a59df900b949e5"]
+action = "s3api_put_object"
+fields = { bucket = "b", key = "k", grant_full_control = "id=79a59df900b949e5" }
+effects = ["grant_access", "write_data"]
+
+[[case]]
+argv = ["aws", "s3api", "put-object", "--bucket", "b", "--key", "k", "--metadata", "a=b"]
+action = "unmodeled"
+
+[[case]]
+argv = ["aws", "s3api", "delete-object", "--bucket", "b", "--key", "k", "--version-id", "v1"]
+action = "s3api_delete_object"
+fields = { bucket = "b", key = "k", version_id = "v1" }
+effects = ["delete_data"]
+
+# A bucket name from a file: a rule on `bucket` cannot see the real name.
+[[case]]
+argv = ["aws", "s3api", "delete-object", "--bucket", "file://bucket.txt", "--key", "k"]
+action = "s3api_delete_object"
+fields = { bucket = "file://bucket.txt", key = "k" }
+effects = ["delete_data", "value_from_file"]
+
+[[case]]
+argv = ["aws", "s3api", "delete-object", "--bucket", "b", "--key", "k", "--bypass-governance-retention"]
+action = "unmodeled"
+
+# A value option given twice is unmodeled.
+[[case]]
+argv = ["aws", "s3api", "delete-object", "--bucket", "a", "--bucket", "b", "--key", "k"]
+action = "unmodeled"
+
+# ==================================================================================================
+# ec2 (aws ec2 <operation> help)
+# ==================================================================================================
+
+# A list option takes every word up to the next option.
+[[case]]
+argv = ["aws", "ec2", "describe-instances", "--instance-ids", "i-0abc", "i-0def", "--region", "us-west-2"]
+action = "ec2_describe_instances"
+fields = { instance_ids = ["i-0abc", "i-0def"], region = "us-west-2" }
+effects = ["read_data"]
+
+[[case]]
+argv = ["aws", "ec2", "describe-instances", "--filters", "Name=instance-state-name,Values=running", "Name=tag:env,Values=prod", "--max-items", "5", "--page-size", "5", "--starting-token", "t"]
+action = "ec2_describe_instances"
+fields = { filters = ["Name=instance-state-name,Values=running", "Name=tag:env,Values=prod"], max_items = "5", page_size = "5", starting_token = "t" }
+effects = ["read_data"]
+
+# `--dry-run` checks permission and returns no data.
+[[case]]
+argv = ["aws", "ec2", "describe-instances", "--dry-run"]
+action = "ec2_describe_instances"
+fields = { dry_run = true }
+
+[[case]]
+argv = ["aws", "ec2", "describe-subnets", "--filters", "Name=vpc-id,Values=vpc-1"]
+action = "ec2_describe_subnets"
+fields = { filters = ["Name=vpc-id,Values=vpc-1"] }
+effects = ["read_data"]
+
+[[case]]
+argv = ["aws", "ec2", "describe-security-groups", "--group-ids", "sg-1"]
+action = "ec2_describe_security_groups"
+fields = { group_ids = ["sg-1"] }
+effects = ["read_data"]
+
+[[case]]
+argv = ["aws", "ec2", "describe-images", "--owners", "self", "amazon", "--include-deprecated"]
+action = "ec2_describe_images"
+fields = { owners = ["self", "amazon"], include_deprecated = true }
+effects = ["read_data"]
+
+[[case]]
+argv = ["aws", "ec2", "start-instances", "--instance-ids", "i-0abc"]
+action = "ec2_start_instances"
+fields = { instance_ids = ["i-0abc"] }
+effects = ["write_data"]
+
+[[case]]
+argv = ["aws", "ec2", "stop-instances", "--instance-ids", "i-0abc", "--hibernate", "--force"]
+action = "ec2_stop_instances"
+fields = { instance_ids = ["i-0abc"], hibernate = true, force = true }
+effects = ["write_data"]
+
+[[case]]
+argv = ["aws", "ec2", "stop-instances", "--instance-ids", "i-0abc", "--dry-run"]
+action = "ec2_stop_instances"
+fields = { instance_ids = ["i-0abc"], dry_run = true }
+
+[[case]]
+argv = ["aws", "ec2", "terminate-instances", "--instance-ids", "i-0abc", "i-0def"]
+action = "ec2_terminate_instances"
+fields = { instance_ids = ["i-0abc", "i-0def"] }
+effects = ["delete_data"]
+
+[[case]]
+argv = ["aws", "ec2", "terminate-instances", "--dry-run", "--instance-ids", "i-0abc"]
+action = "ec2_terminate_instances"
+fields = { dry_run = true, instance_ids = ["i-0abc"] }
+
+# argparse keeps the last of `--dry-run` and `--no-dry-run`, so this line terminates for real.
+# `--no-dry-run` is not declared, so the line is unmodeled.
+[[case]]
+argv = ["aws", "ec2", "terminate-instances", "--instance-ids", "i-0abc", "--dry-run", "--no-dry-run"]
+action = "unmodeled"
+
+# A one-item list from a file: the rule cannot see the instance IDs.
+[[case]]
+argv = ["aws", "ec2", "terminate-instances", "--instance-ids", "file://ids.json"]
+action = "ec2_terminate_instances"
+fields = { instance_ids = ["file://ids.json"] }
+effects = ["delete_data", "value_from_file"]
+
+# The CLI accepts an empty list (nargs "*"); the grammar needs at least one word.
+[[case]]
+argv = ["aws", "ec2", "terminate-instances", "--instance-ids"]
+action = "unmodeled"
+
+[[case]]
+argv = ["aws", "ec2", "run-instances", "--image-id", "ami-1"]
+action = "unmodeled"
+
+# ==================================================================================================
+# lambda (aws lambda <operation> help)
+# ==================================================================================================
+
+[[case]]
+argv = ["aws", "lambda", "list-functions", "--max-items", "10"]
+action = "lambda_list_functions"
+fields = { max_items = "10" }
+effects = ["read_data"]
+
+[[case]]
+argv = ["aws", "lambda", "get-function", "--function-name", "api", "--qualifier", "3"]
+action = "lambda_get_function"
+fields = { function_name = "api", qualifier = "3" }
+effects = ["read_data"]
+
+# invoke runs the function and writes its response to <outfile>.
+[[case]]
+argv = ["aws", "lambda", "invoke", "--function-name", "api", "response.json"]
+action = "lambda_invoke"
+fields = { function_name = "api", outfile = "response.json" }
+effects = ["run_program", "write_local_file"]
+
+[[case]]
+argv = ["aws", "lambda", "invoke", "--function-name", "api", "--invocation-type", "Event", "--payload", "{\"a\":1}", "--cli-binary-format", "raw-in-base64-out", "out.json"]
+action = "lambda_invoke"
+fields = { function_name = "api", invocation_type = "Event", payload = "{\"a\":1}", cli_binary_format = "raw-in-base64-out", outfile = "out.json" }
+effects = ["run_program", "write_local_file"]
+
+# `--invocation-type DryRun` checks the parameters and permission and does not run the function.
+[[case]]
+argv = ["aws", "lambda", "invoke", "--function-name", "api", "--invocation-type", "DryRun", "out.json"]
+action = "lambda_invoke"
+fields = { function_name = "api", invocation_type = "DryRun", outfile = "out.json" }
+effects = ["write_local_file"]
+
+[[case]]
+argv = ["aws", "lambda", "invoke", "--function-name", "api", "--payload", "fileb://event.json", "out.json"]
+action = "lambda_invoke"
+fields = { function_name = "api", payload = "fileb://event.json", outfile = "out.json" }
+effects = ["run_program", "value_from_file", "write_local_file"]
+
+[[case]]
+argv = ["aws", "lambda", "invoke", "--function-name", "api"]
+action = "unmodeled"
+
+[[case]]
+argv = ["aws", "lambda", "delete-function", "--function-name", "api"]
+action = "unmodeled"
+
+# ==================================================================================================
+# cloudformation (aws cloudformation <command> help; customizations/cloudformation/deploy.py)
+# ==================================================================================================
+
+[[case]]
+argv = ["aws", "cloudformation", "describe-stacks"]
+action = "cloudformation_describe_stacks"
+effects = ["read_data"]
+
+[[case]]
+argv = ["aws", "cloudformation", "describe-stacks", "--stack-name", "web"]
+action = "cloudformation_describe_stacks"
+fields = { stack_name = "web" }
+effects = ["read_data"]
+
+[[case]]
+argv = ["aws", "cloudformation", "list-stacks", "--stack-status-filter", "CREATE_COMPLETE", "UPDATE_COMPLETE"]
+action = "cloudformation_list_stacks"
+fields = { stack_status_filter = ["CREATE_COMPLETE", "UPDATE_COMPLETE"] }
+effects = ["read_data"]
+
+[[case]]
+argv = ["aws", "cloudformation", "describe-stack-events", "--stack-name", "web", "--max-items", "20"]
+action = "cloudformation_describe_stack_events"
+fields = { stack_name = "web", max_items = "20" }
+effects = ["read_data"]
+
+[[case]]
+argv = ["aws", "cloudformation", "list-stack-resources", "--stack-name", "web"]
+action = "cloudformation_list_stack_resources"
+fields = { stack_name = "web" }
+effects = ["read_data"]
+
+# deploy reads a local template, and an update deletes the resources it no longer holds.
+[[case]]
+argv = ["aws", "cloudformation", "deploy", "--template-file", "template.yaml", "--stack-name", "web"]
+action = "cloudformation_deploy"
+fields = { template_file = "template.yaml", stack_name = "web" }
+effects = ["delete_data", "upload_local_file", "write_data"]
+
+# A template with IAM resources needs CAPABILITY_IAM or CAPABILITY_NAMED_IAM.
+[[case]]
+argv = ["aws", "cloudformation", "deploy", "--template-file=template.yaml", "--stack-name=web", "--capabilities", "CAPABILITY_NAMED_IAM", "--parameter-overrides", "Env=prod", "Size=2", "--tags", "team=web"]
+action = "cloudformation_deploy"
+fields = { template_file = "template.yaml", stack_name = "web", capabilities = ["CAPABILITY_NAMED_IAM"], parameter_overrides = ["Env=prod", "Size=2"], tags = ["team=web"] }
+effects = ["delete_data", "iam_write", "upload_local_file", "write_data"]
+
+# `--no-execute-changeset` creates the change set and does not run it.
+[[case]]
+argv = ["aws", "cloudformation", "deploy", "--template-file", "t.yaml", "--stack-name", "web", "--capabilities", "CAPABILITY_IAM", "--no-execute-changeset"]
+action = "cloudformation_deploy"
+fields = { template_file = "t.yaml", stack_name = "web", capabilities = ["CAPABILITY_IAM"], no_execute_changeset = true }
+effects = ["upload_local_file", "write_data"]
+
+[[case]]
+argv = ["aws", "cloudformation", "delete-stack", "--stack-name", "web", "--retain-resources", "Bucket"]
+action = "cloudformation_delete_stack"
+fields = { stack_name = "web", retain_resources = ["Bucket"] }
+effects = ["delete_data"]
+
+[[case]]
+argv = ["aws", "cloudformation", "package", "--template-file", "t.yaml", "--s3-bucket", "b"]
+action = "unmodeled"
+
+# ==================================================================================================
+# iam (aws iam <operation> help)
+# ==================================================================================================
+
+[[case]]
+argv = ["aws", "iam", "list-users"]
+action = "iam_list_users"
+effects = ["read_data"]
+
+[[case]]
+argv = ["aws", "iam", "list-roles", "--path-prefix", "/service/"]
+action = "iam_list_roles"
+fields = { path_prefix = "/service/" }
+effects = ["read_data"]
+
+[[case]]
+argv = ["aws", "iam", "list-attached-role-policies", "--role-name", "deploy"]
+action = "iam_list_attached_role_policies"
+fields = { role_name = "deploy" }
+effects = ["read_data"]
+
+[[case]]
+argv = ["aws", "iam", "get-user", "--user-name", "alice"]
+action = "iam_get_user"
+fields = { user_name = "alice" }
+effects = ["read_data"]
+
+[[case]]
+argv = ["aws", "iam", "get-role", "--role-name", "deploy"]
+action = "iam_get_role"
+fields = { role_name = "deploy" }
+effects = ["read_data"]
+
+# create-access-key returns a new long-term secret key.
+[[case]]
+argv = ["aws", "iam", "create-access-key", "--user-name", "alice"]
+action = "iam_create_access_key"
+fields = { user_name = "alice" }
+effects = ["credentials", "iam_write", "write_data"]
+
+[[case]]
+argv = ["aws", "iam", "create-user", "--user-name", "bot"]
+action = "iam_create_user"
+fields = { user_name = "bot" }
+effects = ["iam_write", "write_data"]
+
+[[case]]
+argv = ["aws", "iam", "create-role", "--role-name", "r", "--assume-role-policy-document", "file://trust.json"]
+action = "iam_create_role"
+fields = { role_name = "r", assume_role_policy_document = "file://trust.json" }
+effects = ["iam_write", "value_from_file", "write_data"]
+
+[[case]]
+argv = ["aws", "iam", "create-policy", "--policy-name", "p", "--policy-document", "file://p.json"]
+action = "iam_create_policy"
+fields = { policy_name = "p", policy_document = "file://p.json" }
+effects = ["iam_write", "value_from_file", "write_data"]
+
+[[case]]
+argv = ["aws", "iam", "attach-role-policy", "--role-name", "r", "--policy-arn", "arn:aws:iam::aws:policy/AdministratorAccess"]
+action = "iam_attach_role_policy"
+fields = { role_name = "r", policy_arn = "arn:aws:iam::aws:policy/AdministratorAccess" }
+effects = ["iam_write", "write_data"]
+
+[[case]]
+argv = ["aws", "iam", "put-role-policy", "--role-name", "r", "--policy-name", "inline", "--policy-document", "{\"Version\":\"2012-10-17\",\"Statement\":[]}"]
+action = "iam_put_role_policy"
+fields = { role_name = "r", policy_name = "inline", policy_document = "{\"Version\":\"2012-10-17\",\"Statement\":[]}" }
+effects = ["iam_write", "write_data"]
+
+[[case]]
+argv = ["aws", "iam", "delete-role", "--role-name", "r"]
+action = "iam_delete_role"
+fields = { role_name = "r" }
+effects = ["delete_data", "iam_write"]
+
+[[case]]
+argv = ["aws", "iam", "delete-user", "--user-name", "bot"]
+action = "iam_delete_user"
+fields = { user_name = "bot" }
+effects = ["delete_data", "iam_write"]
+
+[[case]]
+argv = ["aws", "iam", "create-user", "--user-name", "bot", "--tags", "Key=a,Value=b"]
+action = "unmodeled"
+
+# ==================================================================================================
+# logs (aws logs <command> help; customizations/logs/tail.py)
+# ==================================================================================================
+
+[[case]]
+argv = ["aws", "logs", "tail", "/aws/lambda/api", "--follow", "--since", "1h", "--format", "short"]
+action = "logs_tail"
+fields = { group_name = "/aws/lambda/api", follow = true, since = "1h", format = "short" }
+effects = ["read_data"]
+
+[[case]]
+argv = ["aws", "logs", "tail", "--format=json", "--log-stream-names", "a", "b", "app"]
+action = "unmodeled"
+
+[[case]]
+argv = ["aws", "logs", "tail", "app", "--format=json", "--log-stream-names", "a", "b"]
+action = "logs_tail"
+fields = { group_name = "app", format = "json", log_stream_names = ["a", "b"] }
+effects = ["read_data"]
+
+[[case]]
+argv = ["aws", "logs", "tail"]
+action = "unmodeled"
+
+[[case]]
+argv = ["aws", "logs", "describe-log-groups", "--log-group-name-prefix", "/aws/"]
+action = "logs_describe_log_groups"
+fields = { log_group_name_prefix = "/aws/" }
+effects = ["read_data"]
+
+# A value that starts with `-` needs the `=` spelling in argparse.
+[[case]]
+argv = ["aws", "logs", "filter-log-events", "--log-group-name", "app", "--filter-pattern=-DEBUG"]
+action = "logs_filter_log_events"
+fields = { log_group_name = "app", filter_pattern = "-DEBUG" }
+effects = ["read_data"]
+
+# `--unmask` returns data that a data protection policy masks.
+[[case]]
+argv = ["aws", "logs", "filter-log-events", "--log-group-name", "app", "--unmask"]
+action = "logs_filter_log_events"
+fields = { log_group_name = "app", unmask = true }
+effects = ["read_data", "read_secret"]
+
+[[case]]
+argv = ["aws", "logs", "get-log-events", "--log-group-name", "app", "--log-stream-name", "s", "--start-from-head", "--limit", "50"]
+action = "logs_get_log_events"
+fields = { log_group_name = "app", log_stream_name = "s", start_from_head = true, limit = "50" }
+effects = ["read_data"]
+
+[[case]]
+argv = ["aws", "logs", "get-log-events", "--log-group-name", "app", "--log-stream-name", "s", "--unmask"]
+action = "logs_get_log_events"
+fields = { log_group_name = "app", log_stream_name = "s", unmask = true }
+effects = ["read_data", "read_secret"]
+
+[[case]]
+argv = ["aws", "logs", "start-query", "--log-group-name", "app"]
+action = "unmodeled"
+
+# ==================================================================================================
+# dynamodb (aws dynamodb <operation> help)
+# ==================================================================================================
+
+[[case]]
+argv = ["aws", "dynamodb", "list-tables"]
+action = "dynamodb_list_tables"
+effects = ["read_data"]
+
+[[case]]
+argv = ["aws", "dynamodb", "describe-table", "--table-name", "orders"]
+action = "dynamodb_describe_table"
+fields = { table_name = "orders" }
+effects = ["read_data"]
+
+[[case]]
+argv = ["aws", "dynamodb", "get-item", "--table-name", "orders", "--key", "{\"id\":{\"S\":\"1\"}}", "--consistent-read"]
+action = "dynamodb_get_item"
+fields = { table_name = "orders", key = "{\"id\":{\"S\":\"1\"}}", consistent_read = true }
+effects = ["read_data"]
+
+[[case]]
+argv = ["aws", "dynamodb", "query", "--table-name", "orders", "--key-condition-expression", "pk = :p", "--expression-attribute-values", "file://values.json"]
+action = "dynamodb_query"
+fields = { table_name = "orders", key_condition_expression = "pk = :p", expression_attribute_values = "file://values.json" }
+effects = ["read_data", "value_from_file"]
+
+[[case]]
+argv = ["aws", "dynamodb", "scan", "--table-name", "orders", "--select", "COUNT"]
+action = "dynamodb_scan"
+fields = { table_name = "orders", select = "COUNT" }
+effects = ["read_data"]
+
+[[case]]
+argv = ["aws", "dynamodb", "put-item", "--table-name", "orders", "--item", "file://item.json"]
+action = "dynamodb_put_item"
+fields = { table_name = "orders", item = "file://item.json" }
+effects = ["value_from_file", "write_data"]
+
+[[case]]
+argv = ["aws", "dynamodb", "delete-item", "--table-name", "orders", "--key", "{\"id\":{\"S\":\"1\"}}"]
+action = "dynamodb_delete_item"
+fields = { table_name = "orders", key = "{\"id\":{\"S\":\"1\"}}" }
+effects = ["delete_data"]
+
+[[case]]
+argv = ["aws", "dynamodb", "delete-table", "--table-name", "orders"]
+action = "unmodeled"
+
+# ==================================================================================================
+# ssm Parameter Store (aws ssm <operation> help)
+# ==================================================================================================
+
+[[case]]
+argv = ["aws", "ssm", "get-parameter", "--name", "/app/db-host"]
+action = "ssm_get_parameter"
+fields = { name = "/app/db-host" }
+effects = ["read_data"]
+
+# `--with-decryption` returns the plain text of a SecureString.
+[[case]]
+argv = ["aws", "ssm", "get-parameter", "--name", "/app/db-password", "--with-decryption"]
+action = "ssm_get_parameter"
+fields = { name = "/app/db-password", with_decryption = true }
+effects = ["read_data", "read_secret"]
+
+[[case]]
+argv = ["aws", "ssm", "get-parameter", "--name", "/app/db-password", "--no-with-decryption"]
+action = "ssm_get_parameter"
+fields = { name = "/app/db-password", no_with_decryption = true }
+effects = ["read_data"]
+
+# Given both forms, argparse keeps the last; the grammar keeps `read_secret`, which is more, not
+# less.
+[[case]]
+argv = ["aws", "ssm", "get-parameter", "--name", "/p", "--with-decryption", "--no-with-decryption"]
+action = "ssm_get_parameter"
+fields = { name = "/p", with_decryption = true, no_with_decryption = true }
+effects = ["read_data", "read_secret"]
+
+[[case]]
+argv = ["aws", "ssm", "get-parameters", "--names", "/a", "/b", "--with-decryption"]
+action = "ssm_get_parameters"
+fields = { names = ["/a", "/b"], with_decryption = true }
+effects = ["read_data", "read_secret"]
+
+[[case]]
+argv = ["aws", "ssm", "get-parameters-by-path", "--path", "/app", "--recursive", "--with-decryption"]
+action = "ssm_get_parameters_by_path"
+fields = { path = "/app", recursive = true, with_decryption = true }
+effects = ["read_data", "read_secret"]
+
+[[case]]
+argv = ["aws", "ssm", "put-parameter", "--name", "/app/key", "--value", "v", "--type", "SecureString", "--overwrite"]
+action = "ssm_put_parameter"
+fields = { name = "/app/key", value = "v", type = "SecureString", overwrite = true }
+effects = ["write_data"]
+
+# A value from a local file: the content of that file is stored in AWS.
+[[case]]
+argv = ["aws", "ssm", "put-parameter", "--name", "/app/key", "--value", "file://key.pem", "--type", "SecureString"]
+action = "ssm_put_parameter"
+fields = { name = "/app/key", value = "file://key.pem", type = "SecureString" }
+effects = ["value_from_file", "write_data"]
+
+[[case]]
+argv = ["aws", "ssm", "send-command", "--document-name", "AWS-RunShellScript"]
+action = "unmodeled"
+
+# ==================================================================================================
+# secretsmanager (aws secretsmanager <operation> help)
+# ==================================================================================================
+
+[[case]]
+argv = ["aws", "secretsmanager", "get-secret-value", "--secret-id", "prod/db"]
+action = "secretsmanager_get_secret_value"
+fields = { secret_id = "prod/db" }
+effects = ["read_data", "read_secret"]
+
+[[case]]
+argv = ["aws", "secretsmanager", "get-secret-value", "--secret-id", "prod/db", "--version-stage", "AWSPREVIOUS"]
+action = "secretsmanager_get_secret_value"
+fields = { secret_id = "prod/db", version_stage = "AWSPREVIOUS" }
+effects = ["read_data", "read_secret"]
+
+[[case]]
+argv = ["aws", "secretsmanager", "list-secrets", "--filters", "Key=name,Values=prod"]
+action = "secretsmanager_list_secrets"
+fields = { filters = ["Key=name,Values=prod"] }
+effects = ["read_data"]
+
+[[case]]
+argv = ["aws", "secretsmanager", "describe-secret", "--secret-id", "prod/db"]
+action = "secretsmanager_describe_secret"
+fields = { secret_id = "prod/db" }
+effects = ["read_data"]
+
+[[case]]
+argv = ["aws", "secretsmanager", "delete-secret", "--secret-id", "prod/db"]
+action = "unmodeled"
+
+# ==================================================================================================
+# configure (aws configure <command> help; customizations/configure/)
+# ==================================================================================================
+
+[[case]]
+argv = ["aws", "configure", "list"]
+action = "configure_list"
+effects = ["read_config"]
+
+[[case]]
+argv = ["aws", "configure", "list", "--profile", "dev"]
+action = "configure_list"
+fields = { profile = "dev" }
+effects = ["change_account", "read_config"]
+
+[[case]]
+argv = ["aws", "configure", "list-profiles"]
+action = "configure_list_profiles"
+effects = ["read_config"]
+
+[[case]]
+argv = ["aws", "configure", "get", "region"]
+action = "configure_get"
+fields = { varname = "region" }
+effects = ["read_config"]
+
+# configure get prints a secret key or a session token from the config files.
+[[case]]
+argv = ["aws", "configure", "get", "aws_secret_access_key"]
+action = "configure_get"
+fields = { varname = "aws_secret_access_key" }
+effects = ["read_config", "read_secret"]
+
+[[case]]
+argv = ["aws", "configure", "get", "profile.prod.aws_session_token"]
+action = "configure_get"
+fields = { varname = "profile.prod.aws_session_token" }
+effects = ["read_config", "read_secret"]
+
+# The name from a file is unknown, so it is taken to be a secret.
+[[case]]
+argv = ["aws", "configure", "get", "file://name.txt"]
+action = "configure_get"
+fields = { varname = "file://name.txt" }
+effects = ["read_config", "read_secret", "value_from_file"]
+
+[[case]]
+argv = ["aws", "configure", "export-credentials", "--profile", "dev", "--format", "env"]
+action = "configure_export_credentials"
+fields = { profile = "dev", format = "env" }
+effects = ["change_account", "credentials", "read_config"]
+
+[[case]]
+argv = ["aws", "configure", "set", "region", "us-east-1"]
+action = "unmodeled"
+
+[[case]]
+argv = ["aws", "configure"]
+action = "unmodeled"
