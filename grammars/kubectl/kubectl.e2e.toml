@@ -83,3 +83,17 @@ permit (principal, action in Tool::kubectl::Action::"*", resource);
 forbid (principal, action in Tool::kubectl::Action::"*", resource)
 when { context.input has namespace && context.input.namespace == "kube-system" };
 '''
+
+# --- independent verifier cases ---
+# EXPECTED-FAIL. A client dry-run patch prints the fetched Secret (patch.go), so the file policy's
+# no_secret_reads should refuse it. The grammar gives no effect, and the line runs.
+[[case]]
+argv = ["kubectl", "patch", "secret", "db", "-p", "{}", "--dry-run=client", "-o", "yaml"]
+exit = 126
+stderr = "[policy: no_secret_reads]"
+
+# EXPECTED-FAIL. describe prints a service-account token in clear text (describe.go describeSecret).
+[[case]]
+argv = ["kubectl", "describe", "secret", "build-robot-token"]
+exit = 126
+stderr = "[policy: no_secret_reads]"

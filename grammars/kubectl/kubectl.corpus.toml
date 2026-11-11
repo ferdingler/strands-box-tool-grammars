@@ -1226,3 +1226,300 @@ action = "unmodeled"
 [[case]]
 argv = ["kubectl", "plugin", "list"]
 action = "unmodeled"
+
+# --- independent verifier cases ---
+# Written by the verifier from kubectl v1.37.2 source (staging/src/k8s.io/kubectl at tag v1.37.2)
+# and help output, not from this grammar. Cases marked EXPECTED-FAIL state the CLI's real effect,
+# which the grammar does not give; each is a finding in evidence/kubectl/VERIFY.md.
+
+# Comma list of types; Secret in it.
+[[case]]
+argv = ["kubectl", "get", "pods,secrets", "-A"]
+action = "get"
+fields = { type = "pods,secrets", all_namespaces = true }
+effects = ["cluster_read", "read_secrets"]
+
+# Fully qualified resource.version.group form (RESTMapper accepts `secrets.v1.`).
+[[case]]
+argv = ["kubectl", "get", "secrets.v1.", "db", "-o", "yaml"]
+action = "get"
+fields = { type = "secrets.v1.", name = ["db"], output = "yaml" }
+effects = ["cluster_read", "read_secrets"]
+
+# Upper case type; coerceResourceForMatching lowercases it.
+[[case]]
+argv = ["kubectl", "get", "SECRETS"]
+action = "get"
+fields = { type = "SECRETS" }
+effects = ["cluster_read", "read_secrets"]
+
+# TYPE/NAME words of mixed types; the Secret is the second word.
+[[case]]
+argv = ["kubectl", "get", "pod/a", "secret/b"]
+action = "get"
+fields = { type = "pod/a", name = ["secret/b"] }
+effects = ["cluster_read", "read_secrets"]
+
+# A persistent flag before the command word.
+[[case]]
+argv = ["kubectl", "-n", "prod", "get", "secret", "db"]
+action = "get"
+fields = { namespace = "prod", type = "secret", name = ["db"] }
+effects = ["cluster_read", "read_secrets"]
+
+# pflag accepts `-n=prod`; the grammar reads it as unmodeled (safe).
+[[case]]
+argv = ["kubectl", "get", "secret", "db", "-n=prod"]
+action = "unmodeled"
+
+# A Secret read through a -f file is only manifest_input.
+[[case]]
+argv = ["kubectl", "get", "-f", "secret.yaml", "-o", "yaml"]
+action = "get"
+fields = { filename = ["secret.yaml"], output = "yaml" }
+effects = ["cluster_read", "manifest_input"]
+
+# EXPECTED-FAIL. describe.go describeSecret prints the `token` key of a
+# kubernetes.io/service-account-token Secret in clear text.
+[[case]]
+argv = ["kubectl", "describe", "secret", "build-robot-token"]
+action = "describe"
+fields = { type = "secret", name = ["build-robot-token"] }
+effects = ["cluster_read", "read_secrets"]
+
+# EXPECTED-FAIL. patch.go: a client dry run GETs the object, applies the patch locally, and prints
+# it with the -o printer, so the Secret data is printed and nothing is written.
+[[case]]
+argv = ["kubectl", "patch", "secret", "db", "-p", "{}", "--dry-run=client", "-o", "yaml"]
+action = "patch"
+fields = { type = "secret", name = "db", patch = "{}", dry_run = "client", output = "yaml" }
+effects = ["read_secrets"]
+
+# EXPECTED-FAIL. label.go: a client dry run prints info.Object (fetched from the server).
+[[case]]
+argv = ["kubectl", "label", "secret", "db", "a=b", "--dry-run=client", "-o", "yaml"]
+action = "label"
+fields = { operands = ["secret", "db", "a=b"], dry_run = "client", output = "yaml" }
+effects = ["read_secrets"]
+
+# EXPECTED-FAIL. annotate.go: same as label; --all fetches every Secret in the namespace.
+[[case]]
+argv = ["kubectl", "annotate", "secrets", "--all", "a=b", "--dry-run=server", "-o", "json"]
+action = "annotate"
+fields = { operands = ["secrets", "a=b"], all = "", dry_run = "server", output = "json" }
+effects = ["read_secrets"]
+
+# EXPECTED-FAIL. scale.go: a client dry run calls updateReplicas (no error for core-group kinds)
+# and prints info.Object, so a Secret's data is printed.
+[[case]]
+argv = ["kubectl", "scale", "secret", "db", "--replicas=1", "--dry-run=client", "-o", "yaml"]
+action = "scale"
+fields = { type = "secret", name = ["db"], replicas = "1", dry_run = "client", output = "yaml" }
+effects = ["read_secrets"]
+
+# Bare --dry-run (NoOptDefVal "unchanged" -> client) never takes the next word: `server` is the type.
+[[case]]
+argv = ["kubectl", "delete", "--dry-run", "server", "pods"]
+action = "delete"
+fields = { dry_run = "", type = "server", name = ["pods"] }
+effects = []
+
+# EXPECTED-FAIL. Deleting a Namespace deletes every object in it (namespace controller).
+[[case]]
+argv = ["kubectl", "delete", "namespace", "prod"]
+action = "delete"
+fields = { type = "namespace", name = ["prod"] }
+effects = ["cluster_delete", "broad_delete"]
+
+[[case]]
+argv = ["kubectl", "delete", "pods", "--all", "--dry-run=none"]
+action = "delete"
+fields = { type = "pods", all = "", dry_run = "none" }
+effects = ["cluster_delete", "broad_delete"]
+
+[[case]]
+argv = ["kubectl", "delete", "pods", "foo", "--all=false"]
+action = "delete"
+fields = { type = "pods", name = ["foo"], all = "false" }
+effects = ["cluster_delete"]
+
+# A cluster: -A is a flag, -l takes the rest of the word.
+[[case]]
+argv = ["kubectl", "delete", "pods", "-Alapp=web"]
+action = "delete"
+fields = { type = "pods", all_namespaces = true, selector = "app=web" }
+effects = ["cluster_delete", "broad_delete"]
+
+[[case]]
+argv = ["kubectl", "--namespace=kube-system", "delete", "secret", "--all"]
+action = "delete"
+fields = { namespace = "kube-system", type = "secret", all = "" }
+effects = ["cluster_delete", "broad_delete"]
+
+[[case]]
+argv = ["kubectl", "delete", "pods", "--al"]
+action = "unmodeled"
+
+[[case]]
+argv = ["kubectl", "delete", "pods", "--all_namespaces"]
+action = "unmodeled"
+
+[[case]]
+argv = ["kubectl", "delete", "pods", "x", "-i"]
+action = "unmodeled"
+
+# apply --prune with a selector; prune.go deletes unless the dry run is client or server.
+[[case]]
+argv = ["kubectl", "apply", "-f", "x.yaml", "--prune", "-l", "app=web"]
+action = "apply"
+fields = { filename = ["x.yaml"], prune = "", selector = "app=web" }
+effects = ["cluster_write", "cluster_delete", "broad_delete", "manifest_input"]
+
+[[case]]
+argv = ["kubectl", "apply", "-k", "overlays/prod", "--prune", "--all", "--dry-run=server"]
+action = "apply"
+fields = { kustomize = "overlays/prod", prune = "", all = "", dry_run = "server" }
+effects = ["manifest_input"]
+
+[[case]]
+argv = ["kubectl", "apply", "-f", "x.yaml", "--prune=false", "--all"]
+action = "apply"
+fields = { filename = ["x.yaml"], prune = "false", all = "" }
+effects = ["cluster_write", "manifest_input"]
+
+# --applyset is not declared.
+[[case]]
+argv = ["kubectl", "apply", "-f", "x.yaml", "--prune", "--applyset=foo"]
+action = "unmodeled"
+
+[[case]]
+argv = ["kubectl", "exec", "web", "-c", "app", "--", "cat", "/var/run/secrets/kubernetes.io/serviceaccount/token"]
+action = "exec"
+fields = { pod = "web", container = "app", command = ["cat", "/var/run/secrets/kubernetes.io/serviceaccount/token"] }
+effects = ["run_program"]
+
+# exec.go: "exec [POD] [COMMAND] is not supported anymore".
+[[case]]
+argv = ["kubectl", "exec", "web", "cat", "/etc/passwd"]
+action = "unmodeled"
+
+# Persistent flag between the program and the command word, and -it cluster.
+[[case]]
+argv = ["kubectl", "exec", "-n", "prod", "-it", "web", "--", "sh"]
+action = "exec"
+fields = { namespace = "prod", stdin = true, tty = true, pod = "web", command = ["sh"] }
+effects = ["run_program"]
+
+# cp.go extractFileSpec: any `:` makes a remote spec; src remote = copyFromPod.
+[[case]]
+argv = ["kubectl", "cp", "prod/web:/etc/app", "./app"]
+action = "cp"
+fields = { file_spec_src = "prod/web:/etc/app", file_spec_dest = "./app" }
+effects = ["run_program", "write_local_files"]
+
+[[case]]
+argv = ["kubectl", "cp", "./x", "web:/tmp/x", "-c", "app"]
+action = "cp"
+fields = { file_spec_src = "./x", file_spec_dest = "web:/tmp/x", container = "app" }
+effects = ["run_program", "upload_files"]
+
+# EXPECTED-FAIL. use-context makes every later kubectl line target another cluster.
+[[case]]
+argv = ["kubectl", "config", "use-context", "prod"]
+action = "config_use_context"
+fields = { context_name = "prod" }
+effects = ["override_config", "change_target"]
+
+[[case]]
+argv = ["kubectl", "config", "use", "prod"]
+action = "config_use_context"
+fields = { context_name = "prod" }
+effects = ["override_config"]
+
+[[case]]
+argv = ["kubectl", "--as", "system:admin", "--as-group", "system:masters", "delete", "pods", "x"]
+action = "delete"
+fields = { as = "system:admin", as_group = ["system:masters"], type = "pods", name = ["x"] }
+effects = ["impersonate", "cluster_delete"]
+
+[[case]]
+argv = ["kubectl", "delete", "pods", "x", "--as=admin"]
+action = "delete"
+fields = { as = "admin", type = "pods", name = ["x"] }
+effects = ["impersonate", "cluster_delete"]
+
+[[case]]
+argv = ["kubectl", "delete", "pods", "x", "--as-user-extra=a=b"]
+action = "unmodeled"
+
+[[case]]
+argv = ["kubectl", "--insecure-skip-tls-verify", "get", "pods"]
+action = "get"
+fields = { insecure_skip_tls_verify = "", type = "pods" }
+effects = ["cluster_read", "insecure_tls"]
+
+[[case]]
+argv = ["kubectl", "get", "pods", "--insecure-skip-tls-verify=false"]
+action = "get"
+fields = { insecure_skip_tls_verify = "false", type = "pods" }
+effects = ["cluster_read"]
+
+# A persistent flag between two command words.
+[[case]]
+argv = ["kubectl", "config", "--kubeconfig", "/tmp/k", "view", "--raw"]
+action = "config_view"
+fields = { kubeconfig = "/tmp/k", raw = "" }
+effects = ["change_target", "read_secrets"]
+
+[[case]]
+argv = ["kubectl", "--", "delete", "pods"]
+action = "unmodeled"
+
+[[case]]
+argv = ["kubectl", "get", "--all-namespaces=true", "secrets"]
+action = "unmodeled"
+
+[[case]]
+argv = ["kubectl", "-s", "https://evil.example", "get", "secrets"]
+action = "get"
+fields = { server = "https://evil.example", type = "secrets" }
+effects = ["cluster_read", "read_secrets", "change_target"]
+
+[[case]]
+argv = ["kubectl", "create", "secret", "generic", "db", "--from-file=key=./id_rsa", "--dry-run=server"]
+action = "create_secret_generic"
+fields = { name = "db", from_file = ["key=./id_rsa"], dry_run = "server" }
+effects = ["upload_files"]
+
+[[case]]
+argv = ["kubectl", "create", "secret", "generic", "db", "--from-file", "./id_rsa", "--dry-run"]
+action = "create_secret_generic"
+fields = { name = "db", from_file = ["./id_rsa"], dry_run = "" }
+effects = []
+
+[[case]]
+argv = ["kubectl", "create", "secret", "tls", "x", "--cert=a", "--key=b"]
+action = "unmodeled"
+
+[[case]]
+argv = ["kubectl", "top", "po", "-A"]
+action = "top_pod"
+fields = { all_namespaces = true }
+effects = ["cluster_read"]
+
+[[case]]
+argv = ["kubectl", "port-forward", "svc/web", "8080:80", "--address", "0.0.0.0"]
+action = "port_forward"
+fields = { target = "svc/web", ports = ["8080:80"], address = ["0.0.0.0"] }
+effects = ["network_listen", "listen_address"]
+
+[[case]]
+argv = ["kubectl", "version", "--client=false"]
+action = "version"
+fields = { client = "false" }
+effects = ["cluster_read"]
+
+# An anywhere option given twice is unmodeled; pflag would take the last one.
+[[case]]
+argv = ["kubectl", "--context", "dev", "get", "pods", "--context", "prod"]
+action = "unmodeled"
