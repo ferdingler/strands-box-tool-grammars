@@ -1,0 +1,453 @@
+# A tool grammar for pip, the Python package installer.
+#
+# Project:    pypa/pip, https://github.com/pypa/pip
+# Executable: `pip`, a Python console-script entry point (a script whose shebang names a Python
+#             interpreter). Box binds the called name `pip` only. `pip3`, `pip3.14`, and
+#             `python -m pip` are other names: they are spawns of another program and this grammar
+#             does not decide them.
+# Version:    pip 26.3 (tag 26.3, commit 191854fba83d1c69534f974564af85632372d995), checked against
+#             `pip <command> --help` and src/pip/_internal/cli/cmdoptions.py, cli/main_parser.py, and
+#             src/pip/_internal/commands/*.py at that tag.
+#
+# How pip reads a command line (optparse):
+# - General options go before the command and after it. `--python` is the exception: pip refuses it
+#   after the command name (cli/base_command.py), so it is a global that is not `anywhere`.
+# - pip accepts a unique prefix of a long option (`--upgr` for `--upgrade`). The grammar does not:
+#   a prefix is `unmodeled`.
+# - An option that pip lets repeat with "last one wins" (for example `-i`) is `unmodeled` when it is
+#   given twice. An option that pip collects (`action="append"` or an accumulating callback) is
+#   `repeated` here.
+# - The subcommands of `cache`, `config`, and `index` are positional words in pip. Here they are
+#   command words, so a command option between them (`pip config --user set ...`) is `unmodeled`.
+#   Put the option after the subcommand word (`pip config set --user ...`).
+#
+# What this grammar cannot see:
+# - Environment variables. Every option has a `PIP_<OPTION>` variable, for example `PIP_INDEX_URL`,
+#   `PIP_TRUSTED_HOST`, `PIP_BREAK_SYSTEM_PACKAGES`, `PIP_TARGET`, `PIP_USER`, `PIP_PROXY`, and
+#   `PIP_CONFIG_FILE`. Also `VISUAL` and `EDITOR` for `pip config edit`.
+# - Configuration files (`pip.conf` / `pip.ini`: global, user, site, and `PIP_CONFIG_FILE`). They
+#   can set any option. `--isolated` makes pip ignore the environment variables and the user file.
+# - Requirements and constraints files (the line gets `opaque_input`). A `-r` file can hold `-i`, `--extra-index-url`,
+#   `--trusted-host`, `-f`, `-e`, `--no-binary`, `--only-binary`, `--pre`, `-c`, nested `-r`, and
+#   VCS URLs. The grammar sees only the file name.
+# - `pyproject.toml`, `setup.py`, and PEP 723 script metadata, which choose the build backend and
+#   the dependencies.
+# - Child processes that pip starts itself: build backends (setuptools and others run project
+#   code), version control programs for VCS URLs, the keyring program, the editor of
+#   `pip config edit`, and the interpreter that `--python` names.
+# - The weekly self version check: `install`, `download`, `wheel`, `lock`, `list`, and `index` may
+#   contact PyPI once a week unless `--disable-pip-version-check` or `--no-index` is given.
+
+format  = 1
+version = 1
+name    = "pip"
+program = "pip"
+
+[effects]
+network                  = "Contacts a package index or another remote host to resolve or fetch packages"
+install_packages         = "Installs, upgrades, or reinstalls packages in a Python environment"
+remove_packages          = "Uninstalls packages from a Python environment"
+run_build_backend        = "May build a project or source distribution, which runs that project's build code"
+run_vcs                  = "Runs a version control program (git, hg, svn, bzr) to fetch a project from a VCS URL"
+override_index           = "Uses a package source that the command line names: an index, a find-links source, or a direct URL or archive"
+opaque_input             = "Reads requirements or pip options from a file that the grammar cannot see (-r, -c, --build-constraint, --requirements-from-script, --group)"
+write_file               = "Writes a file or directory at a path that the command line names (--report, download -d, wheel -w, lock -o)"
+disable_tls_verification = "Trusts a host without valid HTTPS (--trusted-host)"
+override_tls_trust       = "Replaces the CA bundle that verifies HTTPS (--cert)"
+override_proxy           = "Sends HTTP traffic through a proxy that the command line names (--proxy)"
+write_outside_env        = "Installs into a location other than the active environment (--user, --target, --prefix, --root)"
+break_system_packages    = "Lets pip modify an externally managed (PEP 668) Python installation"
+other_interpreter        = "Runs pip under another Python interpreter that the command line names, against its environment"
+override_config          = "Changes a pip configuration file"
+run_program              = "Runs an editor program (pip config edit)"
+delete_cache             = "Deletes files from pip's cache"
+skip_prompt              = "Skips the confirmation prompt (uninstall -y)"
+
+# General Options (cmdoptions.general_group). Left out, so `unmodeled`: -h/--help, -V/--version,
+# --log (writes a log file), --keyring-provider (credential lookup, can run a program),
+# --client-cert (a private key), --exists-action (can wipe paths), --use-feature, --use-deprecated.
+[global]
+options.debug                      = { flag = ["--debug"], anywhere = true }
+options.isolated                   = { flag = ["--isolated"], anywhere = true }
+options.require_virtualenv         = { flag = ["--require-virtualenv", "--require-venv"], anywhere = true }
+options.python                     = { flag = ["--python"], value = "required", adds = ["other_interpreter"] }
+options.verbose                    = { flag = ["-v", "--verbose"], anywhere = true }
+options.quiet                      = { flag = ["-q", "--quiet"], anywhere = true }
+options.no_input                   = { flag = ["--no-input"], anywhere = true }
+options.proxy                      = { flag = ["--proxy"], value = "required", anywhere = true, adds = ["override_proxy"] }
+options.no_proxy_env               = { flag = ["--no-proxy-env"], anywhere = true }
+options.retries                    = { flag = ["--retries"], value = "required", anywhere = true }
+options.resume_retries             = { flag = ["--resume-retries"], value = "required", anywhere = true }
+options.timeout                    = { flag = ["--timeout", "--default-timeout"], value = "required", anywhere = true }
+options.trusted_host               = { flag = ["--trusted-host"], value = "required", repeated = true, anywhere = true, adds = ["disable_tls_verification"] }
+options.cert                       = { flag = ["--cert"], value = "required", anywhere = true, adds = ["override_tls_trust"] }
+options.cache_dir                  = { flag = ["--cache-dir"], value = "required", anywhere = true }
+options.no_cache_dir               = { flag = ["--no-cache-dir"], anywhere = true }
+options.disable_pip_version_check  = { flag = ["--disable-pip-version-check"], anywhere = true }
+options.no_color                   = { flag = ["--no-color"], anywhere = true }
+options.no_python_version_warning  = { flag = ["--no-python-version-warning"], anywhere = true }
+
+# ---------------------------------------------------------------- install
+# commands/install.py. `--dry-run` installs nothing (the target directory is a temporary one), but
+# pip still resolves, downloads, and prepares metadata, which builds source distributions.
+# `--only-binary :all:` does not remove `run_build_backend`: local paths, `-e`, VCS URLs, and
+# requirements files still build. A rule can read the `only_binary` field.
+# A requirement or `-e` value with `+` and later `:` is a VCS URL in any case (`pkg @ git+https`,
+# `GIT+ssh`, `bzr+lp:`; models/link.py::Link.is_vcs). A URL, a VCS URL, or an archive file
+# (utils/filetypes.py ARCHIVE_EXTENSIONS, lower, UPPER, or Title case per part) is a package
+# source that the line names. `--report -` writes to stdout; `--dry-run` still writes a
+# `--report` file.
+[shell.install]
+usage = "pip [global options] install [options] [<spec>...]"
+adds  = ["install_packages", "network", "run_build_backend"]
+options.requirement              = { flag = ["-r", "--requirement"], value = "required", repeated = true, adds = ["opaque_input"] }
+options.constraint               = { flag = ["-c", "--constraint"], value = "required", repeated = true, adds = ["opaque_input"] }
+options.build_constraint         = { flag = ["--build-constraint"], value = "required", repeated = true, adds = ["opaque_input"] }
+options.requirements_from_script = { flag = ["--requirements-from-script"], value = "required", repeated = true, adds = ["opaque_input"] }
+options.no_deps                  = { flag = ["--no-deps", "--no-dependencies"] }
+options.only_deps                = { flag = ["--only-deps", "--only-dependencies"] }
+options.editable                 = { flag = ["-e", "--editable"], value = "required", repeated = true, when = [{ like = ["*+*:*"], adds = ["run_vcs"] }, { like = ["*://*", "*+*:*", "*.whl", "*.WHL", "*.Whl", "*.zip", "*.ZIP", "*.Zip", "*.tar.gz", "*.TAR.GZ", "*.Tar.Gz", "*.tgz", "*.TGZ", "*.Tgz", "*.tar", "*.TAR", "*.Tar", "*.tar.bz2", "*.TAR.BZ2", "*.Tar.Bz2", "*.tbz", "*.TBZ", "*.Tbz", "*.tar.xz", "*.TAR.XZ", "*.Tar.Xz", "*.txz", "*.TXZ", "*.Txz", "*.tlz", "*.TLZ", "*.Tlz", "*.tar.lz", "*.TAR.LZ", "*.Tar.Lz", "*.tar.lzma", "*.TAR.LZMA", "*.Tar.Lzma"], adds = ["override_index"] }] }
+options.dry_run                  = { flag = ["--dry-run"], removes = ["install_packages", "write_outside_env", "break_system_packages"] }
+options.target                   = { flag = ["-t", "--target"], value = "required", adds = ["write_outside_env"] }
+options.platform                 = { flag = ["--platform"], value = "required", repeated = true }
+options.python_version           = { flag = ["--python-version"], value = "required" }
+options.implementation           = { flag = ["--implementation"], value = "required" }
+options.abi                      = { flag = ["--abi"], value = "required", repeated = true }
+options.user                     = { flag = ["--user"], adds = ["write_outside_env"] }
+options.no_user                  = { flag = ["--no-user"] }
+options.root                     = { flag = ["--root"], value = "required", adds = ["write_outside_env"] }
+options.prefix                   = { flag = ["--prefix"], value = "required", adds = ["write_outside_env"] }
+options.src                      = { flag = ["--src", "--source", "--source-dir", "--source-directory"], value = "required" }
+options.upgrade                  = { flag = ["-U", "--upgrade"] }
+options.upgrade_strategy         = { flag = ["--upgrade-strategy"], value = "required" }
+options.force_reinstall          = { flag = ["--force-reinstall"] }
+options.ignore_installed         = { flag = ["-I", "--ignore-installed"] }
+options.ignore_requires_python   = { flag = ["--ignore-requires-python"] }
+options.no_build_isolation       = { flag = ["--no-build-isolation"] }
+options.check_build_dependencies = { flag = ["--check-build-dependencies"] }
+options.break_system_packages    = { flag = ["--break-system-packages"], adds = ["break_system_packages"] }
+options.config_settings          = { flag = ["-C", "--config-settings"], value = "required", repeated = true }
+options.compile                  = { flag = ["--compile"] }
+options.no_compile               = { flag = ["--no-compile"] }
+options.no_warn_script_location  = { flag = ["--no-warn-script-location"] }
+options.no_warn_conflicts        = { flag = ["--no-warn-conflicts"] }
+options.require_hashes           = { flag = ["--require-hashes"] }
+options.no_require_hashes        = { flag = ["--no-require-hashes"] }
+options.progress_bar             = { flag = ["--progress-bar"], value = "required" }
+options.root_user_action         = { flag = ["--root-user-action"], value = "required" }
+options.report                   = { flag = ["--report"], value = "required", adds = ["write_file"], when = [{ like = "-", removes = ["write_file"] }] }
+options.group                    = { flag = ["--group"], value = "required", repeated = true, adds = ["opaque_input"] }
+options.no_clean                 = { flag = ["--no-clean"] }
+options.pre                      = { flag = ["--pre"] }
+options.all_releases             = { flag = ["--all-releases"], value = "required", repeated = true }
+options.only_final               = { flag = ["--only-final"], value = "required", repeated = true }
+options.no_binary                = { flag = ["--no-binary"], value = "required", repeated = true }
+options.only_binary              = { flag = ["--only-binary"], value = "required", repeated = true }
+options.prefer_binary            = { flag = ["--prefer-binary"] }
+options.index_url                = { flag = ["-i", "--index-url", "--pypi-url"], value = "required", adds = ["override_index"] }
+options.extra_index_url          = { flag = ["--extra-index-url"], value = "required", repeated = true, adds = ["override_index"] }
+options.no_index                 = { flag = ["--no-index"] }
+options.refresh_package          = { flag = ["--refresh-package"], value = "required", repeated = true }
+options.find_links               = { flag = ["-f", "--find-links"], value = "required", repeated = true, adds = ["override_index"] }
+options.uploaded_prior_to        = { flag = ["--uploaded-prior-to"], value = "required" }
+operands.spec                    = { when = [{ like = ["*+*:*"], adds = ["run_vcs"] }, { like = ["*://*", "*+*:*", "*.whl", "*.WHL", "*.Whl", "*.zip", "*.ZIP", "*.Zip", "*.tar.gz", "*.TAR.GZ", "*.Tar.Gz", "*.tgz", "*.TGZ", "*.Tgz", "*.tar", "*.TAR", "*.Tar", "*.tar.bz2", "*.TAR.BZ2", "*.Tar.Bz2", "*.tbz", "*.TBZ", "*.Tbz", "*.tar.xz", "*.TAR.XZ", "*.Tar.Xz", "*.txz", "*.TXZ", "*.Txz", "*.tlz", "*.TLZ", "*.Tlz", "*.tar.lz", "*.TAR.LZ", "*.Tar.Lz", "*.tar.lzma", "*.TAR.LZMA", "*.Tar.Lzma"], adds = ["override_index"] }] }
+
+# ---------------------------------------------------------------- download
+# commands/download.py. Downloads into `-d` (default: the current directory). It resolves like
+# install and builds source distributions to read their metadata. It has no `-e`.
+[shell.download]
+usage = "pip [global options] download [options] [<spec>...]"
+adds  = ["network", "run_build_backend"]
+options.constraint               = { flag = ["-c", "--constraint"], value = "required", repeated = true, adds = ["opaque_input"] }
+options.build_constraint         = { flag = ["--build-constraint"], value = "required", repeated = true, adds = ["opaque_input"] }
+options.requirement              = { flag = ["-r", "--requirement"], value = "required", repeated = true, adds = ["opaque_input"] }
+options.requirements_from_script = { flag = ["--requirements-from-script"], value = "required", repeated = true, adds = ["opaque_input"] }
+options.no_deps                  = { flag = ["--no-deps", "--no-dependencies"] }
+options.only_deps                = { flag = ["--only-deps", "--only-dependencies"] }
+options.src                      = { flag = ["--src", "--source", "--source-dir", "--source-directory"], value = "required" }
+options.require_hashes           = { flag = ["--require-hashes"] }
+options.no_require_hashes        = { flag = ["--no-require-hashes"] }
+options.progress_bar             = { flag = ["--progress-bar"], value = "required" }
+options.no_build_isolation       = { flag = ["--no-build-isolation"] }
+options.check_build_dependencies = { flag = ["--check-build-dependencies"] }
+options.ignore_requires_python   = { flag = ["--ignore-requires-python"] }
+options.dest                     = { flag = ["-d", "--dest", "--destination-dir", "--destination-directory"], value = "required", adds = ["write_file"] }
+options.platform                 = { flag = ["--platform"], value = "required", repeated = true }
+options.python_version           = { flag = ["--python-version"], value = "required" }
+options.implementation           = { flag = ["--implementation"], value = "required" }
+options.abi                      = { flag = ["--abi"], value = "required", repeated = true }
+options.group                    = { flag = ["--group"], value = "required", repeated = true, adds = ["opaque_input"] }
+options.no_clean                 = { flag = ["--no-clean"] }
+options.pre                      = { flag = ["--pre"] }
+options.all_releases             = { flag = ["--all-releases"], value = "required", repeated = true }
+options.only_final               = { flag = ["--only-final"], value = "required", repeated = true }
+options.no_binary                = { flag = ["--no-binary"], value = "required", repeated = true }
+options.only_binary              = { flag = ["--only-binary"], value = "required", repeated = true }
+options.prefer_binary            = { flag = ["--prefer-binary"] }
+options.index_url                = { flag = ["-i", "--index-url", "--pypi-url"], value = "required", adds = ["override_index"] }
+options.extra_index_url          = { flag = ["--extra-index-url"], value = "required", repeated = true, adds = ["override_index"] }
+options.no_index                 = { flag = ["--no-index"] }
+options.refresh_package          = { flag = ["--refresh-package"], value = "required", repeated = true }
+options.find_links               = { flag = ["-f", "--find-links"], value = "required", repeated = true, adds = ["override_index"] }
+options.uploaded_prior_to        = { flag = ["--uploaded-prior-to"], value = "required" }
+operands.spec                    = { when = [{ like = ["*+*:*"], adds = ["run_vcs"] }, { like = ["*://*", "*+*:*", "*.whl", "*.WHL", "*.Whl", "*.zip", "*.ZIP", "*.Zip", "*.tar.gz", "*.TAR.GZ", "*.Tar.Gz", "*.tgz", "*.TGZ", "*.Tgz", "*.tar", "*.TAR", "*.Tar", "*.tar.bz2", "*.TAR.BZ2", "*.Tar.Bz2", "*.tbz", "*.TBZ", "*.Tbz", "*.tar.xz", "*.TAR.XZ", "*.Tar.Xz", "*.txz", "*.TXZ", "*.Txz", "*.tlz", "*.TLZ", "*.Tlz", "*.tar.lz", "*.TAR.LZ", "*.Tar.Lz", "*.tar.lzma", "*.TAR.LZMA", "*.Tar.Lzma"], adds = ["override_index"] }] }
+
+# ---------------------------------------------------------------- wheel
+# commands/wheel.py. Builds wheels into `-w` (default: the current directory).
+[shell.wheel]
+usage = "pip [global options] wheel [options] [<spec>...]"
+adds  = ["network", "run_build_backend"]
+options.wheel_dir                = { flag = ["-w", "--wheel-dir"], value = "required", adds = ["write_file"] }
+options.no_build_isolation       = { flag = ["--no-build-isolation"] }
+options.check_build_dependencies = { flag = ["--check-build-dependencies"] }
+options.constraint               = { flag = ["-c", "--constraint"], value = "required", repeated = true, adds = ["opaque_input"] }
+options.build_constraint         = { flag = ["--build-constraint"], value = "required", repeated = true, adds = ["opaque_input"] }
+options.editable                 = { flag = ["-e", "--editable"], value = "required", repeated = true, when = [{ like = ["*+*:*"], adds = ["run_vcs"] }, { like = ["*://*", "*+*:*", "*.whl", "*.WHL", "*.Whl", "*.zip", "*.ZIP", "*.Zip", "*.tar.gz", "*.TAR.GZ", "*.Tar.Gz", "*.tgz", "*.TGZ", "*.Tgz", "*.tar", "*.TAR", "*.Tar", "*.tar.bz2", "*.TAR.BZ2", "*.Tar.Bz2", "*.tbz", "*.TBZ", "*.Tbz", "*.tar.xz", "*.TAR.XZ", "*.Tar.Xz", "*.txz", "*.TXZ", "*.Txz", "*.tlz", "*.TLZ", "*.Tlz", "*.tar.lz", "*.TAR.LZ", "*.Tar.Lz", "*.tar.lzma", "*.TAR.LZMA", "*.Tar.Lzma"], adds = ["override_index"] }] }
+options.requirement              = { flag = ["-r", "--requirement"], value = "required", repeated = true, adds = ["opaque_input"] }
+options.requirements_from_script = { flag = ["--requirements-from-script"], value = "required", repeated = true, adds = ["opaque_input"] }
+options.src                      = { flag = ["--src", "--source", "--source-dir", "--source-directory"], value = "required" }
+options.ignore_requires_python   = { flag = ["--ignore-requires-python"] }
+options.no_deps                  = { flag = ["--no-deps", "--no-dependencies"] }
+options.only_deps                = { flag = ["--only-deps", "--only-dependencies"] }
+options.progress_bar             = { flag = ["--progress-bar"], value = "required" }
+options.no_verify                = { flag = ["--no-verify"] }
+options.config_settings          = { flag = ["-C", "--config-settings"], value = "required", repeated = true }
+options.require_hashes           = { flag = ["--require-hashes"] }
+options.no_require_hashes        = { flag = ["--no-require-hashes"] }
+options.group                    = { flag = ["--group"], value = "required", repeated = true, adds = ["opaque_input"] }
+options.no_clean                 = { flag = ["--no-clean"] }
+options.pre                      = { flag = ["--pre"] }
+options.all_releases             = { flag = ["--all-releases"], value = "required", repeated = true }
+options.only_final               = { flag = ["--only-final"], value = "required", repeated = true }
+options.no_binary                = { flag = ["--no-binary"], value = "required", repeated = true }
+options.only_binary              = { flag = ["--only-binary"], value = "required", repeated = true }
+options.prefer_binary            = { flag = ["--prefer-binary"] }
+options.index_url                = { flag = ["-i", "--index-url", "--pypi-url"], value = "required", adds = ["override_index"] }
+options.extra_index_url          = { flag = ["--extra-index-url"], value = "required", repeated = true, adds = ["override_index"] }
+options.no_index                 = { flag = ["--no-index"] }
+options.refresh_package          = { flag = ["--refresh-package"], value = "required", repeated = true }
+options.find_links               = { flag = ["-f", "--find-links"], value = "required", repeated = true, adds = ["override_index"] }
+options.uploaded_prior_to        = { flag = ["--uploaded-prior-to"], value = "required" }
+operands.spec                    = { when = [{ like = ["*+*:*"], adds = ["run_vcs"] }, { like = ["*://*", "*+*:*", "*.whl", "*.WHL", "*.Whl", "*.zip", "*.ZIP", "*.Zip", "*.tar.gz", "*.TAR.GZ", "*.Tar.Gz", "*.tgz", "*.TGZ", "*.Tgz", "*.tar", "*.TAR", "*.Tar", "*.tar.bz2", "*.TAR.BZ2", "*.Tar.Bz2", "*.tbz", "*.TBZ", "*.Tbz", "*.tar.xz", "*.TAR.XZ", "*.Tar.Xz", "*.txz", "*.TXZ", "*.Txz", "*.tlz", "*.TLZ", "*.Tlz", "*.tar.lz", "*.TAR.LZ", "*.Tar.Lz", "*.tar.lzma", "*.TAR.LZMA", "*.Tar.Lzma"], adds = ["override_index"] }] }
+
+# ---------------------------------------------------------------- lock
+# commands/lock.py (experimental). Writes `-o` (default: pylock.toml; `-` is stdout). pip 26.3 has
+# no `lock` subcommand such as `pip lock check`; a second word is a requirement.
+[shell.lock]
+usage = "pip [global options] lock [options] [<spec>...]"
+adds  = ["network", "run_build_backend"]
+options.output                   = { flag = ["-o", "--output"], value = "required", adds = ["write_file"], when = [{ like = "-", removes = ["write_file"] }] }
+options.requirement              = { flag = ["-r", "--requirement"], value = "required", repeated = true, adds = ["opaque_input"] }
+options.requirements_from_script = { flag = ["--requirements-from-script"], value = "required", repeated = true, adds = ["opaque_input"] }
+options.constraint               = { flag = ["-c", "--constraint"], value = "required", repeated = true, adds = ["opaque_input"] }
+options.build_constraint         = { flag = ["--build-constraint"], value = "required", repeated = true, adds = ["opaque_input"] }
+options.no_deps                  = { flag = ["--no-deps", "--no-dependencies"] }
+options.only_deps                = { flag = ["--only-deps", "--only-dependencies"] }
+options.editable                 = { flag = ["-e", "--editable"], value = "required", repeated = true, when = [{ like = ["*+*:*"], adds = ["run_vcs"] }, { like = ["*://*", "*+*:*", "*.whl", "*.WHL", "*.Whl", "*.zip", "*.ZIP", "*.Zip", "*.tar.gz", "*.TAR.GZ", "*.Tar.Gz", "*.tgz", "*.TGZ", "*.Tgz", "*.tar", "*.TAR", "*.Tar", "*.tar.bz2", "*.TAR.BZ2", "*.Tar.Bz2", "*.tbz", "*.TBZ", "*.Tbz", "*.tar.xz", "*.TAR.XZ", "*.Tar.Xz", "*.txz", "*.TXZ", "*.Txz", "*.tlz", "*.TLZ", "*.Tlz", "*.tar.lz", "*.TAR.LZ", "*.Tar.Lz", "*.tar.lzma", "*.TAR.LZMA", "*.Tar.Lzma"], adds = ["override_index"] }] }
+options.src                      = { flag = ["--src", "--source", "--source-dir", "--source-directory"], value = "required" }
+options.ignore_requires_python   = { flag = ["--ignore-requires-python"] }
+options.no_build_isolation       = { flag = ["--no-build-isolation"] }
+options.check_build_dependencies = { flag = ["--check-build-dependencies"] }
+options.config_settings          = { flag = ["-C", "--config-settings"], value = "required", repeated = true }
+options.require_hashes           = { flag = ["--require-hashes"] }
+options.no_require_hashes        = { flag = ["--no-require-hashes"] }
+options.progress_bar             = { flag = ["--progress-bar"], value = "required" }
+options.group                    = { flag = ["--group"], value = "required", repeated = true, adds = ["opaque_input"] }
+options.no_clean                 = { flag = ["--no-clean"] }
+options.pre                      = { flag = ["--pre"] }
+options.all_releases             = { flag = ["--all-releases"], value = "required", repeated = true }
+options.only_final               = { flag = ["--only-final"], value = "required", repeated = true }
+options.no_binary                = { flag = ["--no-binary"], value = "required", repeated = true }
+options.only_binary              = { flag = ["--only-binary"], value = "required", repeated = true }
+options.prefer_binary            = { flag = ["--prefer-binary"] }
+options.index_url                = { flag = ["-i", "--index-url", "--pypi-url"], value = "required", adds = ["override_index"] }
+options.extra_index_url          = { flag = ["--extra-index-url"], value = "required", repeated = true, adds = ["override_index"] }
+options.no_index                 = { flag = ["--no-index"] }
+options.refresh_package          = { flag = ["--refresh-package"], value = "required", repeated = true }
+options.find_links               = { flag = ["-f", "--find-links"], value = "required", repeated = true, adds = ["override_index"] }
+options.uploaded_prior_to        = { flag = ["--uploaded-prior-to"], value = "required" }
+operands.spec                    = { when = [{ like = ["*+*:*"], adds = ["run_vcs"] }, { like = ["*://*", "*+*:*", "*.whl", "*.WHL", "*.Whl", "*.zip", "*.ZIP", "*.Zip", "*.tar.gz", "*.TAR.GZ", "*.Tar.Gz", "*.tgz", "*.TGZ", "*.Tgz", "*.tar", "*.TAR", "*.Tar", "*.tar.bz2", "*.TAR.BZ2", "*.Tar.Bz2", "*.tbz", "*.TBZ", "*.Tbz", "*.tar.xz", "*.TAR.XZ", "*.Tar.Xz", "*.txz", "*.TXZ", "*.Txz", "*.tlz", "*.TLZ", "*.Tlz", "*.tar.lz", "*.TAR.LZ", "*.Tar.Lz", "*.tar.lzma", "*.TAR.LZMA", "*.Tar.Lzma"], adds = ["override_index"] }] }
+
+# ---------------------------------------------------------------- uninstall
+# commands/uninstall.py. Asks before it deletes, unless `-y`.
+[shell.uninstall]
+usage = "pip [global options] uninstall [options] [<package>...]"
+adds  = ["remove_packages"]
+options.requirement           = { flag = ["-r", "--requirement"], value = "required", repeated = true, adds = ["opaque_input"] }
+options.yes                   = { flag = ["-y", "--yes"], adds = ["skip_prompt"] }
+options.root_user_action      = { flag = ["--root-user-action"], value = "required" }
+options.break_system_packages = { flag = ["--break-system-packages"], adds = ["break_system_packages"] }
+
+# ---------------------------------------------------------------- reads of the environment
+# commands/list.py. `-o` and `-u` query the index; plain `list` reads the environment only.
+[shell.list]
+usage = "pip [global options] list [options]"
+options.outdated          = { flag = ["-o", "--outdated"], adds = ["network"] }
+options.uptodate          = { flag = ["-u", "--uptodate"], adds = ["network"] }
+options.editable          = { flag = ["-e", "--editable"] }
+options.local             = { flag = ["-l", "--local"] }
+options.user              = { flag = ["--user"] }
+options.path              = { flag = ["--path"], value = "required", repeated = true }
+options.format            = { flag = ["--format"], value = "required" }
+options.not_required      = { flag = ["--not-required"] }
+options.exclude_editable  = { flag = ["--exclude-editable"] }
+options.include_editable  = { flag = ["--include-editable"] }
+options.exclude           = { flag = ["--exclude"], value = "required", repeated = true }
+options.pre               = { flag = ["--pre"] }
+options.all_releases      = { flag = ["--all-releases"], value = "required", repeated = true }
+options.only_final        = { flag = ["--only-final"], value = "required", repeated = true }
+options.no_binary         = { flag = ["--no-binary"], value = "required", repeated = true }
+options.only_binary       = { flag = ["--only-binary"], value = "required", repeated = true }
+options.prefer_binary     = { flag = ["--prefer-binary"] }
+options.index_url         = { flag = ["-i", "--index-url", "--pypi-url"], value = "required", adds = ["override_index"] }
+options.extra_index_url   = { flag = ["--extra-index-url"], value = "required", repeated = true, adds = ["override_index"] }
+options.no_index          = { flag = ["--no-index"] }
+options.refresh_package   = { flag = ["--refresh-package"], value = "required", repeated = true }
+options.find_links        = { flag = ["-f", "--find-links"], value = "required", repeated = true, adds = ["override_index"] }
+options.uploaded_prior_to = { flag = ["--uploaded-prior-to"], value = "required" }
+
+# commands/show.py
+[shell.show]
+usage = "pip [global options] show [options] <package>..."
+options.files = { flag = ["-f", "--files"] }
+
+# commands/freeze.py. `-r` here reads a file for its order; it installs nothing.
+[shell.freeze]
+usage = "pip [global options] freeze [options]"
+options.requirement      = { flag = ["-r", "--requirement"], value = "required", repeated = true }
+options.local            = { flag = ["-l", "--local"] }
+options.user             = { flag = ["--user"] }
+options.path             = { flag = ["--path"], value = "required", repeated = true }
+options.all              = { flag = ["--all"] }
+options.exclude_editable = { flag = ["--exclude-editable"] }
+options.exclude          = { flag = ["--exclude"], value = "required", repeated = true }
+
+# commands/inspect.py
+[shell.inspect]
+usage = "pip [global options] inspect [options]"
+options.local = { flag = ["--local"] }
+options.user  = { flag = ["--user"] }
+options.path  = { flag = ["--path"], value = "required", repeated = true }
+
+# commands/check.py
+[shell.check]
+usage = "pip [global options] check"
+
+# commands/hash.py. Reads local archive files.
+[shell.hash]
+usage = "pip [global options] hash [options] <file>..."
+options.algorithm = { flag = ["-a", "--algorithm"], value = "required" }
+
+# commands/debug.py
+[shell.debug]
+usage = "pip [global options] debug [options]"
+options.platform       = { flag = ["--platform"], value = "required", repeated = true }
+options.python_version = { flag = ["--python-version"], value = "required" }
+options.implementation = { flag = ["--implementation"], value = "required" }
+options.abi            = { flag = ["--abi"], value = "required", repeated = true }
+
+# commands/help.py. A bare `pip help` is pip's main help.
+[shell.help]
+usage = "pip [global options] help [<command>]"
+
+# commands/completion.py. Prints shell completion code.
+[shell.completion]
+usage = "pip [global options] completion [options]"
+options.bash       = { flag = ["-b", "--bash"] }
+options.zsh        = { flag = ["-z", "--zsh"] }
+options.fish       = { flag = ["-f", "--fish"] }
+options.powershell = { flag = ["-p", "--powershell"] }
+
+# ---------------------------------------------------------------- index queries
+# commands/search.py. PyPI no longer serves this API, but pip still contacts the index.
+[shell.search]
+usage = "pip [global options] search [options] <query>..."
+adds  = ["network"]
+options.index = { flag = ["-i", "--index"], value = "required", adds = ["override_index"] }
+
+# commands/index.py. `versions` takes exactly one package.
+[shell.index_versions]
+usage = "pip [global options] index versions [options] <package>"
+adds  = ["network"]
+options.platform               = { flag = ["--platform"], value = "required", repeated = true }
+options.python_version         = { flag = ["--python-version"], value = "required" }
+options.implementation         = { flag = ["--implementation"], value = "required" }
+options.abi                    = { flag = ["--abi"], value = "required", repeated = true }
+options.ignore_requires_python = { flag = ["--ignore-requires-python"] }
+options.json                   = { flag = ["--json"] }
+options.pre                    = { flag = ["--pre"] }
+options.all_releases           = { flag = ["--all-releases"], value = "required", repeated = true }
+options.only_final             = { flag = ["--only-final"], value = "required", repeated = true }
+options.no_binary              = { flag = ["--no-binary"], value = "required", repeated = true }
+options.only_binary            = { flag = ["--only-binary"], value = "required", repeated = true }
+options.prefer_binary          = { flag = ["--prefer-binary"] }
+options.index_url              = { flag = ["-i", "--index-url", "--pypi-url"], value = "required", adds = ["override_index"] }
+options.extra_index_url        = { flag = ["--extra-index-url"], value = "required", repeated = true, adds = ["override_index"] }
+options.no_index               = { flag = ["--no-index"] }
+options.refresh_package        = { flag = ["--refresh-package"], value = "required", repeated = true }
+options.find_links             = { flag = ["-f", "--find-links"], value = "required", repeated = true, adds = ["override_index"] }
+options.uploaded_prior_to      = { flag = ["--uploaded-prior-to"], value = "required" }
+
+# ---------------------------------------------------------------- cache
+# commands/cache.py. `--format` is read by `list` only, so it is declared there only.
+[shell.cache_dir]
+usage = "pip [global options] cache dir"
+
+[shell.cache_info]
+usage = "pip [global options] cache info"
+
+[shell.cache_list]
+usage = "pip [global options] cache list [options] [<pattern>]"
+options.format = { flag = ["--format"], value = "required" }
+
+[shell.cache_remove]
+usage = "pip [global options] cache remove <pattern>"
+adds  = ["delete_cache"]
+
+[shell.cache_purge]
+usage = "pip [global options] cache purge"
+adds  = ["delete_cache"]
+
+# ---------------------------------------------------------------- config
+# commands/configuration.py. `--global`, `--user`, and `--site` choose the file. With none, a
+# write goes to the site file when one exists, else the user file.
+[shell.config_list]
+usage = "pip [global options] config list [options]"
+options.global      = { flag = ["--global"] }
+options.user        = { flag = ["--user"] }
+options.site        = { flag = ["--site"] }
+
+[shell.config_debug]
+usage = "pip [global options] config debug [options]"
+options.global      = { flag = ["--global"] }
+options.user        = { flag = ["--user"] }
+options.site        = { flag = ["--site"] }
+
+[shell.config_get]
+usage = "pip [global options] config get [options] <name>"
+options.global      = { flag = ["--global"] }
+options.user        = { flag = ["--user"] }
+options.site        = { flag = ["--site"] }
+
+[shell.config_set]
+usage = "pip [global options] config set [options] <name> <value>"
+adds  = ["override_config"]
+options.global      = { flag = ["--global"] }
+options.user        = { flag = ["--user"] }
+options.site        = { flag = ["--site"] }
+
+[shell.config_unset]
+usage = "pip [global options] config unset [options] <name>"
+adds  = ["override_config"]
+options.global      = { flag = ["--global"] }
+options.user        = { flag = ["--user"] }
+options.site        = { flag = ["--site"] }
+
+# The editor is `--editor`, else VISUAL, else EDITOR.
+[shell.config_edit]
+usage = "pip [global options] config edit [options]"
+adds  = ["override_config", "run_program"]
+options.editor      = { flag = ["--editor"], value = "required" }
+options.global      = { flag = ["--global"] }
+options.user        = { flag = ["--user"] }
+options.site        = { flag = ["--site"] }
