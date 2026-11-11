@@ -2174,3 +2174,125 @@ argv = ["git", "branch", "--unset-upstream"]
 action = "branch"
 fields = { unset_upstream = true }
 effects = ["override_config"]
+
+# --- independent verifier cases, round 2 ---
+# Checked against git 2.56.1 source: fetch.c prune_refs (`if (!dry_run)`), pull.c (passes
+# `--dry-run` to fetch, returns after run_fetch), remote.c prune_remote and update.
+
+# fetch --dry-run guards the prune deletion (prune_refs).
+[[case]]
+argv = ["git", "fetch", "--dry-run", "--prune", "origin", "refs/tags/*:refs/tags/*"]
+action = "fetch"
+fields = { dry_run = true, prune = true, repository = "origin", refspec = ["refs/tags/*:refs/tags/*"] }
+effects = ["network"]
+
+# pull --dry-run exists and is passed to fetch, so -p deletes nothing.
+[[case]]
+argv = ["git", "pull", "--dry-run", "-p", "origin"]
+action = "pull"
+fields = { dry_run = true, prune = true, repository = "origin" }
+effects = ["network"]
+
+# pull -p without a dry run deletes stale refs.
+[[case]]
+argv = ["git", "pull", "--prune", "--rebase", "origin", "main"]
+action = "pull"
+fields = { prune = true, rebase = "", repository = "origin", refspec = ["main"] }
+effects = ["network", "delete_ref", "rewrite_history"]
+
+# fetch -p in a cluster with -t.
+[[case]]
+argv = ["git", "fetch", "-tp", "origin"]
+action = "fetch"
+fields = { tags = true, prune = true, repository = "origin" }
+effects = ["network", "delete_ref"]
+
+# remote prune --dry-run deletes nothing (prune_remote).
+[[case]]
+argv = ["git", "remote", "prune", "--dry-run", "origin", "upstream"]
+action = "remote_prune"
+fields = { dry_run = true, name = ["origin", "upstream"] }
+effects = ["network"]
+
+# remote update -p runs `fetch --prune --multiple`; remote update has no dry run.
+[[case]]
+argv = ["git", "remote", "update", "-p", "origin"]
+action = "remote_update"
+fields = { prune = true, remote = ["origin"] }
+effects = ["network", "delete_ref"]
+
+# remote update -n is not an option of remote update.
+[[case]]
+argv = ["git", "remote", "update", "-n", "-p"]
+action = "unmodeled"
+
+# remote add with an ext:: URL stores a command for a later fetch.
+[[case]]
+argv = ["git", "remote", "add", "x", "ext::sh -c id"]
+action = "remote_add"
+fields = { name = "x", url = "ext::sh -c id" }
+effects = ["override_config", "run_program"]
+
+# config get stays a read.
+[[case]]
+argv = ["git", "config", "get", "core.hooksPath"]
+action = "config_get"
+fields = { name = "core.hooksPath" }
+effects = []
+
+# config --list stays a read.
+[[case]]
+argv = ["git", "config", "--list", "--show-origin"]
+action = "config"
+fields = { list = true, show_origin = true }
+effects = []
+
+# config unset of core.hooksPath turns the hooks back on, but it is still a write.
+[[case]]
+argv = ["git", "config", "--unset-all", "core.hooksPath"]
+action = "config"
+fields = { unset_all = "core.hooksPath" }
+effects = ["override_config", "run_program", "skip_hooks"]
+
+# --work-tree alone now adds run_program.
+[[case]]
+argv = ["git", "--work-tree=/tmp/wt", "checkout", "--", "a.txt"]
+action = "checkout"
+fields = { work_tree = "/tmp/wt", pathspec = ["a.txt"] }
+effects = ["other_repository", "run_program", "discard_changes"]
+
+# rm --cached without -f keeps staged content safe (git refuses), so no effect.
+[[case]]
+argv = ["git", "rm", "--cached", "a.txt"]
+action = "rm"
+fields = { cached = true, pathspec = ["a.txt"] }
+effects = []
+
+# rm -n -f --cached is a dry run.
+[[case]]
+argv = ["git", "rm", "-nf", "--cached", "a.txt"]
+action = "rm"
+fields = { dry_run = true, force = true, cached = true, pathspec = ["a.txt"] }
+effects = []
+
+# cherry-pick --skip resets the commit in progress.
+[[case]]
+argv = ["git", "cherry-pick", "--skip"]
+action = "cherry_pick"
+fields = { skip = true }
+effects = ["discard_changes"]
+
+# branch --unset-upstream writes branch config.
+[[case]]
+argv = ["git", "branch", "--unset-upstream", "topic"]
+action = "branch"
+fields = { unset_upstream = true, branchname = ["topic"] }
+effects = ["override_config"]
+
+# push -n -u: git writes no upstream on a dry run (transport.c set_upstreams, `if (!pretend)`).
+# The grammar keeps override_config, which over-reports and is safe.
+[[case]]
+argv = ["git", "push", "-n", "-u", "origin", "main"]
+action = "push"
+fields = { dry_run = true, set_upstream = true, repository = "origin", refspec = ["main"] }
+effects = ["network", "override_config"]
