@@ -1,0 +1,98 @@
+# End-to-end cases for stripe.grammar.toml. Each argv runs through the Shell of a real box, where
+# `stripe` is a stub that prints its arguments and exits 0.
+#
+# The policy lets the agent read and write test-mode data, and refuses live mode and money movement.
+
+policy = '''
+@id("stripe_actions")
+permit (principal, action in Tool::stripe::Action::"*", resource);
+
+@id("no_live_mode")
+@description("Live-mode Stripe data is not allowed.")
+forbid (principal, action in Tool::stripe::Action::"*", resource)
+when { context.input.effects.contains(Tool::stripe::Effect::"live_mode") };
+
+@id("no_money_movement")
+@description("Charges, captures, payments, and refunds are not allowed.")
+forbid (principal, action in Tool::stripe::Action::"*", resource)
+when { context.input.effects.contains(Tool::stripe::Effect::"move_money") };
+
+'''
+
+# A test-mode read runs
+[[case]]
+argv = ["stripe", "customers", "list", "--limit", "3"]
+exit = 0
+stdout = "stub-argv: [customers] [list] [--limit] [3]"
+
+# A refund moves money, so it is refused and the program does not run
+[[case]]
+argv = ["stripe", "refunds", "create", "--charge", "ch_1"]
+exit = 126
+stderr = "[policy: no_money_movement]: Charges, captures, payments, and refunds are not allowed."
+
+# `--dry-run` removes `move_money`, so the same refund preview runs
+[[case]]
+argv = ["stripe", "refunds", "create", "--charge", "ch_1", "--dry-run"]
+exit = 0
+stdout = "stub-argv: [refunds] [create] [--charge] [ch_1] [--dry-run]"
+
+# `--live` adds `live_mode`
+[[case]]
+argv = ["stripe", "customers", "list", "--live"]
+exit = 126
+stderr = "[policy: no_live_mode]"
+
+# A live API key on the command line is live mode too
+[[case]]
+argv = ["stripe", "--api-key", "sk_live_example", "customers", "list"]
+exit = 126
+stderr = "[policy: no_live_mode]"
+
+# A resource name with `_` cannot be modeled, so nothing permits it
+[[case]]
+argv = ["stripe", "payment_intents", "list"]
+exit = 126
+stderr = "[default-deny]: No permit policy matched this request."
+
+# The example rules in README.md load, and the listen rule refuses a remote forward
+[[case]]
+argv = ["stripe", "listen", "-f", "https://example.com/hook"]
+exit = 126
+stderr = "[policy: stripe_listen_local]"
+policy = '''
+permit (principal, action in Tool::stripe::Action::"*", resource);
+
+@id("stripe_no_live")
+forbid (principal, action in Tool::stripe::Action::"*", resource)
+when { context.input.effects.contains(Tool::stripe::Effect::"live_mode") };
+
+@id("stripe_no_money")
+forbid (principal, action in Tool::stripe::Action::"*", resource)
+when { context.input.effects.contains(Tool::stripe::Effect::"move_money") };
+
+@id("stripe_own_account")
+forbid (principal, action in Tool::stripe::Action::"*", resource)
+when { context.input.effects.containsAny([
+  Tool::stripe::Effect::"api_key_override", Tool::stripe::Effect::"select_project",
+  Tool::stripe::Effect::"override_config", Tool::stripe::Effect::"connected_account"]) };
+
+@id("stripe_listen_local")
+forbid (principal, action == Tool::stripe::Action::"listen", resource)
+when { context.input.effects.contains(Tool::stripe::Effect::"forward_events") &&
+       !(context.input has forward_to && context.input.forward_to like "localhost:*") };
+'''
+
+# Under the same rules, a local forward runs
+[[case]]
+argv = ["stripe", "listen", "-f", "localhost:3000/hook"]
+exit = 0
+stdout = "stub-argv: [listen] [-f] [localhost:3000/hook]"
+policy = '''
+permit (principal, action in Tool::stripe::Action::"*", resource);
+
+@id("stripe_listen_local")
+forbid (principal, action == Tool::stripe::Action::"listen", resource)
+when { context.input.effects.contains(Tool::stripe::Effect::"forward_events") &&
+       !(context.input has forward_to && context.input.forward_to like "localhost:*") };
+'''
