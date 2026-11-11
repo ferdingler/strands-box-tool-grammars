@@ -1,0 +1,73 @@
+# End-to-end cases for cargo.grammar.toml. The harness runs each argv through the Shell of a real
+# box, where `cargo` is a stub that prints its arguments and exits 0.
+#
+# The policy lets the agent build, check, test, and format, and refuses publishing, a command-line
+# configuration override, and any lockfile write.
+
+policy = '''
+@id("cargo_actions")
+permit (principal, action in Tool::cargo::Action::"*", resource);
+
+@id("no_publish")
+@description("Publishing a crate is not allowed.")
+forbid (principal, action == Tool::cargo::Action::"publish", resource)
+when { context.input.effects.contains(Tool::cargo::Effect::"publish_crate") };
+
+@id("no_config_override")
+@description("Use the project configuration; do not override it on the command line.")
+forbid (principal, action in Tool::cargo::Action::"*", resource)
+when { context.input.effects.contains(Tool::cargo::Effect::"override_config") };
+
+@id("locked_builds")
+@description("Pass --locked or --frozen so that Cargo.lock does not change.")
+forbid (principal, action == Tool::cargo::Action::"build", resource)
+when { context.input.effects.contains(Tool::cargo::Effect::"update_lockfile") };
+'''
+
+# A locked build is permitted and runs the program
+[[case]]
+argv = ["cargo", "build", "--locked", "--release"]
+exit = 0
+stdout = "stub-argv: [build] [--locked] [--release]"
+
+# The same build without --locked can rewrite Cargo.lock, so the rule refuses it
+[[case]]
+argv = ["cargo", "build", "--release"]
+exit = 126
+stderr = "[policy: locked_builds]: Pass --locked or --frozen so that Cargo.lock does not change."
+
+# Publishing is refused
+[[case]]
+argv = ["cargo", "publish"]
+exit = 126
+stderr = "[policy: no_publish]: Publishing a crate is not allowed."
+
+# --dry-run removes publish_crate, so the forbid does not apply
+[[case]]
+argv = ["cargo", "publish", "--dry-run"]
+exit = 0
+stdout = "stub-argv: [publish] [--dry-run]"
+
+# --config is override_config, on any action
+[[case]]
+argv = ["cargo", "test", "--config", "build.rustc-wrapper=\"x\""]
+exit = 126
+stderr = "[policy: no_config_override]"
+
+# Arguments after -- go to the test binary
+[[case]]
+argv = ["cargo", "test", "--locked", "parse", "--", "--nocapture"]
+exit = 0
+stdout = "stub-argv: [test] [--locked] [parse] [--] [--nocapture]"
+
+# A config-file alias can redefine `b`, so it is unmodeled, and nothing permits it
+[[case]]
+argv = ["cargo", "b", "--locked"]
+exit = 126
+stderr = "[default-deny]: No permit policy matched this request."
+
+# An option before an external subcommand is not forwarded, so the line is unmodeled
+[[case]]
+argv = ["cargo", "--offline", "clippy"]
+exit = 126
+stderr = "[default-deny]"
