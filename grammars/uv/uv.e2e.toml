@@ -71,3 +71,37 @@ stderr = "[default-deny]: No permit policy matched this request."
 argv = ["uv", "auth", "login", "pypi.org"]
 exit = 126
 stderr = "[default-deny]"
+
+# The README's example rules load together, and two of them decide
+[[case]]
+argv = ["uv", "pip", "install", "--system", "requests"]
+exit = 126
+stderr = "[policy: no_index_override]"
+policy = '''
+@id("uv_actions")
+permit (principal, action in Tool::uv::Action::"*", resource);
+
+@id("no_index_override")
+forbid (principal, action in Tool::uv::Action::"*", resource)
+when { context.input.effects.containsAny([
+  Tool::uv::Effect::"override_index",
+  Tool::uv::Effect::"disable_tls_verification",
+  Tool::uv::Effect::"system_python"]) };
+
+@id("locked_sync_only")
+forbid (principal, action == Tool::uv::Action::"sync", resource)
+when { context.input.effects.contains(Tool::uv::Effect::"modify_project") };
+'''
+
+[[case]]
+argv = ["uv", "sync"]
+exit = 126
+stderr = "[policy: locked_sync_only]"
+policy = '''
+@id("uv_actions")
+permit (principal, action in Tool::uv::Action::"*", resource);
+
+@id("locked_sync_only")
+forbid (principal, action == Tool::uv::Action::"sync", resource)
+when { context.input.effects.contains(Tool::uv::Effect::"modify_project") };
+'''
