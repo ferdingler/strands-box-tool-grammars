@@ -336,7 +336,10 @@ action('python_list', f'{G} python list [options] [<request>]',
    ('show_urls',      flag('["--show-urls"]')),
    ('output_format',  flag('["--output-format"]', value='"required"')),
   ],
-  comment='''`uv python list` reads the download list built into uv. `--python-downloads-json-url` can fetch one,
+  operands=[('request', '{ adds = ["run_program"], removes = ["read_only"] }')],
+  comment='''A `<request>` is passed to `find_all_python_installations`, which queries the file it names, so it
+adds `run_program` (crates/uv-python-commands/src/list.rs).
+`uv python list` reads the download list built into uv. `--python-downloads-json-url` can fetch one,
 so it is not declared and makes the line `unmodeled`.''')
 
 action('python_install', f'{G} python install [options] [<targets>...]',

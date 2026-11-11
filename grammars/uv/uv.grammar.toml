@@ -582,6 +582,8 @@ usage   = "uv [global options] tool update-shell"
 aliases = ["tool ensurepath"]
 adds    = ["modify_user"]
 
+# A `<request>` is passed to `find_all_python_installations`, which queries the file it names, so it
+# adds `run_program` (crates/uv-python-commands/src/list.rs).
 # `uv python list` reads the download list built into uv. `--python-downloads-json-url` can fetch one,
 # so it is not declared and makes the line `unmodeled`.
 [shell.python_list]
@@ -595,6 +597,7 @@ options.only_installed = { flag = ["--only-installed"] }
 options.only_downloads = { flag = ["--only-downloads"] }
 options.show_urls      = { flag = ["--show-urls"] }
 options.output_format  = { flag = ["--output-format"], value = "required" }
+operands.request = { adds = ["run_program"], removes = ["read_only"] }
 
 # Mirror and download-list options (`--mirror`, `--python-downloads-json-url`, ...) choose where Python
 # comes from; they are not declared.

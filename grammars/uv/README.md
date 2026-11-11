@@ -66,9 +66,9 @@ take them accept them.
 
 | Effect | Meaning | Added by | Removed by |
 |---|---|---|---|
-| `read_only` | Makes no change to files, environments, or settings | list, show, find, dir, `version` alone, `python pin` alone | any `-p/--python`, a request to `python find`/`pin`, `python find --script`, a value or `--bump` on `version`, `--rm` on `python pin` |
+| `read_only` | Makes no change to files, environments, or settings | list, show, find, dir, `version` alone, `python pin` alone | any `-p/--python`, a request to `python list`/`find`/`pin`, `python find --script`, a value or `--bump` on `version`, `--rm` on `python pin` |
 | `network` | uv may contact indexes, Git hosts, or Python download servers | resolving, installing, downloading, publishing, `--outdated` | global `--offline` (not on `publish`) |
-| `run_program` | Runs a program the line names | `run`, `tool run`, every `-p/--python` value, a `python find`/`python pin` request | nothing |
+| `run_program` | Runs a program the line names | `run`, `tool run`, every `-p/--python` value, a `python list`/`find`/`pin` request | nothing |
 | `build_code` | May run a package build backend (arbitrary code) | every command that resolves or installs, and `build` | nothing; `--no-build` still builds editables |
 | `modify_environment` | Creates or changes a Python environment | `sync`, `add`, `remove`, `run`, `venv`, `pip install/sync/uninstall`, `tool run`, `version` with a value | `--dry-run`, `--check`, `--no-sync` (on `add`, `remove`, `version`) |
 | `modify_project` | Writes pyproject.toml, uv.lock, or .python-version | `init`, `add`, `remove`, `sync`, `lock`, `tree`, `export`, `run`, `version` with a value, `python pin` | `--locked`, `--frozen` (where they keep uv.lock unchanged), `--check`, `--dry-run` |
@@ -134,7 +134,7 @@ These are deliberately not modeled, so their lines are `unmodeled` and fall to d
 
 ## Known limits
 
-- `-p/--python` and a `python find`/`pin` request always add `run_program`. uv executes the
+- `-p/--python` and a `python list`/`find`/`pin` request always add `run_program`. uv executes the
   interpreter a request names to query it, and a bare name is looked up on `PATH`. A `like` pattern
   cannot tell `3.12` from `mypython3` or `./x`, so even a version request counts. In the `pip`
   commands that change an environment it also adds `system_python`.

@@ -632,7 +632,7 @@ effects = ["read_only"]
 argv = ["uv", "python", "ls", "3.12", "--only-installed"]
 action = "python_list"
 fields = { request = "3.12", only_installed = true }
-effects = ["read_only"]
+effects = ["run_program"]
 
 # A custom download list can be fetched from a URL; it is not declared.
 [[case]]
@@ -1275,7 +1275,7 @@ effects = ["modify_user", "network", "write_file"]
 # --- independent verifier cases, round 2 ---
 # Written by the verifier from uv 0.13.7 source and probes on the local uv 0.12.5.
 
-# EXPECT-FAIL (VERIFY.md F8): `uv python list <request>` passes the request to
+# Fixed after verification (VERIFY.md F8): `uv python list <request>` passes the request to
 # `find_all_python_installations` (crates/uv-python-commands/src/list.rs), which queries the named file.
 # Probe: `uv python list ./fakepy` executed ./fakepy.
 [[case]]
