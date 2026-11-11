@@ -1680,3 +1680,88 @@ action = "unmodeled"
 [[case]]
 argv = ["git", "worktree", "add"]
 action = "unmodeled"
+
+# ---------------------------------------------------------------- more spellings
+
+# A dry run also removes `delete_remote_ref` from `-d`.
+[[case]]
+argv = ["git", "push", "-n", "-d", "origin", "old"]
+action = "push"
+fields = { delete = true, dry_run = true, refspec = ["old"], repository = "origin" }
+effects = ["network"]
+
+# git-checkout(1): `--orphan` starts an unborn branch; git refuses paths with it.
+[[case]]
+argv = ["git", "checkout", "--orphan", "gh-pages"]
+action = "checkout"
+fields = { orphan = "gh-pages" }
+
+# git-checkout(1) 2.56: `-m` on a branch switch stashes the conflicting changes and reapplies them.
+[[case]]
+argv = ["git", "checkout", "-m", "-b", "topic"]
+action = "checkout"
+fields = { create = "topic", merge = true }
+
+[[case]]
+argv = ["git", "switch", "-m", "main"]
+action = "switch"
+fields = { branch = "main", merge = true }
+
+# builtin/stash.c: `git stash -p <path>` is accepted by git (`-p` lets `push` be assumed), but this
+# usage takes paths only after `--`.
+[[case]]
+argv = ["git", "stash", "-p", "src"]
+action = "unmodeled"
+
+# Older `config`: `--get <name> <value-pattern>` reads in git; here the second word is an operand,
+# which adds override_config.
+[[case]]
+argv = ["git", "config", "--get", "remote.origin.url", "github"]
+action = "config"
+fields = { get = "remote.origin.url", name = "github" }
+effects = ["override_config"]
+
+# revision.c reads `--format` only with `=`; a bare `--format` gets the empty value here, and
+# the next word is a revision. Git refuses the line.
+[[case]]
+argv = ["git", "log", "--format", "oneline"]
+action = "log"
+fields = { format = "", revision = ["oneline"] }
+
+# git(1): `--attr-source <tree-ish>` and `--namespace=<name>` change no outcome here.
+[[case]]
+argv = ["git", "--attr-source", "HEAD", "--namespace=ns", "ls-files"]
+action = "ls_files"
+fields = { attr_source = "HEAD", namespace = "ns" }
+
+# Global `-c` and `clone -c` are two fields.
+[[case]]
+argv = ["git", "-c", "http.sslVerify=false", "clone", "-c", "a.b=c", "https://example.com/r.git"]
+action = "clone"
+fields = { config = ["http.sslVerify=false"], config_option = ["a.b=c"], repository = "https://example.com/r.git" }
+effects = ["network", "override_config", "run_program", "skip_hooks"]
+
+# A value that looks like an option, for a required value.
+[[case]]
+argv = ["git", "rebase", "--onto", "--root", "main"]
+action = "rebase"
+fields = { onto = "--root", upstream = "main" }
+effects = ["rewrite_history"]
+
+# `pull --dry-run` also removes `skip_hooks`: git returns before the merge runs any hook.
+[[case]]
+argv = ["git", "pull", "--dry-run", "--no-verify"]
+action = "pull"
+fields = { dry_run = true, no_verify = true }
+effects = ["network"]
+
+# `fetch --all` with `-p`; `--refmap` is not declared.
+[[case]]
+argv = ["git", "fetch", "--refmap=+refs/heads/*:refs/x/*", "origin"]
+action = "unmodeled"
+
+[[case]]
+argv = ["git", "branch", "-r", "-d", "origin/old"]
+action = "branch"
+fields = { branchname = ["origin/old"], delete = true, remotes = true }
+effects = ["delete_ref"]
