@@ -60,14 +60,16 @@ upload_local_file = "Sends the content of local files to AWS"
 write_local_file  = "Writes a local file (a download, or a response saved to a file)"
 value_from_file   = "A value starts with file:// or fileb://, so the CLI sends the content of a local file that the rule cannot see"
 override_endpoint = "Sends the requests to an endpoint URL that the line names (--endpoint-url)"
+assume_role       = "Makes AWS act with the permissions of a role that the line names (cloudformation --role-arn)"
 change_account    = "Selects a named profile (--profile), which can hold other credentials, another account, or another role"
 insecure_tls      = "Weakens TLS: skips certificate checks, trusts a CA bundle the line names, or uses an http:// endpoint"
 read_config       = "Reads the local AWS CLI configuration"
 
 # Global options (awscli/data/cli.json). The main parser reads them anywhere on the line.
+# botocore lowercases the URL scheme, so every casing of http:// is plain HTTP.
 [global]
 options.debug               = { flag = "--debug", anywhere = true }
-options.endpoint_url        = { flag = "--endpoint-url", value = "required", anywhere = true, adds = ["override_endpoint"], when = [{ like = "http://*", adds = ["insecure_tls"] }] }
+options.endpoint_url        = { flag = "--endpoint-url", value = "required", anywhere = true, adds = ["override_endpoint"], when = [{ like = ["http://*", "httP://*", "htTp://*", "htTP://*", "hTtp://*", "hTtP://*", "hTTp://*", "hTTP://*", "Http://*", "HttP://*", "HtTp://*", "HtTP://*", "HTtp://*", "HTtP://*", "HTTp://*", "HTTP://*"], adds = ["insecure_tls"] }] }
 options.no_verify_ssl       = { flag = "--no-verify-ssl", anywhere = true, adds = ["insecure_tls"] }
 options.no_paginate         = { flag = "--no-paginate", anywhere = true }
 options.output              = { flag = "--output", value = "required", anywhere = true }
@@ -452,7 +454,8 @@ options.client_context  = { flag = "--client-context", value = "required", when 
 # --------------------------------------------------------------------------------------------------
 # cloudformation. `deploy` is a custom command (customizations/cloudformation/deploy.py): it
 # reads a local template, and an update deletes each resource that the template no longer
-# holds. `--no-execute-changeset` only creates the change set.
+# holds. `--no-execute-changeset` only creates the change set. `--role-arn` makes CloudFormation act
+# with that service role, so it adds `assume_role`.
 
 [shell.cloudformation_describe_stacks]
 usage = "aws [global options] cloudformation describe-stacks [options]"
@@ -496,7 +499,7 @@ options.capabilities               = { flag = "--capabilities", value = "many", 
 options.no_execute_changeset       = { flag = "--no-execute-changeset", removes = ["delete_data", "iam_write"] }
 options.disable_rollback           = { flag = "--disable-rollback" }
 options.no_disable_rollback        = { flag = "--no-disable-rollback" }
-options.role_arn                   = { flag = "--role-arn", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.role_arn                   = { flag = "--role-arn", value = "required", adds = ["assume_role"], when = [{ like = "file*://*", adds = ["value_from_file"] }] }
 options.notification_arns          = { flag = "--notification-arns", value = "many", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
 options.fail_on_empty_changeset    = { flag = "--fail-on-empty-changeset" }
 options.no_fail_on_empty_changeset = { flag = "--no-fail-on-empty-changeset" }
@@ -507,7 +510,7 @@ usage = "aws [global options] cloudformation delete-stack [options]"
 adds  = ["delete_data"]
 options.stack_name       = { flag = "--stack-name", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
 options.retain_resources = { flag = "--retain-resources", value = "many", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
-options.role_arn         = { flag = "--role-arn", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.role_arn         = { flag = "--role-arn", value = "required", adds = ["assume_role"], when = [{ like = "file*://*", adds = ["value_from_file"] }] }
 options.deletion_mode    = { flag = "--deletion-mode", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
 
 # --------------------------------------------------------------------------------------------------
@@ -832,7 +835,7 @@ adds  = ["read_config"]
 [shell.configure_get]
 usage = "aws [global options] configure get <varname>"
 adds  = ["read_config"]
-operands.varname = { when = [{ like = ["aws_secret_access_key", "aws_session_token", "*.aws_secret_access_key", "*.aws_session_token"], adds = ["read_secret"] }, { like = "file*://*", adds = ["read_secret", "value_from_file"] }] }
+operands.varname = { when = [{ like = ["aws_secret_access_key", "aws_session_token", "aws_security_token", "*.aws_secret_access_key", "*.aws_session_token", "*.aws_security_token"], adds = ["read_secret"] }, { like = "file*://*", adds = ["read_secret", "value_from_file"] }] }
 
 [shell.configure_export_credentials]
 usage = "aws [global options] configure export-credentials [options]"

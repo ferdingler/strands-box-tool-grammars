@@ -48,6 +48,16 @@ program = "aws"
 The CLI also reads its configuration and credentials (`~/.aws/config`, `~/.aws/credentials`).
 Grant the tool what your setup needs, in the tool's own filesystem lists.
 
+**Keep `~/.aws/cli/alias` and `~/.aws/config` unwritable by the agent and by the tool.** An alias
+can take the name of a built-in service or operation, so `aws sts get-caller-identity` can run
+something else, and an alias that starts with `!` runs a shell command. The config file can load
+plugins (`[plugins]`) and run a program (`credential_process`). The grammar reads the words as
+the built-in command, so it is only correct while those files are what the operator wrote.
+
+## Regenerate
+
+`gen/` holds the generator: from `grammars/aws/gen`, run `python3 gen.py head.toml > ../aws.grammar.toml`.
+
 ## Command families
 
 Each action is the command words joined with `_`, such as `s3_cp` or `ec2_terminate_instances`.
@@ -59,7 +69,7 @@ Each action is the command words joined with `_`, such as `s3_cp` or `ec2_termin
 | s3api | `list-buckets`, `list-objects-v2`, `head-object`, `get-object`, `get-bucket-policy`; `put-object`; `delete-object` | `read_data`; `write_data`; `delete_data` |
 | ec2 | `describe-instances`, `-vpcs`, `-subnets`, `-security-groups`, `-images`; `start-instances`, `stop-instances`; `terminate-instances` | `read_data`; `write_data`; `delete_data`; `--dry-run` removes it |
 | lambda | `list-functions`, `get-function`; `invoke` | `read_data`; `run_program` (`--invocation-type DryRun` removes it) |
-| cloudformation | `describe-stacks`, `list-stacks`, `describe-stack-events`, `list-stack-resources`; `deploy`; `delete-stack` | `read_data`; `write_data` and `delete_data`; `delete_data` |
+| cloudformation | `describe-stacks`, `list-stacks`, `describe-stack-events`, `list-stack-resources`; `deploy`; `delete-stack` | `read_data`; `write_data` and `delete_data`; `delete_data`; `--role-arn` adds `assume_role` |
 | iam | `list-users`, `list-roles`, `list-attached-role-policies`, `get-user`, `get-role`; `create-access-key`, `create-user`, `create-role`, `create-policy`, `attach-role-policy`, `put-role-policy`; `delete-role`, `delete-user` | `read_data`; `iam_write` with `write_data` or `delete_data`; `create-access-key` also `credentials` |
 | logs | `tail`, `describe-log-groups`, `filter-log-events`, `get-log-events` | `read_data`; `--unmask` adds `read_secret` |
 | dynamodb | `list-tables`, `describe-table`, `get-item`, `query`, `scan`; `put-item`; `delete-item` | `read_data`; `write_data`; `delete_data` |
@@ -79,7 +89,7 @@ Every action takes the global options anywhere on the line: `--region`, `--profi
 | `read_data` | Reads data or metadata from an AWS account: list, describe, get, download. |
 | `write_data` | Creates or changes resources or data in an AWS account. |
 | `delete_data` | Deletes resources or data in AWS, or the local files that `s3 mv` and `s3 sync --delete` remove. A `cloudformation deploy` can delete the resources that a template no longer holds. |
-| `read_secret` | Returns secret plain text: a secret value, a decrypted parameter, unmasked log data, or a credential from the config file. |
+| `read_secret` | Returns secret plain text: a secret value, a decrypted parameter, unmasked log data, or a credential from the config file (`aws_secret_access_key`, `aws_session_token`, or the legacy `aws_security_token`). |
 | `credentials` | Obtains, creates, or prints AWS credentials. |
 | `iam_write` | Changes IAM identities, policies, or permissions, or lets a stack do so (`--capabilities CAPABILITY_IAM`). |
 | `make_public` | Grants access to everyone, or to every AWS account: a `public-read`, `public-read-write`, or `authenticated-read` ACL, or a grant to the AllUsers or AuthenticatedUsers group. |
@@ -89,8 +99,9 @@ Every action takes the global options anywhere on the line: `--region`, `--profi
 | `write_local_file` | Writes a local file: a download, or a response saved to a file. |
 | `value_from_file` | A value starts with `file://` or `fileb://`. The CLI reads that local file and sends its content, so a rule sees only the file name. |
 | `override_endpoint` | Sends the requests to an endpoint URL that the line names (`--endpoint-url`). |
+| `assume_role` | Makes AWS act with the permissions of a role that the line names (`cloudformation deploy` and `delete-stack --role-arn`). |
 | `change_account` | Selects a named profile (`--profile`), which can hold other credentials, another account, or another role. |
-| `insecure_tls` | Skips certificate checks (`--no-verify-ssl`), trusts a CA bundle the line names (`--ca-bundle`), or uses an `http://` endpoint. |
+| `insecure_tls` | Skips certificate checks (`--no-verify-ssl`), trusts a CA bundle the line names (`--ca-bundle`), or uses an `http://` endpoint in any letter case. |
 | `read_config` | Reads the local AWS CLI configuration. |
 
 ## Example rules
@@ -157,7 +168,8 @@ These are not declared, so a line that uses one is `unmodeled`:
   endpoint, and TLS trust with nothing on the line. A `credential_process` in the config file
   runs a program.
 - **CLI aliases.** `~/.aws/cli/alias` can give a built-in command another meaning, and an alias
-  that starts with `!` runs a shell command. The grammar reads the words as the built-in command.
+  that starts with `!` runs a shell command. The grammar reads the words as the built-in command,
+  so keep that file unwritable by the agent (see Load the grammar).
 - **Option prefixes.** argparse accepts a unique prefix of a long option (`--reg`). The grammar
   does not, so such a line is `unmodeled`.
 - **Required options.** The grammar does not check that a required option, such as `--bucket`,
@@ -166,6 +178,5 @@ These are not declared, so a line that uses one is `unmodeled`:
   with the effects of that command, which is more than the CLI does.
 - **Lambda configuration.** `lambda list-functions` and `get-function` return the environment
   variables of a function in plain text, and they can hold secrets. They have only `read_data`.
-- **Case of `http://`.** `insecure_tls` matches an endpoint that starts with lowercase `http://`.
 - **An empty list.** The CLI accepts a list option with no value (`--instance-ids` alone). The
   grammar needs at least one value, so such a line is `unmodeled`.

@@ -1318,3 +1318,39 @@ effects = ["read_data", "read_secret"]
 [[case]]
 argv = ["aws", "ssm", "get-parameter", "--cli-input-json", "file://in.json"]
 action = "unmodeled"
+
+# --- fixes after verification ---
+
+# botocore reads the legacy key name aws_security_token as a session token
+# (botocore/credentials.py, TOKENS), and configure get prints it.
+[[case]]
+argv = ["aws", "configure", "get", "profile.prod.aws_security_token"]
+action = "configure_get"
+fields = { varname = "profile.prod.aws_security_token" }
+effects = ["read_config", "read_secret"]
+
+# botocore lowercases the URL scheme, so HTTP:// is plain HTTP too.
+[[case]]
+argv = ["aws", "s3", "ls", "--endpoint-url", "HTTP://localhost:4566"]
+action = "s3_ls"
+fields = { endpoint_url = "HTTP://localhost:4566" }
+effects = ["insecure_tls", "override_endpoint", "read_data"]
+
+[[case]]
+argv = ["aws", "s3", "ls", "--endpoint-url", "hTtP://localhost:4566"]
+action = "s3_ls"
+fields = { endpoint_url = "hTtP://localhost:4566" }
+effects = ["insecure_tls", "override_endpoint", "read_data"]
+
+# `--role-arn` makes CloudFormation act with that service role.
+[[case]]
+argv = ["aws", "cloudformation", "deploy", "--template-file", "t.yaml", "--stack-name", "web", "--role-arn", "arn:aws:iam::123456789012:role/cfn"]
+action = "cloudformation_deploy"
+fields = { template_file = "t.yaml", stack_name = "web", role_arn = "arn:aws:iam::123456789012:role/cfn" }
+effects = ["assume_role", "delete_data", "upload_local_file", "write_data"]
+
+[[case]]
+argv = ["aws", "cloudformation", "delete-stack", "--stack-name", "web", "--role-arn=arn:aws:iam::123456789012:role/cfn"]
+action = "cloudformation_delete_stack"
+fields = { stack_name = "web", role_arn = "arn:aws:iam::123456789012:role/cfn" }
+effects = ["assume_role", "delete_data"]
