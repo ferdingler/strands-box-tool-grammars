@@ -1,0 +1,1386 @@
+# Golden cases for uv.grammar.toml (uv 0.13.7). Each expectation was written from uv's documented
+# behaviour before the harness ran. "help" means the captured `uv <command> --help` output for 0.13.7;
+# "source" means crates/uv-cli/src/lib.rs (or the file named) at tag 0.13.7.
+# `fields` lists only non-default values.
+
+# ---------------------------------------------------------------- run
+# `uv run [OPTIONS] [COMMAND]`: the command and all its words go to the program (help: uv run;
+# source: `RunArgs::command` is a clap external subcommand). uv locks, syncs, then runs it.
+[[case]]
+argv = ["uv", "run", "pytest", "-x"]
+action = "run"
+fields = { command = ["pytest", "-x"] }
+effects = ["build_code", "modify_environment", "modify_project", "network", "run_program"]
+
+# `-w/--with` may repeat (source: `with: Vec<...>`); a short flag takes an attached value.
+[[case]]
+argv = ["uv", "run", "--with", "requests", "-whttpx", "python", "script.py"]
+action = "run"
+fields = { with = ["httpx", "requests"], command = ["python", "script.py"] }
+effects = ["build_code", "modify_environment", "modify_project", "network", "run_program"]
+
+# `--frozen` runs without updating uv.lock (help).
+[[case]]
+argv = ["uv", "run", "--frozen", "python", "-c", "print(1)"]
+action = "run"
+fields = { frozen = true, command = ["python", "-c", "print(1)"] }
+effects = ["build_code", "modify_environment", "network", "run_program"]
+
+# `--locked` asserts uv.lock stays unchanged (help).
+[[case]]
+argv = ["uv", "run", "--locked", "pytest"]
+action = "run"
+fields = { locked = true, command = ["pytest"] }
+effects = ["build_code", "modify_environment", "network", "run_program"]
+
+# `--no-sync` implies `--frozen` (source doc comment on `RunArgs::no_sync`), but `--with` still installs
+# into an overlay environment, so `modify_environment` stays.
+[[case]]
+argv = ["uv", "run", "--no-sync", "--with", "rich", "python"]
+action = "run"
+fields = { no_sync = true, with = ["rich"], command = ["python"] }
+effects = ["build_code", "modify_environment", "network", "run_program"]
+
+# The global `--offline` before the command words removes uv's own `network`.
+[[case]]
+argv = ["uv", "--offline", "run", "python"]
+action = "run"
+fields = { offline = true, command = ["python"] }
+effects = ["build_code", "modify_environment", "modify_project", "run_program"]
+
+# `--offline` after the program name belongs to the program, not to uv: it removes nothing.
+[[case]]
+argv = ["uv", "run", "python", "--offline"]
+action = "run"
+fields = { command = ["python", "--offline"] }
+effects = ["build_code", "modify_environment", "modify_project", "network", "run_program"]
+
+# `--` before the command is dropped; the words after it are the command.
+[[case]]
+argv = ["uv", "run", "--", "python", "-V"]
+action = "run"
+fields = { command = ["python", "-V"] }
+effects = ["build_code", "modify_environment", "modify_project", "network", "run_program"]
+
+# A cluster of an anywhere global (`-q`) and an action flag (`-m`, help: `-m, --module`).
+[[case]]
+argv = ["uv", "run", "-qm", "http.server"]
+action = "run"
+fields = { quiet = true, module = true, command = ["http.server"] }
+effects = ["build_code", "modify_environment", "modify_project", "network", "run_program"]
+
+# `-p/--python` is a per-command option of `uv run` (help: Python options). `-s/--script` is a flag in
+# `uv run` (help: "Run the given path as a Python script"), so the path is the command.
+[[case]]
+argv = ["uv", "run", "-p", "3.12", "--script", "tool.py"]
+action = "run"
+fields = { python = "3.12", script = true, command = ["tool.py"] }
+effects = ["build_code", "modify_environment", "modify_project", "network", "run_program"]
+
+[[case]]
+argv = ["uv", "run", "-p", "3.12", "-s", "tool.py"]
+action = "run"
+fields = { python = "3.12", script = true, command = ["tool.py"] }
+effects = ["build_code", "modify_environment", "modify_project", "network", "run_program"]
+
+# `--directory` changes where uv runs (help: Global options).
+[[case]]
+argv = ["uv", "run", "--directory", "../other", "python"]
+action = "run"
+fields = { directory = "../other", command = ["python"] }
+effects = ["build_code", "modify_environment", "modify_project", "network", "other_directory", "run_program"]
+
+# An index URL with credentials in it adds `credentials` and `override_index`.
+[[case]]
+argv = ["uv", "run", "--index-url", "https://user:pw@pypi.example.com/simple", "python"]
+action = "run"
+fields = { index_url = "https://user:pw@pypi.example.com/simple", command = ["python"] }
+effects = ["build_code", "credentials", "modify_environment", "modify_project", "network", "override_index", "run_program"]
+
+# `-w=x` is not a value spelling this grammar reads.
+[[case]]
+argv = ["uv", "run", "-w=rich", "python"]
+action = "unmodeled"
+
+# No command: `uv run` alone lists scripts in uv; it is not modeled.
+[[case]]
+argv = ["uv", "run"]
+action = "unmodeled"
+
+# An undeclared flag, a prefix of `--with`, and `--help`.
+[[case]]
+argv = ["uv", "run", "--bogus", "python"]
+action = "unmodeled"
+
+[[case]]
+argv = ["uv", "run", "--wit", "rich", "python"]
+action = "unmodeled"
+
+[[case]]
+argv = ["uv", "run", "--help"]
+action = "unmodeled"
+
+# ---------------------------------------------------------------- init
+# `uv init [OPTIONS] [PATH]` (help); it may download a Python to pin.
+[[case]]
+argv = ["uv", "init", "myproj", "--lib"]
+action = "init"
+fields = { path = "myproj", lib = true }
+effects = ["modify_project", "network", "write_file"]
+
+[[case]]
+argv = ["uv", "init", "--vcs=none", "--name", "demo"]
+action = "init"
+fields = { vcs = "none", name = "demo" }
+effects = ["modify_project", "network"]
+
+[[case]]
+argv = ["uv", "init", "a", "b"]
+action = "unmodeled"
+
+[[case]]
+argv = ["uv", "init", "--template", "x"]
+action = "unmodeled"
+
+# ---------------------------------------------------------------- add / remove
+# `uv add` edits pyproject.toml, locks, and syncs (help: `--no-sync`, `--frozen`).
+[[case]]
+argv = ["uv", "add", "requests", "httpx>=0.27"]
+action = "add"
+fields = { packages = ["httpx>=0.27", "requests"] }
+effects = ["build_code", "modify_environment", "modify_project", "network"]
+
+[[case]]
+argv = ["uv", "add", "--dev", "pytest"]
+action = "add"
+fields = { dev = true, packages = ["pytest"] }
+effects = ["build_code", "modify_environment", "modify_project", "network"]
+
+[[case]]
+argv = ["uv", "add", "--group", "lint", "ruff"]
+action = "add"
+fields = { group = "lint", packages = ["ruff"] }
+effects = ["build_code", "modify_environment", "modify_project", "network"]
+
+[[case]]
+argv = ["uv", "add", "--optional", "cli", "rich"]
+action = "add"
+fields = { optional = "cli", packages = ["rich"] }
+effects = ["build_code", "modify_environment", "modify_project", "network"]
+
+# `--no-sync` skips the environment sync.
+[[case]]
+argv = ["uv", "add", "--no-sync", "requests"]
+action = "add"
+fields = { no_sync = true, packages = ["requests"] }
+effects = ["build_code", "modify_project", "network"]
+
+# `--frozen` still edits pyproject.toml, so it removes nothing.
+[[case]]
+argv = ["uv", "add", "--frozen", "requests"]
+action = "add"
+fields = { frozen = true, packages = ["requests"] }
+effects = ["build_code", "modify_environment", "modify_project", "network"]
+
+# `-r` alone, with no package operand (help: `<PACKAGES|--requirements <REQUIREMENTS>>`).
+[[case]]
+argv = ["uv", "add", "-r", "requirements.txt", "-r", "dev.txt"]
+action = "add"
+fields = { requirements = ["dev.txt", "requirements.txt"] }
+effects = ["build_code", "modify_environment", "modify_project", "network"]
+
+# `--` ends the options.
+[[case]]
+argv = ["uv", "add", "--dev", "--", "pytest"]
+action = "add"
+fields = { dev = true, packages = ["pytest"] }
+effects = ["build_code", "modify_environment", "modify_project", "network"]
+
+# `--group` takes one value in `uv add` (source: `AddArgs::group: Option<GroupName>`).
+[[case]]
+argv = ["uv", "add", "--group", "a", "--group", "b", "x"]
+action = "unmodeled"
+
+[[case]]
+argv = ["uv", "add", "--devv", "x"]
+action = "unmodeled"
+
+[[case]]
+argv = ["uv", "remove", "requests"]
+action = "remove"
+fields = { packages = ["requests"] }
+effects = ["build_code", "modify_environment", "modify_project", "network"]
+
+[[case]]
+argv = ["uv", "remove", "--dev", "--no-sync", "pytest"]
+action = "remove"
+fields = { dev = true, no_sync = true, packages = ["pytest"] }
+effects = ["build_code", "modify_project", "network"]
+
+# `<PACKAGES>...` is required (help).
+[[case]]
+argv = ["uv", "remove"]
+action = "unmodeled"
+
+# ---------------------------------------------------------------- sync
+[[case]]
+argv = ["uv", "sync"]
+action = "sync"
+effects = ["build_code", "modify_environment", "modify_project", "network"]
+
+[[case]]
+argv = ["uv", "sync", "--locked"]
+action = "sync"
+fields = { locked = true }
+effects = ["build_code", "modify_environment", "network"]
+
+[[case]]
+argv = ["uv", "sync", "--frozen", "--offline"]
+action = "sync"
+fields = { frozen = true, offline = true }
+effects = ["build_code", "modify_environment"]
+
+# `--dry-run` writes neither the lockfile nor the environment (help).
+[[case]]
+argv = ["uv", "sync", "--dry-run"]
+action = "sync"
+fields = { dry_run = true }
+effects = ["build_code", "network"]
+
+[[case]]
+argv = ["uv", "sync", "--check"]
+action = "sync"
+fields = { check = true }
+effects = ["build_code", "network"]
+
+# `--group` may repeat in `uv sync`; `--extra=v` and `--extra v` both work.
+[[case]]
+argv = ["uv", "sync", "--all-extras", "--group", "dev", "--group", "docs", "--extra=a", "--extra", "b"]
+action = "sync"
+fields = { all_extras = true, group = ["dev", "docs"], extra = ["a", "b"] }
+effects = ["build_code", "modify_environment", "modify_project", "network"]
+
+# `--no-build` does not remove `build_code`: uv may still build editable requirements (source doc
+# comment on `no_build`).
+[[case]]
+argv = ["uv", "sync", "--no-build"]
+action = "sync"
+fields = { no_build = true }
+effects = ["build_code", "modify_environment", "modify_project", "network"]
+
+# `-P` repeats and takes an attached value.
+[[case]]
+argv = ["uv", "sync", "-U", "-P", "requests", "-Phttpx"]
+action = "sync"
+fields = { upgrade = true, upgrade_package = ["httpx", "requests"] }
+effects = ["build_code", "modify_environment", "modify_project", "network"]
+
+# `--allow-insecure-host` (global, alias `--trusted-host`) disables TLS verification for a host.
+[[case]]
+argv = ["uv", "sync", "--allow-insecure-host", "pypi.internal"]
+action = "sync"
+fields = { allow_insecure_host = ["pypi.internal"] }
+effects = ["build_code", "disable_tls_verification", "modify_environment", "modify_project", "network"]
+
+# The hidden opposite `--no-frozen` and `-C/--config-setting` are not declared.
+[[case]]
+argv = ["uv", "sync", "--frozen", "--no-frozen"]
+action = "unmodeled"
+
+[[case]]
+argv = ["uv", "sync", "-C", "key=value"]
+action = "unmodeled"
+
+[[case]]
+argv = ["uv", "sync", "extra-operand"]
+action = "unmodeled"
+
+# ---------------------------------------------------------------- lock
+[[case]]
+argv = ["uv", "lock"]
+action = "lock"
+effects = ["build_code", "modify_project", "network"]
+
+[[case]]
+argv = ["uv", "lock", "--check"]
+action = "lock"
+fields = { check = true }
+effects = ["build_code", "network"]
+
+[[case]]
+argv = ["uv", "lock", "--check-exists"]
+action = "lock"
+fields = { check_exists = true }
+effects = ["build_code", "network"]
+
+[[case]]
+argv = ["uv", "lock", "--dry-run", "--upgrade-package", "requests"]
+action = "lock"
+fields = { dry_run = true, upgrade_package = ["requests"] }
+effects = ["build_code", "network"]
+
+# `uv lock --frozen` is hidden in 0.13.7 (source `LockArgs::frozen`, `hide = true`).
+[[case]]
+argv = ["uv", "lock", "--frozen"]
+action = "unmodeled"
+
+# ---------------------------------------------------------------- tree / export
+[[case]]
+argv = ["uv", "tree"]
+action = "tree"
+effects = ["build_code", "modify_project", "network"]
+
+[[case]]
+argv = ["uv", "tree", "--frozen", "-d", "1"]
+action = "tree"
+fields = { frozen = true, depth = "1" }
+effects = ["build_code", "network"]
+
+[[case]]
+argv = ["uv", "tree", "--outdated", "--locked", "-d2"]
+action = "tree"
+fields = { outdated = true, locked = true, depth = "2" }
+effects = ["build_code", "network"]
+
+[[case]]
+argv = ["uv", "export", "--format", "requirements.txt", "-o", "requirements.txt", "--frozen"]
+action = "export"
+fields = { format = "requirements.txt", output_file = "requirements.txt", frozen = true }
+effects = ["build_code", "network", "write_file"]
+
+[[case]]
+argv = ["uv", "export", "--no-hashes"]
+action = "export"
+fields = { no_hashes = true }
+effects = ["build_code", "modify_project", "network"]
+
+[[case]]
+argv = ["uv", "export", "--format"]
+action = "unmodeled"
+
+# ---------------------------------------------------------------- venv (aliases `virtualenv`, `v`)
+[[case]]
+argv = ["uv", "venv"]
+action = "venv"
+effects = ["modify_environment", "network"]
+
+[[case]]
+argv = ["uv", "venv", ".venv", "--python", "3.12", "--seed"]
+action = "venv"
+fields = { path = ".venv", python = "3.12", seed = true }
+effects = ["modify_environment", "network", "run_program", "write_file"]
+
+# `-c/--clear` removes what is at the path (help).
+[[case]]
+argv = ["uv", "venv", "-c"]
+action = "venv"
+fields = { clear = true }
+effects = ["delete_data", "modify_environment", "network"]
+
+# Aliases from source: `#[command(alias = "virtualenv", alias = "v")]`.
+[[case]]
+argv = ["uv", "virtualenv"]
+action = "venv"
+effects = ["modify_environment", "network"]
+
+[[case]]
+argv = ["uv", "v", "env2"]
+action = "venv"
+fields = { path = "env2" }
+effects = ["modify_environment", "network", "write_file"]
+
+[[case]]
+argv = ["uv", "venv", "a", "b"]
+action = "unmodeled"
+
+# ---------------------------------------------------------------- build
+[[case]]
+argv = ["uv", "build"]
+action = "build"
+effects = ["build_code", "network"]
+
+[[case]]
+argv = ["uv", "build", "--wheel", "-o", "dist"]
+action = "build"
+fields = { wheel = true, out_dir = "dist" }
+effects = ["build_code", "network", "write_file"]
+
+[[case]]
+argv = ["uv", "build", "--clear"]
+action = "build"
+fields = { clear = true }
+effects = ["build_code", "delete_data", "network"]
+
+[[case]]
+argv = ["uv", "build", "--offline", "--sdist", "."]
+action = "build"
+fields = { offline = true, sdist = true, src = "." }
+effects = ["build_code"]
+
+[[case]]
+argv = ["uv", "build", "--list"]
+action = "unmodeled"
+
+# ---------------------------------------------------------------- publish (no global options)
+[[case]]
+argv = ["uv", "publish"]
+action = "publish"
+effects = ["network", "publish"]
+
+# `-t/--token` and `-p/--password` carry credentials (help: uv publish).
+[[case]]
+argv = ["uv", "publish", "--token", "pypi-xxxx", "dist/pkg-1.0.tar.gz"]
+action = "publish"
+fields = { token = "pypi-xxxx", files = ["dist/pkg-1.0.tar.gz"] }
+effects = ["credentials", "network", "publish"]
+
+# In `uv publish`, `-p` is `--password`, not `--python`.
+[[case]]
+argv = ["uv", "publish", "-u", "__token__", "-p", "secret"]
+action = "publish"
+fields = { username = "__token__", password = "secret" }
+effects = ["credentials", "network", "publish"]
+
+[[case]]
+argv = ["uv", "publish", "--dry-run"]
+action = "publish"
+fields = { dry_run = true }
+effects = ["network"]
+
+[[case]]
+argv = ["uv", "publish", "--publish-url", "https://test.pypi.org/legacy/", "-q"]
+action = "publish"
+fields = { publish_url = "https://test.pypi.org/legacy/", quiet = true }
+effects = ["network", "override_index", "publish"]
+
+# `uv publish` shadows the global `--offline` with a hidden one (source `PublishArgs::offline`), so it
+# and any global option before `publish` are unmodeled.
+[[case]]
+argv = ["uv", "publish", "--offline"]
+action = "unmodeled"
+
+[[case]]
+argv = ["uv", "--offline", "publish"]
+action = "unmodeled"
+
+[[case]]
+argv = ["uv", "publish", "--keyring-provider", "subprocess"]
+action = "unmodeled"
+
+# ---------------------------------------------------------------- version
+[[case]]
+argv = ["uv", "version"]
+action = "version"
+effects = ["read_only"]
+
+[[case]]
+argv = ["uv", "version", "--short"]
+action = "version"
+fields = { short = true }
+effects = ["read_only"]
+
+# A value or `--bump` writes pyproject.toml, then locks and syncs (source version.rs).
+[[case]]
+argv = ["uv", "version", "1.2.0"]
+action = "version"
+fields = { value = "1.2.0" }
+effects = ["build_code", "modify_environment", "modify_project", "network"]
+
+[[case]]
+argv = ["uv", "version", "--bump", "major", "--bump=alpha"]
+action = "version"
+fields = { bump = ["alpha", "major"] }
+effects = ["build_code", "modify_environment", "modify_project", "network"]
+
+[[case]]
+argv = ["uv", "version", "--bump", "patch", "--no-sync"]
+action = "version"
+fields = { bump = ["patch"], no_sync = true }
+effects = ["build_code", "modify_project", "network"]
+
+# `--dry-run` writes nothing and skips the lock and sync; `--bump` already removed `read_only`.
+[[case]]
+argv = ["uv", "version", "--bump", "minor", "--dry-run"]
+action = "version"
+fields = { bump = ["minor"], dry_run = true }
+effects = []
+
+[[case]]
+argv = ["uv", "version", "1.0", "2.0"]
+action = "unmodeled"
+
+# ---------------------------------------------------------------- tool
+[[case]]
+argv = ["uv", "tool", "run", "ruff", "check", "."]
+action = "tool_run"
+fields = { command = ["ruff", "check", "."] }
+effects = ["build_code", "modify_environment", "network", "run_program"]
+
+[[case]]
+argv = ["uv", "tool", "run", "--from", "httpie>=3", "http", "GET", "example.com"]
+action = "tool_run"
+fields = { from = "httpie>=3", command = ["http", "GET", "example.com"] }
+effects = ["build_code", "modify_environment", "network", "run_program"]
+
+[[case]]
+argv = ["uv", "tool", "run", "--offline", "ruff"]
+action = "tool_run"
+fields = { offline = true, command = ["ruff"] }
+effects = ["build_code", "modify_environment", "run_program"]
+
+# An anywhere global option between two command words.
+[[case]]
+argv = ["uv", "tool", "-q", "run", "ruff"]
+action = "tool_run"
+fields = { quiet = true, command = ["ruff"] }
+effects = ["build_code", "modify_environment", "network", "run_program"]
+
+[[case]]
+argv = ["uv", "tool", "run"]
+action = "unmodeled"
+
+# The hidden `uv tool uvx` is not modeled.
+[[case]]
+argv = ["uv", "tool", "uvx", "ruff"]
+action = "unmodeled"
+
+[[case]]
+argv = ["uv", "tool", "install", "ruff"]
+action = "tool_install"
+fields = { package = "ruff" }
+effects = ["build_code", "modify_user", "network"]
+
+[[case]]
+argv = ["uv", "tool", "install", "--with", "mkdocs-material", "mkdocs"]
+action = "tool_install"
+fields = { with = ["mkdocs-material"], package = "mkdocs" }
+effects = ["build_code", "modify_user", "network"]
+
+[[case]]
+argv = ["uv", "tool", "install", "-e", "."]
+action = "tool_install"
+fields = { editable = true, package = "." }
+effects = ["build_code", "modify_user", "network"]
+
+# `--from` is hidden on `uv tool install` (source `ToolInstallArgs::from`, `hide = true`).
+[[case]]
+argv = ["uv", "tool", "install", "--from", "x", "ruff"]
+action = "unmodeled"
+
+[[case]]
+argv = ["uv", "tool", "install", "a", "b"]
+action = "unmodeled"
+
+[[case]]
+argv = ["uv", "tool", "uninstall", "ruff", "black"]
+action = "tool_uninstall"
+fields = { name = ["black", "ruff"] }
+effects = ["delete_data", "modify_user"]
+
+[[case]]
+argv = ["uv", "tool", "uninstall", "--all"]
+action = "tool_uninstall"
+fields = { all = true }
+effects = ["delete_data", "modify_user"]
+
+# Alias `update` (source `#[command(alias = "update")]`).
+[[case]]
+argv = ["uv", "tool", "update", "ruff"]
+action = "tool_upgrade"
+fields = { name = ["ruff"] }
+effects = ["build_code", "modify_user", "network"]
+
+[[case]]
+argv = ["uv", "tool", "upgrade", "--all"]
+action = "tool_upgrade"
+fields = { all = true }
+effects = ["build_code", "modify_user", "network"]
+
+[[case]]
+argv = ["uv", "tool", "list"]
+action = "tool_list"
+effects = ["read_only"]
+
+[[case]]
+argv = ["uv", "tool", "ls", "--outdated"]
+action = "tool_list"
+fields = { outdated = true }
+effects = ["network", "read_only"]
+
+[[case]]
+argv = ["uv", "tool", "dir", "--bin"]
+action = "tool_dir"
+fields = { bin = true }
+effects = ["read_only"]
+
+[[case]]
+argv = ["uv", "tool", "ensurepath"]
+action = "tool_update_shell"
+effects = ["modify_user"]
+
+[[case]]
+argv = ["uv", "tool", "update-shell", "--force"]
+action = "unmodeled"
+
+# ---------------------------------------------------------------- python
+[[case]]
+argv = ["uv", "python", "list"]
+action = "python_list"
+effects = ["read_only"]
+
+[[case]]
+argv = ["uv", "python", "ls", "3.12", "--only-installed"]
+action = "python_list"
+fields = { request = "3.12", only_installed = true }
+effects = ["run_program"]
+
+# A custom download list can be fetched from a URL; it is not declared.
+[[case]]
+argv = ["uv", "python", "list", "--python-downloads-json-url", "https://example.com/x.json"]
+action = "unmodeled"
+
+[[case]]
+argv = ["uv", "python", "install", "3.12", "3.13"]
+action = "python_install"
+fields = { targets = ["3.12", "3.13"] }
+effects = ["modify_user", "network"]
+
+[[case]]
+argv = ["uv", "python", "install", "-U", "--default", "--offline"]
+action = "python_install"
+fields = { upgrade = true, default = true, offline = true }
+effects = ["modify_user"]
+
+[[case]]
+argv = ["uv", "python", "install", "--mirror", "https://example.com"]
+action = "unmodeled"
+
+[[case]]
+argv = ["uv", "python", "upgrade"]
+action = "python_upgrade"
+effects = ["modify_user", "network"]
+
+[[case]]
+argv = ["uv", "python", "find", ">=3.11"]
+action = "python_find"
+fields = { request = ">=3.11" }
+effects = ["run_program"]
+
+[[case]]
+argv = ["uv", "python", "pin"]
+action = "python_pin"
+effects = ["read_only"]
+
+[[case]]
+argv = ["uv", "python", "pin", "3.12"]
+action = "python_pin"
+fields = { request = "3.12" }
+effects = ["modify_project", "network", "run_program"]
+
+[[case]]
+argv = ["uv", "python", "pin", "--rm"]
+action = "python_pin"
+fields = { rm = true }
+effects = ["delete_data", "modify_project"]
+
+[[case]]
+argv = ["uv", "python", "pin", "--global", "3.13"]
+action = "python_pin"
+fields = { global = true, request = "3.13" }
+effects = ["modify_user", "network", "run_program"]
+
+[[case]]
+argv = ["uv", "python", "pin", "--global"]
+action = "python_pin"
+fields = { global = true }
+effects = ["modify_user"]
+
+[[case]]
+argv = ["uv", "python", "uninstall", "3.11"]
+action = "python_uninstall"
+fields = { targets = ["3.11"] }
+effects = ["delete_data", "modify_user"]
+
+[[case]]
+argv = ["uv", "python", "uninstall", "--all"]
+action = "python_uninstall"
+fields = { all = true }
+effects = ["delete_data", "modify_user"]
+
+[[case]]
+argv = ["uv", "python", "dir"]
+action = "python_dir"
+effects = ["read_only"]
+
+[[case]]
+argv = ["uv", "python", "update-shell"]
+action = "python_update_shell"
+effects = ["modify_user"]
+
+[[case]]
+argv = ["uv", "python", "frobnicate"]
+action = "unmodeled"
+
+# ---------------------------------------------------------------- pip
+[[case]]
+argv = ["uv", "pip", "install", "requests"]
+action = "pip_install"
+fields = { package = ["requests"] }
+effects = ["build_code", "modify_environment", "network"]
+
+[[case]]
+argv = ["uv", "pip", "install", "-r", "requirements.txt", "-c", "constraints.txt"]
+action = "pip_install"
+fields = { requirements = ["requirements.txt"], constraints = ["constraints.txt"] }
+effects = ["build_code", "modify_environment", "network"]
+
+# `--system` and `--break-system-packages` target a system Python (help).
+[[case]]
+argv = ["uv", "pip", "install", "--system", "flask"]
+action = "pip_install"
+fields = { system = true, package = ["flask"] }
+effects = ["build_code", "modify_environment", "network", "system_python"]
+
+[[case]]
+argv = ["uv", "pip", "install", "--break-system-packages", "flask"]
+action = "pip_install"
+fields = { break_system_packages = true, package = ["flask"] }
+effects = ["build_code", "modify_environment", "network", "system_python"]
+
+[[case]]
+argv = ["uv", "pip", "install", "--dry-run", "flask"]
+action = "pip_install"
+fields = { dry_run = true, package = ["flask"] }
+effects = ["build_code", "network"]
+
+[[case]]
+argv = ["uv", "pip", "install", "-e.", "--editable", "../lib"]
+action = "pip_install"
+fields = { editable = [".", "../lib"] }
+effects = ["build_code", "modify_environment", "network"]
+
+[[case]]
+argv = ["uv", "pip", "install", "--extra-index-url", "https://download.pytorch.org/whl/cpu", "torch"]
+action = "pip_install"
+fields = { extra_index_url = ["https://download.pytorch.org/whl/cpu"], package = ["torch"] }
+effects = ["build_code", "modify_environment", "network", "override_index"]
+
+# The global alias `--trusted-host` before the words.
+[[case]]
+argv = ["uv", "--trusted-host", "pypi.internal", "pip", "install", "x"]
+action = "pip_install"
+fields = { allow_insecure_host = ["pypi.internal"], package = ["x"] }
+effects = ["build_code", "disable_tls_verification", "modify_environment", "network"]
+
+# `--user` is a pip-compatibility flag that uv refuses; it is not declared.
+[[case]]
+argv = ["uv", "pip", "install", "--user", "x"]
+action = "unmodeled"
+
+[[case]]
+argv = ["uv", "pip", "install", "--cert", "ca.pem", "x"]
+action = "unmodeled"
+
+[[case]]
+argv = ["uv", "pip", "sync", "requirements.txt"]
+action = "pip_sync"
+fields = { src_file = ["requirements.txt"] }
+effects = ["build_code", "modify_environment", "network"]
+
+[[case]]
+argv = ["uv", "pip", "sync"]
+action = "unmodeled"
+
+[[case]]
+argv = ["uv", "pip", "compile", "requirements.in", "-o", "requirements.txt", "--universal"]
+action = "pip_compile"
+fields = { src_file = ["requirements.in"], output_file = "requirements.txt", universal = true }
+effects = ["build_code", "network", "write_file"]
+
+[[case]]
+argv = ["uv", "pip", "uninstall", "requests"]
+action = "pip_uninstall"
+fields = { package = ["requests"] }
+effects = ["delete_data", "modify_environment"]
+
+[[case]]
+argv = ["uv", "pip", "uninstall", "--dry-run", "requests"]
+action = "pip_uninstall"
+fields = { dry_run = true, package = ["requests"] }
+effects = []
+
+[[case]]
+argv = ["uv", "pip", "uninstall", "--system", "requests"]
+action = "pip_uninstall"
+fields = { system = true, package = ["requests"] }
+effects = ["delete_data", "modify_environment", "system_python"]
+
+[[case]]
+argv = ["uv", "pip", "list"]
+action = "pip_list"
+effects = ["read_only"]
+
+# Alias `ls` (source `#[command(alias = "ls")]` on `PipCommand::List`).
+[[case]]
+argv = ["uv", "pip", "ls", "--outdated", "--format=json"]
+action = "pip_list"
+fields = { outdated = true, format = "json" }
+effects = ["network", "read_only"]
+
+[[case]]
+argv = ["uv", "pip", "show", "requests", "-f"]
+action = "pip_show"
+fields = { package = ["requests"], files = true }
+effects = ["read_only"]
+
+[[case]]
+argv = ["uv", "pip", "freeze", "--exclude-editable"]
+action = "pip_freeze"
+fields = { exclude_editable = true }
+effects = ["read_only"]
+
+[[case]]
+argv = ["uv", "pip", "check"]
+action = "pip_check"
+effects = ["read_only"]
+
+[[case]]
+argv = ["uv", "pip", "tree", "--depth=2", "--invert"]
+action = "pip_tree"
+fields = { depth = "2", invert = true }
+effects = ["read_only"]
+
+[[case]]
+argv = ["uv", "pip", "debug"]
+action = "unmodeled"
+
+# ---------------------------------------------------------------- cache
+[[case]]
+argv = ["uv", "cache", "clean"]
+action = "cache_clean"
+effects = ["delete_data"]
+
+# Alias `clear` (source `#[command(alias = "clear")]`).
+[[case]]
+argv = ["uv", "cache", "clear", "requests"]
+action = "cache_clean"
+fields = { package = ["requests"] }
+effects = ["delete_data"]
+
+[[case]]
+argv = ["uv", "cache", "prune", "--ci"]
+action = "cache_prune"
+fields = { ci = true }
+effects = ["delete_data"]
+
+[[case]]
+argv = ["uv", "cache", "dir"]
+action = "cache_dir"
+effects = ["read_only"]
+
+[[case]]
+argv = ["uv", "cache", "size", "--human-readable"]
+action = "cache_size"
+fields = { human = true }
+effects = ["read_only"]
+
+[[case]]
+argv = ["uv", "cache", "dir", "--bin"]
+action = "unmodeled"
+
+# ---------------------------------------------------------------- self
+[[case]]
+argv = ["uv", "self", "update"]
+action = "self_update"
+effects = ["modify_user", "network"]
+
+[[case]]
+argv = ["uv", "self", "update", "--dry-run"]
+action = "self_update"
+fields = { dry_run = true }
+effects = ["network"]
+
+[[case]]
+argv = ["uv", "self", "update", "--token", "ghp_example", "0.14.0"]
+action = "self_update"
+fields = { token = "ghp_example", target_version = "0.14.0" }
+effects = ["credentials", "modify_user", "network"]
+
+[[case]]
+argv = ["uv", "self", "version", "--short"]
+action = "self_version"
+fields = { short = true }
+effects = ["read_only"]
+
+# ---------------------------------------------------------------- global options
+# A flag repeats before and after the words (clap `ArgAction::Count`); a cluster `-qq`.
+[[case]]
+argv = ["uv", "-v", "sync", "-v"]
+action = "sync"
+fields = { verbose = true }
+effects = ["build_code", "modify_environment", "modify_project", "network"]
+
+[[case]]
+argv = ["uv", "-qq", "pip", "list"]
+action = "pip_list"
+fields = { quiet = true }
+effects = ["read_only"]
+
+# A value option that is not repeated, given before and after the words, is unmodeled.
+[[case]]
+argv = ["uv", "--cache-dir", "/tmp/a", "sync", "--cache-dir", "/tmp/b"]
+action = "unmodeled"
+
+[[case]]
+argv = ["uv", "--color=never", "-n", "--cache-dir", "/tmp/c", "pip", "list"]
+action = "pip_list"
+fields = { color = "never", no_cache = true, cache_dir = "/tmp/c" }
+effects = ["read_only"]
+
+[[case]]
+argv = ["uv", "--config-file", "ci/uv.toml", "lock"]
+action = "lock"
+fields = { config_file = "ci/uv.toml" }
+effects = ["build_code", "modify_project", "network", "override_config"]
+
+[[case]]
+argv = ["uv", "sync", "--no-config", "--project", "../app"]
+action = "sync"
+fields = { no_config = true, project = "../app" }
+effects = ["build_code", "modify_environment", "modify_project", "network", "other_directory", "override_config"]
+
+[[case]]
+argv = ["uv", "--native-tls", "--system-certs", "--no-progress", "--managed-python", "python", "list"]
+action = "python_list"
+fields = { native_tls = true, system_certs = true, no_progress = true, managed_python = true }
+effects = ["read_only"]
+
+[[case]]
+argv = ["uv", "--no-python-downloads", "--no-managed-python", "--preview", "python", "find"]
+action = "python_find"
+fields = { no_python_downloads = true, no_managed_python = true, preview = true }
+effects = ["read_only"]
+
+# Hidden opposites of declared global flags are not declared.
+[[case]]
+argv = ["uv", "--no-offline", "sync"]
+action = "unmodeled"
+
+[[case]]
+argv = ["uv", "--offline", "sync", "--no-offline"]
+action = "unmodeled"
+
+# Help, version, a bare program, an excluded family, and a case change.
+[[case]]
+argv = ["uv", "--version"]
+action = "unmodeled"
+
+[[case]]
+argv = ["uv", "-V"]
+action = "unmodeled"
+
+[[case]]
+argv = ["uv"]
+action = "unmodeled"
+
+[[case]]
+argv = ["uv", "help", "sync"]
+action = "unmodeled"
+
+[[case]]
+argv = ["uv", "sync", "-h"]
+action = "unmodeled"
+
+[[case]]
+argv = ["uv", "auth", "login", "pypi.org"]
+action = "unmodeled"
+
+[[case]]
+argv = ["uv", "format"]
+action = "unmodeled"
+
+[[case]]
+argv = ["uv", "SYNC"]
+action = "unmodeled"
+
+# A global option that takes a value takes the next word, even one that looks like a flag.
+[[case]]
+argv = ["uv", "--directory", "--offline", "sync"]
+action = "sync"
+fields = { directory = "--offline" }
+effects = ["build_code", "modify_environment", "modify_project", "network", "other_directory"]
+
+# --- independent verifier cases ---
+# Written by the verifier from uv 0.13.7 source (crates/uv-cli/src/lib.rs) and clap behaviour, not from
+# the grammar. Cases marked "Fixed after verification" were failing at cb8a475 (see VERIFY.md).
+
+# External subcommand: every word after the program goes to it, global flags included (clap
+# `external_subcommand`, `RunArgs::command`). Probe: `uv run echo -q hi --no-sync` prints `-q hi --no-sync`.
+[[case]]
+argv = ["uv", "run", "python", "-q", "--offline", "--frozen"]
+action = "run"
+fields = { command = ["python", "-q", "--offline", "--frozen"] }
+effects = ["build_code", "modify_environment", "modify_project", "network", "run_program"]
+
+# Global flags before and after `run` (clap `global = true`), and `--` before the program.
+[[case]]
+argv = ["uv", "-q", "run", "--offline", "--", "python", "-c", "x"]
+action = "run"
+fields = { quiet = true, offline = true, command = ["python", "-c", "x"] }
+effects = ["build_code", "modify_environment", "modify_project", "run_program"]
+
+# A `--` after the program belongs to the program.
+[[case]]
+argv = ["uv", "run", "echo", "--", "x"]
+action = "run"
+fields = { command = ["echo", "--", "x"] }
+effects = ["build_code", "modify_environment", "modify_project", "network", "run_program"]
+
+# A cluster that mixes a global short flag and an action short flag.
+[[case]]
+argv = ["uv", "run", "-qm", "http.server"]
+action = "run"
+fields = { quiet = true, module = true, command = ["http.server"] }
+effects = ["build_code", "modify_environment", "modify_project", "network", "run_program"]
+
+# `--with=v` and `-wv` both give a value; `--with` swallows the next word even when it looks like a program.
+[[case]]
+argv = ["uv", "run", "--with=rich", "-wtyper", "--with", "python", "evil.py"]
+action = "run"
+fields = { with = ["python", "rich", "typer"], command = ["evil.py"] }
+effects = ["build_code", "modify_environment", "modify_project", "network", "run_program"]
+
+# `--no-sync` implies `--frozen` (RunArgs::no_sync doc).
+[[case]]
+argv = ["uv", "run", "--no-sync", "python"]
+action = "run"
+fields = { no_sync = true, command = ["python"] }
+effects = ["build_code", "modify_environment", "network", "run_program"]
+
+# `uv run -m` with no command is an error in uv; the grammar needs a command.
+[[case]]
+argv = ["uv", "run", "-m"]
+action = "unmodeled"
+
+# clap accepts `-p=3.12`; Box reads an attached `=` value as unmodeled (conservative).
+[[case]]
+argv = ["uv", "run", "-p=3.12", "python"]
+action = "unmodeled"
+
+# `--python=v` long form.
+[[case]]
+argv = ["uv", "run", "--python=3.12", "python"]
+action = "run"
+fields = { python = "3.12", command = ["python"] }
+effects = ["build_code", "modify_environment", "modify_project", "network", "run_program"]
+
+# tool run: words after the command go to it, including `--offline`.
+[[case]]
+argv = ["uv", "tool", "run", "--from", "httpie", "http", "--offline", "GET", "x"]
+action = "tool_run"
+fields = { from = "httpie", command = ["http", "--offline", "GET", "x"] }
+effects = ["build_code", "modify_environment", "network", "run_program"]
+
+# Hidden `uv tool uvx` (ToolCommand::Uvx) runs code and is not modeled.
+[[case]]
+argv = ["uv", "tool", "uvx", "ruff"]
+action = "unmodeled"
+
+# uv has no subcommand inference: `cach` is an error (probe on uv 0.12.5: "unrecognized subcommand").
+[[case]]
+argv = ["uv", "cach", "dir"]
+action = "unmodeled"
+
+# The hidden top-level `uv clean` (Commands::Clean) deletes the cache; not modeled.
+[[case]]
+argv = ["uv", "clean"]
+action = "unmodeled"
+
+# Aliases from source: `pip ls`, `v`, `cache clear`, `tool update`, `python ensurepath`.
+[[case]]
+argv = ["uv", "pip", "ls", "--format", "json"]
+action = "pip_list"
+fields = { format = "json" }
+effects = ["read_only"]
+
+[[case]]
+argv = ["uv", "v", "--clear", ".venv"]
+action = "venv"
+fields = { clear = true, path = ".venv" }
+effects = ["delete_data", "modify_environment", "network", "write_file"]
+
+[[case]]
+argv = ["uv", "cache", "clear", "requests"]
+action = "cache_clean"
+fields = { package = ["requests"] }
+effects = ["delete_data"]
+
+[[case]]
+argv = ["uv", "-nq", "tool", "update", "--all"]
+action = "tool_upgrade"
+fields = { no_cache = true, quiet = true, all = true }
+effects = ["build_code", "modify_user", "network"]
+
+# Hidden `--no-offline` overrides `--offline` (GlobalArgs::no_offline); it must not be read.
+[[case]]
+argv = ["uv", "--offline", "sync", "--no-offline"]
+action = "unmodeled"
+
+# A global option between command words is accepted by clap (global = true).
+[[case]]
+argv = ["uv", "pip", "--offline", "install", "-r", "req.txt"]
+action = "pip_install"
+fields = { offline = true, requirements = ["req.txt"] }
+effects = ["build_code", "modify_environment"]
+
+# Credentials in an index URL, plus an insecure host alias.
+[[case]]
+argv = ["uv", "pip", "install", "--trusted-host", "pypi.internal", "--index-url=http://u:pw@pypi.internal/simple", "x"]
+action = "pip_install"
+fields = { allow_insecure_host = ["pypi.internal"], index_url = "http://u:pw@pypi.internal/simple", package = ["x"] }
+effects = ["build_code", "credentials", "disable_tls_verification", "modify_environment", "network", "override_index"]
+
+# `--no-build` still builds editables.
+[[case]]
+argv = ["uv", "pip", "install", "--no-build", "-e", "."]
+action = "pip_install"
+fields = { no_build = true, editable = ["."] }
+effects = ["build_code", "modify_environment", "network"]
+
+# A package name that looks like a flag after `--`.
+[[case]]
+argv = ["uv", "pip", "install", "--", "--system"]
+action = "pip_install"
+fields = { package = ["--system"] }
+effects = ["build_code", "modify_environment", "network"]
+
+# publish: -u/-p password, credentials.
+[[case]]
+argv = ["uv", "publish", "-u", "__token__", "-p", "pypi-secret", "dist/x.whl"]
+action = "publish"
+fields = { username = "__token__", password = "pypi-secret", files = ["dist/x.whl"] }
+effects = ["credentials", "network", "publish"]
+
+# publish: credentials in a publish URL; --dry-run keeps credentials and network.
+[[case]]
+argv = ["uv", "publish", "--dry-run", "--publish-url=https://u:p@upload.example/legacy/"]
+action = "publish"
+fields = { dry_run = true, publish_url = "https://u:p@upload.example/legacy/" }
+effects = ["credentials", "network", "override_index"]
+
+# publish: the hidden local `--offline` (PublishArgs::offline) and any global option are unmodeled.
+[[case]]
+argv = ["uv", "publish", "--offline"]
+action = "unmodeled"
+
+[[case]]
+argv = ["uv", "--directory", "pkg", "publish"]
+action = "unmodeled"
+
+# publish: --trusted-publishing takes a value (enum).
+[[case]]
+argv = ["uv", "publish", "--trusted-publishing", "always"]
+action = "publish"
+fields = { trusted_publishing = "always" }
+effects = ["network", "publish"]
+
+# publish: --keyring-provider is not modeled.
+[[case]]
+argv = ["uv", "publish", "--keyring-provider", "subprocess"]
+action = "unmodeled"
+
+# self update: --token, and --offline (self_update refuses to run offline).
+[[case]]
+argv = ["uv", "self", "update", "--token", "ghp_x", "0.13.8"]
+action = "self_update"
+fields = { token = "ghp_x", target_version = "0.13.8" }
+effects = ["credentials", "modify_user", "network"]
+
+# `--directory=v` after the words (global = true).
+[[case]]
+argv = ["uv", "sync", "--frozen", "--directory=/tmp/other"]
+action = "sync"
+fields = { frozen = true, directory = "/tmp/other" }
+effects = ["build_code", "modify_environment", "network", "other_directory"]
+
+# Fixed after verification (VERIFY.md F1-F4): `--python <path>` executes that file to query it (InterpreterInfo::query,
+# crates/uv-python-interpreter/src/interpreter.rs `Command::new(interpreter)`; probe on uv 0.12.5 ran
+# ./fakepy). The command line names a program that runs, so `run_program` applies.
+[[case]]
+argv = ["uv", "pip", "list", "--python", "./fakepy"]
+action = "pip_list"
+fields = { python = "./fakepy" }
+effects = ["run_program"]
+
+# Fixed after verification (VERIFY.md F1-F4): same, through the `python find` request operand.
+[[case]]
+argv = ["uv", "python", "find", "./fakepy"]
+action = "python_find"
+fields = { request = "./fakepy" }
+effects = ["run_program"]
+
+# Fixed after verification (VERIFY.md F1-F4): `pip install --python <system interpreter>` installs into that interpreter ("it can modify
+# the system Python installation", PipInstallArgs::python doc).
+[[case]]
+argv = ["uv", "pip", "install", "--python", "/usr/bin/python3", "x"]
+action = "pip_install"
+fields = { python = "/usr/bin/python3", package = ["x"] }
+effects = ["build_code", "modify_environment", "network", "run_program", "system_python"]
+
+# Fixed after verification (VERIFY.md F1-F4): `export -o FILE` writes FILE even with `--frozen`.
+[[case]]
+argv = ["uv", "export", "--frozen", "-o", "pyproject.toml"]
+action = "export"
+fields = { frozen = true, output_file = "pyproject.toml" }
+effects = ["build_code", "network", "write_file"]
+
+# Fixed after verification (VERIFY.md F1-F4): `python find --script` may download a Python (ScriptInterpreter::discover ->
+# PythonInstallation::find_or_download, crates/uv-python-discovery/src/script.rs).
+[[case]]
+argv = ["uv", "python", "find", "--script", "s.py"]
+action = "python_find"
+fields = { script = "s.py" }
+effects = ["modify_user", "network"]
+
+# A version request in `--python` is also an executable query: a bare name is looked up on PATH, and
+# `like` cannot tell a version from a name (`uv help python`: `<executable-name>`), so it adds
+# `run_program` and drops `read_only`.
+[[case]]
+argv = ["uv", "pip", "list", "-p", "3.12"]
+action = "pip_list"
+fields = { python = "3.12" }
+effects = ["run_program"]
+
+# `-t/--target` and `--prefix` write into a named directory; `--python` in `pip sync` may pick a system
+# interpreter (PipInstallArgs::python doc).
+[[case]]
+argv = ["uv", "pip", "sync", "--target", "vendor", "-p", "python3", "requirements.txt"]
+action = "pip_sync"
+fields = { target = "vendor", python = "python3", src_file = ["requirements.txt"] }
+effects = ["build_code", "modify_environment", "network", "run_program", "system_python", "write_file"]
+
+[[case]]
+argv = ["uv", "pip", "uninstall", "-p", "/usr/bin/python3", "requests"]
+action = "pip_uninstall"
+fields = { python = "/usr/bin/python3", package = ["requests"] }
+effects = ["delete_data", "modify_environment", "run_program", "system_python"]
+
+# `python install -i` writes into the named directory.
+[[case]]
+argv = ["uv", "python", "install", "-i", "/opt/py", "3.12"]
+action = "python_install"
+fields = { install_dir = "/opt/py", targets = ["3.12"] }
+effects = ["modify_user", "network", "write_file"]
+
+# --- independent verifier cases, round 2 ---
+# Written by the verifier from uv 0.13.7 source and probes on the local uv 0.12.5.
+
+# Fixed after verification (VERIFY.md F8): `uv python list <request>` passes the request to
+# `find_all_python_installations` (crates/uv-python-commands/src/list.rs), which queries the named file.
+# Probe: `uv python list ./fakepy` executed ./fakepy.
+[[case]]
+argv = ["uv", "python", "list", "./fakepy"]
+action = "python_list"
+fields = { request = "./fakepy" }
+effects = ["run_program"]
+
+# `--python=v` long form still adds run_program and drops read_only.
+[[case]]
+argv = ["uv", "pip", "freeze", "--python=./fakepy"]
+action = "pip_freeze"
+fields = { python = "./fakepy" }
+effects = ["run_program"]
+
+# `-pv` attached short value.
+[[case]]
+argv = ["uv", "pip", "show", "-p./fakepy", "requests"]
+action = "pip_show"
+fields = { python = "./fakepy", package = ["requests"] }
+effects = ["run_program"]
+
+# clap accepts `-p=v`; Box reads it as unmodeled, which is the safe direction.
+[[case]]
+argv = ["uv", "pip", "list", "-p=./fakepy"]
+action = "unmodeled"
+
+# The hidden global `--python-preference` is not declared.
+[[case]]
+argv = ["uv", "--python-preference", "only-system", "pip", "list"]
+action = "unmodeled"
+
+# `uv venv -p FILE` and `uv tool install -p FILE` execute FILE.
+[[case]]
+argv = ["uv", "venv", "-p", "./fakepy", "env3"]
+action = "venv"
+fields = { python = "./fakepy", path = "env3" }
+effects = ["modify_environment", "network", "run_program", "write_file"]
+
+[[case]]
+argv = ["uv", "tool", "install", "--python", "./fakepy", "ruff"]
+action = "tool_install"
+fields = { python = "./fakepy", package = "ruff" }
+effects = ["build_code", "modify_user", "network", "run_program"]
+
+# `tool run --from <path>` builds a local project and runs its command.
+[[case]]
+argv = ["uv", "tool", "run", "--from", "./localpkg", "mycmd", "-p", "x"]
+action = "tool_run"
+fields = { from = "./localpkg", command = ["mycmd", "-p", "x"] }
+effects = ["build_code", "modify_environment", "network", "run_program"]
+
+# `uv run --script` runs the script.
+[[case]]
+argv = ["uv", "run", "--script", "s.py", "--python", "3.12"]
+action = "run"
+fields = { script = true, command = ["s.py", "--python", "3.12"] }
+effects = ["build_code", "modify_environment", "modify_project", "network", "run_program"]
+
+# `uv build <sdist>` runs the sdist's build backend.
+[[case]]
+argv = ["uv", "build", "--wheel", "pkg-1.0.tar.gz"]
+action = "build"
+fields = { wheel = true, src = "pkg-1.0.tar.gz" }
+effects = ["build_code", "network"]
+
+# `--target=v` writes into the named directory.
+[[case]]
+argv = ["uv", "pip", "install", "--target=./vendor", "x"]
+action = "pip_install"
+fields = { target = "./vendor", package = ["x"] }
+effects = ["build_code", "modify_environment", "network", "write_file"]
+
+# `pip list --target` reads only; no write_file there.
+[[case]]
+argv = ["uv", "pip", "list", "--target", "./vendor"]
+action = "pip_list"
+fields = { target = "./vendor" }
+effects = ["read_only"]
+
+# `pip compile -o` writes; `--offline` removes network only.
+[[case]]
+argv = ["uv", "--offline", "pip", "compile", "-orequirements.txt", "requirements.in"]
+action = "pip_compile"
+fields = { offline = true, output_file = "requirements.txt", src_file = ["requirements.in"] }
+effects = ["build_code", "write_file"]
+
+# --- independent verifier cases, round 3 ---
+# The `python ls` alias reaches the same request operand.
+[[case]]
+argv = ["uv", "python", "ls", "/tmp/x/python3"]
+action = "python_list"
+fields = { request = "/tmp/x/python3" }
+effects = ["run_program"]
+
+# `--only-downloads` skips the query in uv, but the grammar over-approximates (safe direction).
+[[case]]
+argv = ["uv", "python", "list", "--only-downloads", "3.13"]
+action = "python_list"
+fields = { only_downloads = true, request = "3.13" }
+effects = ["run_program"]
+
+# With no request, `python list` stays read_only (it queries discovered interpreters, a stated residual).
+[[case]]
+argv = ["uv", "python", "list", "--only-installed"]
+action = "python_list"
+fields = { only_installed = true }
+effects = ["read_only"]
