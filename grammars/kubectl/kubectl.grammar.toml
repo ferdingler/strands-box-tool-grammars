@@ -75,7 +75,8 @@ options.match_server_version = { flag = ["--match-server-version"], value = "opt
 # ---------------------------------------------------------------------------------------------
 
 # kubectl get [TYPE[.VERSION][.GROUP] [NAME...] | TYPE/NAME...]. A Secret type (any case, because
-# the RESTMapper lowercases the resource) adds `read_secrets`. --raw is not modeled.
+# the RESTMapper lowercases the resource) adds `read_secrets`, and so does -f/-k, because the file
+# can name a Secret. --raw is not modeled.
 [shell.get]
 usage = "kubectl [global options] get [options] [<type>] [<name>...]"
 adds  = ["cluster_read"]
@@ -83,9 +84,9 @@ options.all_namespaces = { flag = ["-A", "--all-namespaces"] }
 options.allow_missing_template_keys = { flag = ["--allow-missing-template-keys"], value = "optional" }
 options.chunk_size     = { flag = ["--chunk-size"], value = "required" }
 options.field_selector = { flag = ["--field-selector"], value = "required" }
-options.filename       = { flag = ["-f", "--filename"], value = "required", repeated = true, adds = ["manifest_input"] }
+options.filename       = { flag = ["-f", "--filename"], value = "required", repeated = true, adds = ["manifest_input", "read_secrets"] }
 options.ignore_not_found = { flag = ["--ignore-not-found"], value = "optional" }
-options.kustomize      = { flag = ["-k", "--kustomize"], value = "required", adds = ["manifest_input"] }
+options.kustomize      = { flag = ["-k", "--kustomize"], value = "required", adds = ["manifest_input", "read_secrets"] }
 options.label_columns  = { flag = ["-L", "--label-columns"], value = "required", repeated = true }
 options.no_headers     = { flag = ["--no-headers"], value = "optional" }
 options.output         = { flag = ["-o", "--output"], value = "required" }
@@ -136,19 +137,55 @@ like = [
   "*SECRet*/*", "*SECReT*/*", "*SECREt*/*", "*SECRET*/*",
 ]
 
-# kubectl describe. It prints the keys and sizes of a Secret's data, not the values.
+# kubectl describe. For a service-account-token Secret it prints the token (describe.go
+# describeSecret), so a Secret type or a -f/-k input adds `read_secrets`.
 [shell.describe]
 usage = "kubectl [global options] describe [options] [<type>] [<name>...]"
 adds  = ["cluster_read"]
 options.all_namespaces = { flag = ["-A", "--all-namespaces"] }
 options.chunk_size     = { flag = ["--chunk-size"], value = "required" }
-options.filename       = { flag = ["-f", "--filename"], value = "required", repeated = true, adds = ["manifest_input"] }
-options.kustomize      = { flag = ["-k", "--kustomize"], value = "required", adds = ["manifest_input"] }
+options.filename       = { flag = ["-f", "--filename"], value = "required", repeated = true, adds = ["manifest_input", "read_secrets"] }
+options.kustomize      = { flag = ["-k", "--kustomize"], value = "required", adds = ["manifest_input", "read_secrets"] }
 options.recursive      = { flag = ["-R", "--recursive"] }
 options.selector       = { flag = ["-l", "--selector"], value = "required" }
 options.show_events    = { flag = ["--show-events"], value = "optional" }
 
 # kubectl logs [-f] [-p] (POD | TYPE/NAME) [CONTAINER]. Zero operands needs -l.
+
+[shell.describe.operands.type]
+adds = ["read_secrets"]
+# Every upper and lower case spelling of `secret`.
+like = [
+  "*secret*", "*secreT*", "*secrEt*", "*secrET*", "*secRet*", "*secReT*",
+  "*secREt*", "*secRET*", "*seCret*", "*seCreT*", "*seCrEt*", "*seCrET*",
+  "*seCRet*", "*seCReT*", "*seCREt*", "*seCRET*", "*sEcret*", "*sEcreT*",
+  "*sEcrEt*", "*sEcrET*", "*sEcRet*", "*sEcReT*", "*sEcREt*", "*sEcRET*",
+  "*sECret*", "*sECreT*", "*sECrEt*", "*sECrET*", "*sECRet*", "*sECReT*",
+  "*sECREt*", "*sECRET*", "*Secret*", "*SecreT*", "*SecrEt*", "*SecrET*",
+  "*SecRet*", "*SecReT*", "*SecREt*", "*SecRET*", "*SeCret*", "*SeCreT*",
+  "*SeCrEt*", "*SeCrET*", "*SeCRet*", "*SeCReT*", "*SeCREt*", "*SeCRET*",
+  "*SEcret*", "*SEcreT*", "*SEcrEt*", "*SEcrET*", "*SEcRet*", "*SEcReT*",
+  "*SEcREt*", "*SEcRET*", "*SECret*", "*SECreT*", "*SECrEt*", "*SECrET*",
+  "*SECRet*", "*SECReT*", "*SECREt*", "*SECRET*",
+]
+
+[shell.describe.operands.name]
+adds = ["read_secrets"]
+# A TYPE/NAME word whose type is a Secret, in any case.
+like = [
+  "*secret*/*", "*secreT*/*", "*secrEt*/*", "*secrET*/*", "*secRet*/*", "*secReT*/*",
+  "*secREt*/*", "*secRET*/*", "*seCret*/*", "*seCreT*/*", "*seCrEt*/*", "*seCrET*/*",
+  "*seCRet*/*", "*seCReT*/*", "*seCREt*/*", "*seCRET*/*", "*sEcret*/*", "*sEcreT*/*",
+  "*sEcrEt*/*", "*sEcrET*/*", "*sEcRet*/*", "*sEcReT*/*", "*sEcREt*/*", "*sEcRET*/*",
+  "*sECret*/*", "*sECreT*/*", "*sECrEt*/*", "*sECrET*/*", "*sECRet*/*", "*sECReT*/*",
+  "*sECREt*/*", "*sECRET*/*", "*Secret*/*", "*SecreT*/*", "*SecrEt*/*", "*SecrET*/*",
+  "*SecRet*/*", "*SecReT*/*", "*SecREt*/*", "*SecRET*/*", "*SeCret*/*", "*SeCreT*/*",
+  "*SeCrEt*/*", "*SeCrET*/*", "*SeCRet*/*", "*SeCReT*/*", "*SeCREt*/*", "*SeCRET*/*",
+  "*SEcret*/*", "*SEcreT*/*", "*SEcrEt*/*", "*SEcrET*/*", "*SEcRet*/*", "*SEcReT*/*",
+  "*SEcREt*/*", "*SEcRET*/*", "*SECret*/*", "*SECreT*/*", "*SECrEt*/*", "*SECrET*/*",
+  "*SECRet*/*", "*SECReT*/*", "*SECREt*/*", "*SECRET*/*",
+]
+
 [shell.logs]
 usage = "kubectl [global options] logs [options] [<pod>] [<container>]"
 adds  = ["cluster_read"]
@@ -274,13 +311,15 @@ options.template  = { flag = ["--template"], value = "required" }
 # Local kubeconfig. These do not contact the cluster.
 # ---------------------------------------------------------------------------------------------
 
-# kubectl config view redacts credentials unless --raw or --flatten is true.
+# kubectl config view redacts only some fields: auth-provider config (OIDC tokens) and exec env
+# values print in clear (client-go RedactSecrets), so it always adds `read_secrets`.
 [shell.config_view]
 usage = "kubectl [global options] config view [options]"
-options.flatten  = { flag = ["--flatten"], value = "optional", like = ["", "true", "True", "TRUE", "t", "T", "1"], adds = ["read_secrets"] }
+adds  = ["read_secrets"]
+options.flatten  = { flag = ["--flatten"], value = "optional" }
 options.minify   = { flag = ["--minify"], value = "optional" }
 options.output   = { flag = ["-o", "--output"], value = "required" }
-options.raw      = { flag = ["--raw"], value = "optional", like = ["", "true", "True", "TRUE", "t", "T", "1"], adds = ["read_secrets"] }
+options.raw      = { flag = ["--raw"], value = "optional" }
 options.template = { flag = ["--template"], value = "required" }
 
 [shell.config_get_contexts]
@@ -295,12 +334,15 @@ usage = "kubectl [global options] config current-context"
 [shell.config_use_context]
 usage   = "kubectl [global options] config use-context <context_name>"
 aliases = ["config use"]
-adds    = ["override_config"]
+adds    = ["override_config", "change_target"]
 
 # ---------------------------------------------------------------------------------------------
 # Writes. --dry-run is `value = "optional"`: pflag sets NoOptDefVal "unchanged", so a bare
 # --dry-run is client dry-run and `--dry-run server` is a bare --dry-run and an operand. Each true
 # boolean, `unchanged`, `client`, and `server` removes the write effects; `none` and false keep them.
+# A dry run never removes `read_secrets`. On apply, create -f, patch, label, annotate, scale, and
+# create secret generic, -o and --template print the object, so they add `read_secrets`; so does a
+# Secret type on patch, label, annotate, and scale.
 # ---------------------------------------------------------------------------------------------
 
 [shell.apply]
@@ -316,7 +358,7 @@ options.force     = { flag = ["--force"], value = "optional", like = ["", "true"
 options.force_conflicts = { flag = ["--force-conflicts"], value = "optional" }
 options.grace_period = { flag = ["--grace-period"], value = "required" }
 options.kustomize = { flag = ["-k", "--kustomize"], value = "required", adds = ["manifest_input"] }
-options.output    = { flag = ["-o", "--output"], value = "required" }
+options.output    = { flag = ["-o", "--output"], value = "required", adds = ["read_secrets"] }
 options.overwrite = { flag = ["--overwrite"], value = "optional" }
 options.prune     = { flag = ["--prune"], value = "optional", like = ["", "true", "True", "TRUE", "t", "T", "1"], adds = ["cluster_delete", "broad_delete"] }
 options.prune_allowlist = { flag = ["--prune-allowlist"], value = "required", repeated = true }
@@ -324,7 +366,7 @@ options.recursive = { flag = ["-R", "--recursive"] }
 options.selector  = { flag = ["-l", "--selector"], value = "required" }
 options.server_side = { flag = ["--server-side"], value = "optional" }
 options.show_managed_fields = { flag = ["--show-managed-fields"], value = "optional" }
-options.template  = { flag = ["--template"], value = "required" }
+options.template  = { flag = ["--template"], value = "required", adds = ["read_secrets"] }
 options.timeout   = { flag = ["--timeout"], value = "required" }
 options.validate  = { flag = ["--validate"], value = "optional" }
 options.wait      = { flag = ["--wait"], value = "optional" }
@@ -338,12 +380,12 @@ options.dry_run   = { flag = ["--dry-run"], value = "optional", like = ["", "unc
 options.field_manager = { flag = ["--field-manager"], value = "required" }
 options.filename  = { flag = ["-f", "--filename"], value = "required", repeated = true, adds = ["manifest_input"] }
 options.kustomize = { flag = ["-k", "--kustomize"], value = "required", adds = ["manifest_input"] }
-options.output    = { flag = ["-o", "--output"], value = "required" }
+options.output    = { flag = ["-o", "--output"], value = "required", adds = ["read_secrets"] }
 options.recursive = { flag = ["-R", "--recursive"] }
 options.save_config = { flag = ["--save-config"], value = "optional" }
 options.selector  = { flag = ["-l", "--selector"], value = "required" }
 options.show_managed_fields = { flag = ["--show-managed-fields"], value = "optional" }
-options.template  = { flag = ["--template"], value = "required" }
+options.template  = { flag = ["--template"], value = "required", adds = ["read_secrets"] }
 options.validate  = { flag = ["--validate"], value = "optional" }
 
 [shell.create_namespace]
@@ -371,10 +413,10 @@ options.field_manager = { flag = ["--field-manager"], value = "required" }
 options.from_env_file = { flag = ["--from-env-file"], value = "required", repeated = true, adds = ["upload_files"] }
 options.from_file = { flag = ["--from-file"], value = "required", repeated = true, adds = ["upload_files"] }
 options.from_literal = { flag = ["--from-literal"], value = "required", repeated = true }
-options.output    = { flag = ["-o", "--output"], value = "required" }
+options.output    = { flag = ["-o", "--output"], value = "required", adds = ["read_secrets"] }
 options.save_config = { flag = ["--save-config"], value = "optional" }
 options.show_managed_fields = { flag = ["--show-managed-fields"], value = "optional" }
-options.template  = { flag = ["--template"], value = "required" }
+options.template  = { flag = ["--template"], value = "required", adds = ["read_secrets"] }
 options.type      = { flag = ["--type"], value = "required" }
 options.validate  = { flag = ["--validate"], value = "optional" }
 
@@ -414,6 +456,8 @@ options.template  = { flag = ["--template"], value = "required" }
 options.validate  = { flag = ["--validate"], value = "optional" }
 
 # kubectl delete ([-f FILENAME] | [-k DIRECTORY] | TYPE [(NAME | -l label | --all)]).
+# A Namespace or a CustomResourceDefinition removes every object in it, so it adds `broad_delete`;
+# so do -R and -k. A Secret adds `write_secrets`.
 # --raw and --interactive (a prompt) are not modeled.
 [shell.delete]
 usage = "kubectl [global options] delete [options] [<type>] [<name>...]"
@@ -421,22 +465,207 @@ adds  = ["cluster_delete"]
 options.all       = { flag = ["--all"], value = "optional", like = ["", "true", "True", "TRUE", "t", "T", "1"], adds = ["broad_delete"] }
 options.all_namespaces = { flag = ["-A", "--all-namespaces"], adds = ["broad_delete"] }
 options.cascade   = { flag = ["--cascade"], value = "optional" }
-options.dry_run   = { flag = ["--dry-run"], value = "optional", like = ["", "unchanged", "client", "server", "true", "True", "TRUE", "t", "T", "1"], removes = ["cluster_delete", "broad_delete"] }
+options.dry_run   = { flag = ["--dry-run"], value = "optional", like = ["", "unchanged", "client", "server", "true", "True", "TRUE", "t", "T", "1"], removes = ["cluster_delete", "broad_delete", "write_secrets"] }
 options.field_selector = { flag = ["--field-selector"], value = "required", adds = ["broad_delete"] }
 options.filename  = { flag = ["-f", "--filename"], value = "required", repeated = true, adds = ["manifest_input"] }
 options.force     = { flag = ["--force"], value = "optional" }
 options.grace_period = { flag = ["--grace-period"], value = "required" }
 options.ignore_not_found = { flag = ["--ignore-not-found"], value = "optional" }
-options.kustomize = { flag = ["-k", "--kustomize"], value = "required", adds = ["manifest_input"] }
+options.kustomize = { flag = ["-k", "--kustomize"], value = "required", adds = ["manifest_input", "broad_delete"] }
 options.now       = { flag = ["--now"], value = "optional" }
 options.output    = { flag = ["-o", "--output"], value = "required" }
-options.recursive = { flag = ["-R", "--recursive"] }
+options.recursive = { flag = ["-R", "--recursive"], adds = ["broad_delete"] }
 options.selector  = { flag = ["-l", "--selector"], value = "required", adds = ["broad_delete"] }
 options.timeout   = { flag = ["--timeout"], value = "required" }
 options.wait      = { flag = ["--wait"], value = "optional" }
 
 # kubectl patch (-f FILENAME | TYPE NAME | TYPE/NAME). A patch to a Secret adds `write_secrets`.
 # --local only prints the patched object, so it removes the write effects.
+
+[shell.delete.operands.type]
+# A Secret, in any case.
+[[shell.delete.operands.type.when]]
+like = [
+  "*secret*", "*secreT*", "*secrEt*", "*secrET*", "*secRet*", "*secReT*",
+  "*secREt*", "*secRET*", "*seCret*", "*seCreT*", "*seCrEt*", "*seCrET*",
+  "*seCRet*", "*seCReT*", "*seCREt*", "*seCRET*", "*sEcret*", "*sEcreT*",
+  "*sEcrEt*", "*sEcrET*", "*sEcRet*", "*sEcReT*", "*sEcREt*", "*sEcRET*",
+  "*sECret*", "*sECreT*", "*sECrEt*", "*sECrET*", "*sECRet*", "*sECReT*",
+  "*sECREt*", "*sECRET*", "*Secret*", "*SecreT*", "*SecrEt*", "*SecrET*",
+  "*SecRet*", "*SecReT*", "*SecREt*", "*SecRET*", "*SeCret*", "*SeCreT*",
+  "*SeCrEt*", "*SeCrET*", "*SeCRet*", "*SeCReT*", "*SeCREt*", "*SeCRET*",
+  "*SEcret*", "*SEcreT*", "*SEcrEt*", "*SEcrET*", "*SEcRet*", "*SEcReT*",
+  "*SEcREt*", "*SEcRET*", "*SECret*", "*SECreT*", "*SECrEt*", "*SECrET*",
+  "*SECRet*", "*SECReT*", "*SECREt*", "*SECRET*",
+]
+adds = ["write_secrets"]
+
+# A Namespace (`ns`, `namespace`, any case) or a CustomResourceDefinition (`crd` in any case;
+# the long name in lower, Title, Kind, and upper case only).
+[[shell.delete.operands.type.when]]
+like = [
+  "ns", "ns/*", "ns,*", "*,ns", "*,ns,*", "nS", "nS/*", "nS,*",
+  "*,nS", "*,nS,*", "Ns", "Ns/*", "Ns,*", "*,Ns", "*,Ns,*", "NS",
+  "NS/*", "NS,*", "*,NS", "*,NS,*", "*namespace*", "*namespacE*", "*namespaCe*", "*namespaCE*",
+  "*namespAce*", "*namespAcE*", "*namespACe*", "*namespACE*", "*namesPace*", "*namesPacE*", "*namesPaCe*", "*namesPaCE*",
+  "*namesPAce*", "*namesPAcE*", "*namesPACe*", "*namesPACE*", "*nameSpace*", "*nameSpacE*", "*nameSpaCe*", "*nameSpaCE*",
+  "*nameSpAce*", "*nameSpAcE*", "*nameSpACe*", "*nameSpACE*", "*nameSPace*", "*nameSPacE*", "*nameSPaCe*", "*nameSPaCE*",
+  "*nameSPAce*", "*nameSPAcE*", "*nameSPACe*", "*nameSPACE*", "*namEspace*", "*namEspacE*", "*namEspaCe*", "*namEspaCE*",
+  "*namEspAce*", "*namEspAcE*", "*namEspACe*", "*namEspACE*", "*namEsPace*", "*namEsPacE*", "*namEsPaCe*", "*namEsPaCE*",
+  "*namEsPAce*", "*namEsPAcE*", "*namEsPACe*", "*namEsPACE*", "*namESpace*", "*namESpacE*", "*namESpaCe*", "*namESpaCE*",
+  "*namESpAce*", "*namESpAcE*", "*namESpACe*", "*namESpACE*", "*namESPace*", "*namESPacE*", "*namESPaCe*", "*namESPaCE*",
+  "*namESPAce*", "*namESPAcE*", "*namESPACe*", "*namESPACE*", "*naMespace*", "*naMespacE*", "*naMespaCe*", "*naMespaCE*",
+  "*naMespAce*", "*naMespAcE*", "*naMespACe*", "*naMespACE*", "*naMesPace*", "*naMesPacE*", "*naMesPaCe*", "*naMesPaCE*",
+  "*naMesPAce*", "*naMesPAcE*", "*naMesPACe*", "*naMesPACE*", "*naMeSpace*", "*naMeSpacE*", "*naMeSpaCe*", "*naMeSpaCE*",
+  "*naMeSpAce*", "*naMeSpAcE*", "*naMeSpACe*", "*naMeSpACE*", "*naMeSPace*", "*naMeSPacE*", "*naMeSPaCe*", "*naMeSPaCE*",
+  "*naMeSPAce*", "*naMeSPAcE*", "*naMeSPACe*", "*naMeSPACE*", "*naMEspace*", "*naMEspacE*", "*naMEspaCe*", "*naMEspaCE*",
+  "*naMEspAce*", "*naMEspAcE*", "*naMEspACe*", "*naMEspACE*", "*naMEsPace*", "*naMEsPacE*", "*naMEsPaCe*", "*naMEsPaCE*",
+  "*naMEsPAce*", "*naMEsPAcE*", "*naMEsPACe*", "*naMEsPACE*", "*naMESpace*", "*naMESpacE*", "*naMESpaCe*", "*naMESpaCE*",
+  "*naMESpAce*", "*naMESpAcE*", "*naMESpACe*", "*naMESpACE*", "*naMESPace*", "*naMESPacE*", "*naMESPaCe*", "*naMESPaCE*",
+  "*naMESPAce*", "*naMESPAcE*", "*naMESPACe*", "*naMESPACE*", "*nAmespace*", "*nAmespacE*", "*nAmespaCe*", "*nAmespaCE*",
+  "*nAmespAce*", "*nAmespAcE*", "*nAmespACe*", "*nAmespACE*", "*nAmesPace*", "*nAmesPacE*", "*nAmesPaCe*", "*nAmesPaCE*",
+  "*nAmesPAce*", "*nAmesPAcE*", "*nAmesPACe*", "*nAmesPACE*", "*nAmeSpace*", "*nAmeSpacE*", "*nAmeSpaCe*", "*nAmeSpaCE*",
+  "*nAmeSpAce*", "*nAmeSpAcE*", "*nAmeSpACe*", "*nAmeSpACE*", "*nAmeSPace*", "*nAmeSPacE*", "*nAmeSPaCe*", "*nAmeSPaCE*",
+  "*nAmeSPAce*", "*nAmeSPAcE*", "*nAmeSPACe*", "*nAmeSPACE*", "*nAmEspace*", "*nAmEspacE*", "*nAmEspaCe*", "*nAmEspaCE*",
+  "*nAmEspAce*", "*nAmEspAcE*", "*nAmEspACe*", "*nAmEspACE*", "*nAmEsPace*", "*nAmEsPacE*", "*nAmEsPaCe*", "*nAmEsPaCE*",
+  "*nAmEsPAce*", "*nAmEsPAcE*", "*nAmEsPACe*", "*nAmEsPACE*", "*nAmESpace*", "*nAmESpacE*", "*nAmESpaCe*", "*nAmESpaCE*",
+  "*nAmESpAce*", "*nAmESpAcE*", "*nAmESpACe*", "*nAmESpACE*", "*nAmESPace*", "*nAmESPacE*", "*nAmESPaCe*", "*nAmESPaCE*",
+  "*nAmESPAce*", "*nAmESPAcE*", "*nAmESPACe*", "*nAmESPACE*", "*nAMespace*", "*nAMespacE*", "*nAMespaCe*", "*nAMespaCE*",
+  "*nAMespAce*", "*nAMespAcE*", "*nAMespACe*", "*nAMespACE*", "*nAMesPace*", "*nAMesPacE*", "*nAMesPaCe*", "*nAMesPaCE*",
+  "*nAMesPAce*", "*nAMesPAcE*", "*nAMesPACe*", "*nAMesPACE*", "*nAMeSpace*", "*nAMeSpacE*", "*nAMeSpaCe*", "*nAMeSpaCE*",
+  "*nAMeSpAce*", "*nAMeSpAcE*", "*nAMeSpACe*", "*nAMeSpACE*", "*nAMeSPace*", "*nAMeSPacE*", "*nAMeSPaCe*", "*nAMeSPaCE*",
+  "*nAMeSPAce*", "*nAMeSPAcE*", "*nAMeSPACe*", "*nAMeSPACE*", "*nAMEspace*", "*nAMEspacE*", "*nAMEspaCe*", "*nAMEspaCE*",
+  "*nAMEspAce*", "*nAMEspAcE*", "*nAMEspACe*", "*nAMEspACE*", "*nAMEsPace*", "*nAMEsPacE*", "*nAMEsPaCe*", "*nAMEsPaCE*",
+  "*nAMEsPAce*", "*nAMEsPAcE*", "*nAMEsPACe*", "*nAMEsPACE*", "*nAMESpace*", "*nAMESpacE*", "*nAMESpaCe*", "*nAMESpaCE*",
+  "*nAMESpAce*", "*nAMESpAcE*", "*nAMESpACe*", "*nAMESpACE*", "*nAMESPace*", "*nAMESPacE*", "*nAMESPaCe*", "*nAMESPaCE*",
+  "*nAMESPAce*", "*nAMESPAcE*", "*nAMESPACe*", "*nAMESPACE*", "*Namespace*", "*NamespacE*", "*NamespaCe*", "*NamespaCE*",
+  "*NamespAce*", "*NamespAcE*", "*NamespACe*", "*NamespACE*", "*NamesPace*", "*NamesPacE*", "*NamesPaCe*", "*NamesPaCE*",
+  "*NamesPAce*", "*NamesPAcE*", "*NamesPACe*", "*NamesPACE*", "*NameSpace*", "*NameSpacE*", "*NameSpaCe*", "*NameSpaCE*",
+  "*NameSpAce*", "*NameSpAcE*", "*NameSpACe*", "*NameSpACE*", "*NameSPace*", "*NameSPacE*", "*NameSPaCe*", "*NameSPaCE*",
+  "*NameSPAce*", "*NameSPAcE*", "*NameSPACe*", "*NameSPACE*", "*NamEspace*", "*NamEspacE*", "*NamEspaCe*", "*NamEspaCE*",
+  "*NamEspAce*", "*NamEspAcE*", "*NamEspACe*", "*NamEspACE*", "*NamEsPace*", "*NamEsPacE*", "*NamEsPaCe*", "*NamEsPaCE*",
+  "*NamEsPAce*", "*NamEsPAcE*", "*NamEsPACe*", "*NamEsPACE*", "*NamESpace*", "*NamESpacE*", "*NamESpaCe*", "*NamESpaCE*",
+  "*NamESpAce*", "*NamESpAcE*", "*NamESpACe*", "*NamESpACE*", "*NamESPace*", "*NamESPacE*", "*NamESPaCe*", "*NamESPaCE*",
+  "*NamESPAce*", "*NamESPAcE*", "*NamESPACe*", "*NamESPACE*", "*NaMespace*", "*NaMespacE*", "*NaMespaCe*", "*NaMespaCE*",
+  "*NaMespAce*", "*NaMespAcE*", "*NaMespACe*", "*NaMespACE*", "*NaMesPace*", "*NaMesPacE*", "*NaMesPaCe*", "*NaMesPaCE*",
+  "*NaMesPAce*", "*NaMesPAcE*", "*NaMesPACe*", "*NaMesPACE*", "*NaMeSpace*", "*NaMeSpacE*", "*NaMeSpaCe*", "*NaMeSpaCE*",
+  "*NaMeSpAce*", "*NaMeSpAcE*", "*NaMeSpACe*", "*NaMeSpACE*", "*NaMeSPace*", "*NaMeSPacE*", "*NaMeSPaCe*", "*NaMeSPaCE*",
+  "*NaMeSPAce*", "*NaMeSPAcE*", "*NaMeSPACe*", "*NaMeSPACE*", "*NaMEspace*", "*NaMEspacE*", "*NaMEspaCe*", "*NaMEspaCE*",
+  "*NaMEspAce*", "*NaMEspAcE*", "*NaMEspACe*", "*NaMEspACE*", "*NaMEsPace*", "*NaMEsPacE*", "*NaMEsPaCe*", "*NaMEsPaCE*",
+  "*NaMEsPAce*", "*NaMEsPAcE*", "*NaMEsPACe*", "*NaMEsPACE*", "*NaMESpace*", "*NaMESpacE*", "*NaMESpaCe*", "*NaMESpaCE*",
+  "*NaMESpAce*", "*NaMESpAcE*", "*NaMESpACe*", "*NaMESpACE*", "*NaMESPace*", "*NaMESPacE*", "*NaMESPaCe*", "*NaMESPaCE*",
+  "*NaMESPAce*", "*NaMESPAcE*", "*NaMESPACe*", "*NaMESPACE*", "*NAmespace*", "*NAmespacE*", "*NAmespaCe*", "*NAmespaCE*",
+  "*NAmespAce*", "*NAmespAcE*", "*NAmespACe*", "*NAmespACE*", "*NAmesPace*", "*NAmesPacE*", "*NAmesPaCe*", "*NAmesPaCE*",
+  "*NAmesPAce*", "*NAmesPAcE*", "*NAmesPACe*", "*NAmesPACE*", "*NAmeSpace*", "*NAmeSpacE*", "*NAmeSpaCe*", "*NAmeSpaCE*",
+  "*NAmeSpAce*", "*NAmeSpAcE*", "*NAmeSpACe*", "*NAmeSpACE*", "*NAmeSPace*", "*NAmeSPacE*", "*NAmeSPaCe*", "*NAmeSPaCE*",
+  "*NAmeSPAce*", "*NAmeSPAcE*", "*NAmeSPACe*", "*NAmeSPACE*", "*NAmEspace*", "*NAmEspacE*", "*NAmEspaCe*", "*NAmEspaCE*",
+  "*NAmEspAce*", "*NAmEspAcE*", "*NAmEspACe*", "*NAmEspACE*", "*NAmEsPace*", "*NAmEsPacE*", "*NAmEsPaCe*", "*NAmEsPaCE*",
+  "*NAmEsPAce*", "*NAmEsPAcE*", "*NAmEsPACe*", "*NAmEsPACE*", "*NAmESpace*", "*NAmESpacE*", "*NAmESpaCe*", "*NAmESpaCE*",
+  "*NAmESpAce*", "*NAmESpAcE*", "*NAmESpACe*", "*NAmESpACE*", "*NAmESPace*", "*NAmESPacE*", "*NAmESPaCe*", "*NAmESPaCE*",
+  "*NAmESPAce*", "*NAmESPAcE*", "*NAmESPACe*", "*NAmESPACE*", "*NAMespace*", "*NAMespacE*", "*NAMespaCe*", "*NAMespaCE*",
+  "*NAMespAce*", "*NAMespAcE*", "*NAMespACe*", "*NAMespACE*", "*NAMesPace*", "*NAMesPacE*", "*NAMesPaCe*", "*NAMesPaCE*",
+  "*NAMesPAce*", "*NAMesPAcE*", "*NAMesPACe*", "*NAMesPACE*", "*NAMeSpace*", "*NAMeSpacE*", "*NAMeSpaCe*", "*NAMeSpaCE*",
+  "*NAMeSpAce*", "*NAMeSpAcE*", "*NAMeSpACe*", "*NAMeSpACE*", "*NAMeSPace*", "*NAMeSPacE*", "*NAMeSPaCe*", "*NAMeSPaCE*",
+  "*NAMeSPAce*", "*NAMeSPAcE*", "*NAMeSPACe*", "*NAMeSPACE*", "*NAMEspace*", "*NAMEspacE*", "*NAMEspaCe*", "*NAMEspaCE*",
+  "*NAMEspAce*", "*NAMEspAcE*", "*NAMEspACe*", "*NAMEspACE*", "*NAMEsPace*", "*NAMEsPacE*", "*NAMEsPaCe*", "*NAMEsPaCE*",
+  "*NAMEsPAce*", "*NAMEsPAcE*", "*NAMEsPACe*", "*NAMEsPACE*", "*NAMESpace*", "*NAMESpacE*", "*NAMESpaCe*", "*NAMESpaCE*",
+  "*NAMESpAce*", "*NAMESpAcE*", "*NAMESpACe*", "*NAMESpACE*", "*NAMESPace*", "*NAMESPacE*", "*NAMESPaCe*", "*NAMESPaCE*",
+  "*NAMESPAce*", "*NAMESPAcE*", "*NAMESPACe*", "*NAMESPACE*", "*crd*", "*crD*", "*cRd*", "*cRD*",
+  "*Crd*", "*CrD*", "*CRd*", "*CRD*", "*customresourcedefinition*", "*CustomResourceDefinition*", "*Customresourcedefinition*", "*CUSTOMRESOURCEDEFINITION*",
+]
+adds = ["broad_delete"]
+
+[shell.delete.operands.name]
+# A Secret, in any case.
+[[shell.delete.operands.name.when]]
+like = [
+  "*secret*/*", "*secreT*/*", "*secrEt*/*", "*secrET*/*", "*secRet*/*", "*secReT*/*",
+  "*secREt*/*", "*secRET*/*", "*seCret*/*", "*seCreT*/*", "*seCrEt*/*", "*seCrET*/*",
+  "*seCRet*/*", "*seCReT*/*", "*seCREt*/*", "*seCRET*/*", "*sEcret*/*", "*sEcreT*/*",
+  "*sEcrEt*/*", "*sEcrET*/*", "*sEcRet*/*", "*sEcReT*/*", "*sEcREt*/*", "*sEcRET*/*",
+  "*sECret*/*", "*sECreT*/*", "*sECrEt*/*", "*sECrET*/*", "*sECRet*/*", "*sECReT*/*",
+  "*sECREt*/*", "*sECRET*/*", "*Secret*/*", "*SecreT*/*", "*SecrEt*/*", "*SecrET*/*",
+  "*SecRet*/*", "*SecReT*/*", "*SecREt*/*", "*SecRET*/*", "*SeCret*/*", "*SeCreT*/*",
+  "*SeCrEt*/*", "*SeCrET*/*", "*SeCRet*/*", "*SeCReT*/*", "*SeCREt*/*", "*SeCRET*/*",
+  "*SEcret*/*", "*SEcreT*/*", "*SEcrEt*/*", "*SEcrET*/*", "*SEcRet*/*", "*SEcReT*/*",
+  "*SEcREt*/*", "*SEcRET*/*", "*SECret*/*", "*SECreT*/*", "*SECrEt*/*", "*SECrET*/*",
+  "*SECRet*/*", "*SECReT*/*", "*SECREt*/*", "*SECRET*/*",
+]
+adds = ["write_secrets"]
+
+# A Namespace (`ns`, `namespace`, any case) or a CustomResourceDefinition (`crd` in any case;
+# the long name in lower, Title, Kind, and upper case only).
+[[shell.delete.operands.name.when]]
+like = [
+  "ns/*", "nS/*", "Ns/*", "NS/*", "*namespace*/*", "*namespacE*/*", "*namespaCe*/*", "*namespaCE*/*",
+  "*namespAce*/*", "*namespAcE*/*", "*namespACe*/*", "*namespACE*/*", "*namesPace*/*", "*namesPacE*/*", "*namesPaCe*/*", "*namesPaCE*/*",
+  "*namesPAce*/*", "*namesPAcE*/*", "*namesPACe*/*", "*namesPACE*/*", "*nameSpace*/*", "*nameSpacE*/*", "*nameSpaCe*/*", "*nameSpaCE*/*",
+  "*nameSpAce*/*", "*nameSpAcE*/*", "*nameSpACe*/*", "*nameSpACE*/*", "*nameSPace*/*", "*nameSPacE*/*", "*nameSPaCe*/*", "*nameSPaCE*/*",
+  "*nameSPAce*/*", "*nameSPAcE*/*", "*nameSPACe*/*", "*nameSPACE*/*", "*namEspace*/*", "*namEspacE*/*", "*namEspaCe*/*", "*namEspaCE*/*",
+  "*namEspAce*/*", "*namEspAcE*/*", "*namEspACe*/*", "*namEspACE*/*", "*namEsPace*/*", "*namEsPacE*/*", "*namEsPaCe*/*", "*namEsPaCE*/*",
+  "*namEsPAce*/*", "*namEsPAcE*/*", "*namEsPACe*/*", "*namEsPACE*/*", "*namESpace*/*", "*namESpacE*/*", "*namESpaCe*/*", "*namESpaCE*/*",
+  "*namESpAce*/*", "*namESpAcE*/*", "*namESpACe*/*", "*namESpACE*/*", "*namESPace*/*", "*namESPacE*/*", "*namESPaCe*/*", "*namESPaCE*/*",
+  "*namESPAce*/*", "*namESPAcE*/*", "*namESPACe*/*", "*namESPACE*/*", "*naMespace*/*", "*naMespacE*/*", "*naMespaCe*/*", "*naMespaCE*/*",
+  "*naMespAce*/*", "*naMespAcE*/*", "*naMespACe*/*", "*naMespACE*/*", "*naMesPace*/*", "*naMesPacE*/*", "*naMesPaCe*/*", "*naMesPaCE*/*",
+  "*naMesPAce*/*", "*naMesPAcE*/*", "*naMesPACe*/*", "*naMesPACE*/*", "*naMeSpace*/*", "*naMeSpacE*/*", "*naMeSpaCe*/*", "*naMeSpaCE*/*",
+  "*naMeSpAce*/*", "*naMeSpAcE*/*", "*naMeSpACe*/*", "*naMeSpACE*/*", "*naMeSPace*/*", "*naMeSPacE*/*", "*naMeSPaCe*/*", "*naMeSPaCE*/*",
+  "*naMeSPAce*/*", "*naMeSPAcE*/*", "*naMeSPACe*/*", "*naMeSPACE*/*", "*naMEspace*/*", "*naMEspacE*/*", "*naMEspaCe*/*", "*naMEspaCE*/*",
+  "*naMEspAce*/*", "*naMEspAcE*/*", "*naMEspACe*/*", "*naMEspACE*/*", "*naMEsPace*/*", "*naMEsPacE*/*", "*naMEsPaCe*/*", "*naMEsPaCE*/*",
+  "*naMEsPAce*/*", "*naMEsPAcE*/*", "*naMEsPACe*/*", "*naMEsPACE*/*", "*naMESpace*/*", "*naMESpacE*/*", "*naMESpaCe*/*", "*naMESpaCE*/*",
+  "*naMESpAce*/*", "*naMESpAcE*/*", "*naMESpACe*/*", "*naMESpACE*/*", "*naMESPace*/*", "*naMESPacE*/*", "*naMESPaCe*/*", "*naMESPaCE*/*",
+  "*naMESPAce*/*", "*naMESPAcE*/*", "*naMESPACe*/*", "*naMESPACE*/*", "*nAmespace*/*", "*nAmespacE*/*", "*nAmespaCe*/*", "*nAmespaCE*/*",
+  "*nAmespAce*/*", "*nAmespAcE*/*", "*nAmespACe*/*", "*nAmespACE*/*", "*nAmesPace*/*", "*nAmesPacE*/*", "*nAmesPaCe*/*", "*nAmesPaCE*/*",
+  "*nAmesPAce*/*", "*nAmesPAcE*/*", "*nAmesPACe*/*", "*nAmesPACE*/*", "*nAmeSpace*/*", "*nAmeSpacE*/*", "*nAmeSpaCe*/*", "*nAmeSpaCE*/*",
+  "*nAmeSpAce*/*", "*nAmeSpAcE*/*", "*nAmeSpACe*/*", "*nAmeSpACE*/*", "*nAmeSPace*/*", "*nAmeSPacE*/*", "*nAmeSPaCe*/*", "*nAmeSPaCE*/*",
+  "*nAmeSPAce*/*", "*nAmeSPAcE*/*", "*nAmeSPACe*/*", "*nAmeSPACE*/*", "*nAmEspace*/*", "*nAmEspacE*/*", "*nAmEspaCe*/*", "*nAmEspaCE*/*",
+  "*nAmEspAce*/*", "*nAmEspAcE*/*", "*nAmEspACe*/*", "*nAmEspACE*/*", "*nAmEsPace*/*", "*nAmEsPacE*/*", "*nAmEsPaCe*/*", "*nAmEsPaCE*/*",
+  "*nAmEsPAce*/*", "*nAmEsPAcE*/*", "*nAmEsPACe*/*", "*nAmEsPACE*/*", "*nAmESpace*/*", "*nAmESpacE*/*", "*nAmESpaCe*/*", "*nAmESpaCE*/*",
+  "*nAmESpAce*/*", "*nAmESpAcE*/*", "*nAmESpACe*/*", "*nAmESpACE*/*", "*nAmESPace*/*", "*nAmESPacE*/*", "*nAmESPaCe*/*", "*nAmESPaCE*/*",
+  "*nAmESPAce*/*", "*nAmESPAcE*/*", "*nAmESPACe*/*", "*nAmESPACE*/*", "*nAMespace*/*", "*nAMespacE*/*", "*nAMespaCe*/*", "*nAMespaCE*/*",
+  "*nAMespAce*/*", "*nAMespAcE*/*", "*nAMespACe*/*", "*nAMespACE*/*", "*nAMesPace*/*", "*nAMesPacE*/*", "*nAMesPaCe*/*", "*nAMesPaCE*/*",
+  "*nAMesPAce*/*", "*nAMesPAcE*/*", "*nAMesPACe*/*", "*nAMesPACE*/*", "*nAMeSpace*/*", "*nAMeSpacE*/*", "*nAMeSpaCe*/*", "*nAMeSpaCE*/*",
+  "*nAMeSpAce*/*", "*nAMeSpAcE*/*", "*nAMeSpACe*/*", "*nAMeSpACE*/*", "*nAMeSPace*/*", "*nAMeSPacE*/*", "*nAMeSPaCe*/*", "*nAMeSPaCE*/*",
+  "*nAMeSPAce*/*", "*nAMeSPAcE*/*", "*nAMeSPACe*/*", "*nAMeSPACE*/*", "*nAMEspace*/*", "*nAMEspacE*/*", "*nAMEspaCe*/*", "*nAMEspaCE*/*",
+  "*nAMEspAce*/*", "*nAMEspAcE*/*", "*nAMEspACe*/*", "*nAMEspACE*/*", "*nAMEsPace*/*", "*nAMEsPacE*/*", "*nAMEsPaCe*/*", "*nAMEsPaCE*/*",
+  "*nAMEsPAce*/*", "*nAMEsPAcE*/*", "*nAMEsPACe*/*", "*nAMEsPACE*/*", "*nAMESpace*/*", "*nAMESpacE*/*", "*nAMESpaCe*/*", "*nAMESpaCE*/*",
+  "*nAMESpAce*/*", "*nAMESpAcE*/*", "*nAMESpACe*/*", "*nAMESpACE*/*", "*nAMESPace*/*", "*nAMESPacE*/*", "*nAMESPaCe*/*", "*nAMESPaCE*/*",
+  "*nAMESPAce*/*", "*nAMESPAcE*/*", "*nAMESPACe*/*", "*nAMESPACE*/*", "*Namespace*/*", "*NamespacE*/*", "*NamespaCe*/*", "*NamespaCE*/*",
+  "*NamespAce*/*", "*NamespAcE*/*", "*NamespACe*/*", "*NamespACE*/*", "*NamesPace*/*", "*NamesPacE*/*", "*NamesPaCe*/*", "*NamesPaCE*/*",
+  "*NamesPAce*/*", "*NamesPAcE*/*", "*NamesPACe*/*", "*NamesPACE*/*", "*NameSpace*/*", "*NameSpacE*/*", "*NameSpaCe*/*", "*NameSpaCE*/*",
+  "*NameSpAce*/*", "*NameSpAcE*/*", "*NameSpACe*/*", "*NameSpACE*/*", "*NameSPace*/*", "*NameSPacE*/*", "*NameSPaCe*/*", "*NameSPaCE*/*",
+  "*NameSPAce*/*", "*NameSPAcE*/*", "*NameSPACe*/*", "*NameSPACE*/*", "*NamEspace*/*", "*NamEspacE*/*", "*NamEspaCe*/*", "*NamEspaCE*/*",
+  "*NamEspAce*/*", "*NamEspAcE*/*", "*NamEspACe*/*", "*NamEspACE*/*", "*NamEsPace*/*", "*NamEsPacE*/*", "*NamEsPaCe*/*", "*NamEsPaCE*/*",
+  "*NamEsPAce*/*", "*NamEsPAcE*/*", "*NamEsPACe*/*", "*NamEsPACE*/*", "*NamESpace*/*", "*NamESpacE*/*", "*NamESpaCe*/*", "*NamESpaCE*/*",
+  "*NamESpAce*/*", "*NamESpAcE*/*", "*NamESpACe*/*", "*NamESpACE*/*", "*NamESPace*/*", "*NamESPacE*/*", "*NamESPaCe*/*", "*NamESPaCE*/*",
+  "*NamESPAce*/*", "*NamESPAcE*/*", "*NamESPACe*/*", "*NamESPACE*/*", "*NaMespace*/*", "*NaMespacE*/*", "*NaMespaCe*/*", "*NaMespaCE*/*",
+  "*NaMespAce*/*", "*NaMespAcE*/*", "*NaMespACe*/*", "*NaMespACE*/*", "*NaMesPace*/*", "*NaMesPacE*/*", "*NaMesPaCe*/*", "*NaMesPaCE*/*",
+  "*NaMesPAce*/*", "*NaMesPAcE*/*", "*NaMesPACe*/*", "*NaMesPACE*/*", "*NaMeSpace*/*", "*NaMeSpacE*/*", "*NaMeSpaCe*/*", "*NaMeSpaCE*/*",
+  "*NaMeSpAce*/*", "*NaMeSpAcE*/*", "*NaMeSpACe*/*", "*NaMeSpACE*/*", "*NaMeSPace*/*", "*NaMeSPacE*/*", "*NaMeSPaCe*/*", "*NaMeSPaCE*/*",
+  "*NaMeSPAce*/*", "*NaMeSPAcE*/*", "*NaMeSPACe*/*", "*NaMeSPACE*/*", "*NaMEspace*/*", "*NaMEspacE*/*", "*NaMEspaCe*/*", "*NaMEspaCE*/*",
+  "*NaMEspAce*/*", "*NaMEspAcE*/*", "*NaMEspACe*/*", "*NaMEspACE*/*", "*NaMEsPace*/*", "*NaMEsPacE*/*", "*NaMEsPaCe*/*", "*NaMEsPaCE*/*",
+  "*NaMEsPAce*/*", "*NaMEsPAcE*/*", "*NaMEsPACe*/*", "*NaMEsPACE*/*", "*NaMESpace*/*", "*NaMESpacE*/*", "*NaMESpaCe*/*", "*NaMESpaCE*/*",
+  "*NaMESpAce*/*", "*NaMESpAcE*/*", "*NaMESpACe*/*", "*NaMESpACE*/*", "*NaMESPace*/*", "*NaMESPacE*/*", "*NaMESPaCe*/*", "*NaMESPaCE*/*",
+  "*NaMESPAce*/*", "*NaMESPAcE*/*", "*NaMESPACe*/*", "*NaMESPACE*/*", "*NAmespace*/*", "*NAmespacE*/*", "*NAmespaCe*/*", "*NAmespaCE*/*",
+  "*NAmespAce*/*", "*NAmespAcE*/*", "*NAmespACe*/*", "*NAmespACE*/*", "*NAmesPace*/*", "*NAmesPacE*/*", "*NAmesPaCe*/*", "*NAmesPaCE*/*",
+  "*NAmesPAce*/*", "*NAmesPAcE*/*", "*NAmesPACe*/*", "*NAmesPACE*/*", "*NAmeSpace*/*", "*NAmeSpacE*/*", "*NAmeSpaCe*/*", "*NAmeSpaCE*/*",
+  "*NAmeSpAce*/*", "*NAmeSpAcE*/*", "*NAmeSpACe*/*", "*NAmeSpACE*/*", "*NAmeSPace*/*", "*NAmeSPacE*/*", "*NAmeSPaCe*/*", "*NAmeSPaCE*/*",
+  "*NAmeSPAce*/*", "*NAmeSPAcE*/*", "*NAmeSPACe*/*", "*NAmeSPACE*/*", "*NAmEspace*/*", "*NAmEspacE*/*", "*NAmEspaCe*/*", "*NAmEspaCE*/*",
+  "*NAmEspAce*/*", "*NAmEspAcE*/*", "*NAmEspACe*/*", "*NAmEspACE*/*", "*NAmEsPace*/*", "*NAmEsPacE*/*", "*NAmEsPaCe*/*", "*NAmEsPaCE*/*",
+  "*NAmEsPAce*/*", "*NAmEsPAcE*/*", "*NAmEsPACe*/*", "*NAmEsPACE*/*", "*NAmESpace*/*", "*NAmESpacE*/*", "*NAmESpaCe*/*", "*NAmESpaCE*/*",
+  "*NAmESpAce*/*", "*NAmESpAcE*/*", "*NAmESpACe*/*", "*NAmESpACE*/*", "*NAmESPace*/*", "*NAmESPacE*/*", "*NAmESPaCe*/*", "*NAmESPaCE*/*",
+  "*NAmESPAce*/*", "*NAmESPAcE*/*", "*NAmESPACe*/*", "*NAmESPACE*/*", "*NAMespace*/*", "*NAMespacE*/*", "*NAMespaCe*/*", "*NAMespaCE*/*",
+  "*NAMespAce*/*", "*NAMespAcE*/*", "*NAMespACe*/*", "*NAMespACE*/*", "*NAMesPace*/*", "*NAMesPacE*/*", "*NAMesPaCe*/*", "*NAMesPaCE*/*",
+  "*NAMesPAce*/*", "*NAMesPAcE*/*", "*NAMesPACe*/*", "*NAMesPACE*/*", "*NAMeSpace*/*", "*NAMeSpacE*/*", "*NAMeSpaCe*/*", "*NAMeSpaCE*/*",
+  "*NAMeSpAce*/*", "*NAMeSpAcE*/*", "*NAMeSpACe*/*", "*NAMeSpACE*/*", "*NAMeSPace*/*", "*NAMeSPacE*/*", "*NAMeSPaCe*/*", "*NAMeSPaCE*/*",
+  "*NAMeSPAce*/*", "*NAMeSPAcE*/*", "*NAMeSPACe*/*", "*NAMeSPACE*/*", "*NAMEspace*/*", "*NAMEspacE*/*", "*NAMEspaCe*/*", "*NAMEspaCE*/*",
+  "*NAMEspAce*/*", "*NAMEspAcE*/*", "*NAMEspACe*/*", "*NAMEspACE*/*", "*NAMEsPace*/*", "*NAMEsPacE*/*", "*NAMEsPaCe*/*", "*NAMEsPaCE*/*",
+  "*NAMEsPAce*/*", "*NAMEsPAcE*/*", "*NAMEsPACe*/*", "*NAMEsPACE*/*", "*NAMESpace*/*", "*NAMESpacE*/*", "*NAMESpaCe*/*", "*NAMESpaCE*/*",
+  "*NAMESpAce*/*", "*NAMESpAcE*/*", "*NAMESpACe*/*", "*NAMESpACE*/*", "*NAMESPace*/*", "*NAMESPacE*/*", "*NAMESPaCe*/*", "*NAMESPaCE*/*",
+  "*NAMESPAce*/*", "*NAMESPAcE*/*", "*NAMESPACe*/*", "*NAMESPACE*/*", "*crd*/*", "*crD*/*", "*cRd*/*", "*cRD*/*",
+  "*Crd*/*", "*CrD*/*", "*CRd*/*", "*CRD*/*", "*customresourcedefinition*/*", "*CustomResourceDefinition*/*", "*Customresourcedefinition*/*", "*CUSTOMRESOURCEDEFINITION*/*",
+]
+adds = ["broad_delete"]
+
 [shell.patch]
 usage = "kubectl [global options] patch [options] [<type>] [<name>]"
 adds  = ["cluster_write"]
@@ -446,17 +675,17 @@ options.field_manager = { flag = ["--field-manager"], value = "required" }
 options.filename  = { flag = ["-f", "--filename"], value = "required", repeated = true, adds = ["manifest_input"] }
 options.kustomize = { flag = ["-k", "--kustomize"], value = "required", adds = ["manifest_input"] }
 options.local     = { flag = ["--local"], value = "optional", like = ["", "true", "True", "TRUE", "t", "T", "1"], removes = ["cluster_write", "write_secrets"] }
-options.output    = { flag = ["-o", "--output"], value = "required" }
+options.output    = { flag = ["-o", "--output"], value = "required", adds = ["read_secrets"] }
 options.patch     = { flag = ["-p", "--patch"], value = "required" }
 options.patch_file = { flag = ["--patch-file"], value = "required", adds = ["manifest_input"] }
 options.recursive = { flag = ["-R", "--recursive"] }
 options.show_managed_fields = { flag = ["--show-managed-fields"], value = "optional" }
 options.subresource = { flag = ["--subresource"], value = "required" }
-options.template  = { flag = ["--template"], value = "required" }
+options.template  = { flag = ["--template"], value = "required", adds = ["read_secrets"] }
 options.type_option = { flag = ["--type"], value = "required" }  # `type` is the operand
 
 [shell.patch.operands.type]
-adds = ["write_secrets"]
+adds = ["read_secrets", "write_secrets"]
 # Every upper and lower case spelling of `secret`.
 like = [
   "*secret*", "*secreT*", "*secrEt*", "*secrET*", "*secRet*", "*secReT*",
@@ -473,7 +702,7 @@ like = [
 ]
 
 [shell.patch.operands.name]
-adds = ["write_secrets"]
+adds = ["read_secrets", "write_secrets"]
 # A TYPE/NAME word whose type is a Secret, in any case.
 like = [
   "*secret*/*", "*secreT*/*", "*secrEt*/*", "*secrET*/*", "*secRet*/*", "*secReT*/*",
@@ -497,19 +726,36 @@ adds  = ["cluster_write"]
 options.all       = { flag = ["--all"], value = "optional" }
 options.all_namespaces = { flag = ["-A", "--all-namespaces"] }
 options.allow_missing_template_keys = { flag = ["--allow-missing-template-keys"], value = "optional" }
-options.dry_run   = { flag = ["--dry-run"], value = "optional", like = ["", "unchanged", "client", "server", "true", "True", "TRUE", "t", "T", "1"], removes = ["cluster_write"] }
+options.dry_run   = { flag = ["--dry-run"], value = "optional", like = ["", "unchanged", "client", "server", "true", "True", "TRUE", "t", "T", "1"], removes = ["cluster_write", "write_secrets"] }
 options.field_manager = { flag = ["--field-manager"], value = "required" }
 options.field_selector = { flag = ["--field-selector"], value = "required" }
 options.filename  = { flag = ["-f", "--filename"], value = "required", repeated = true, adds = ["manifest_input"] }
 options.kustomize = { flag = ["-k", "--kustomize"], value = "required", adds = ["manifest_input"] }
-options.local     = { flag = ["--local"], value = "optional", like = ["", "true", "True", "TRUE", "t", "T", "1"], removes = ["cluster_write"] }
-options.output    = { flag = ["-o", "--output"], value = "required" }
+options.local     = { flag = ["--local"], value = "optional", like = ["", "true", "True", "TRUE", "t", "T", "1"], removes = ["cluster_write", "write_secrets"] }
+options.output    = { flag = ["-o", "--output"], value = "required", adds = ["read_secrets"] }
 options.overwrite = { flag = ["--overwrite"], value = "optional" }
 options.recursive = { flag = ["-R", "--recursive"] }
 options.resource_version = { flag = ["--resource-version"], value = "required" }
 options.selector  = { flag = ["-l", "--selector"], value = "required" }
 options.show_managed_fields = { flag = ["--show-managed-fields"], value = "optional" }
-options.template  = { flag = ["--template"], value = "required" }
+options.template  = { flag = ["--template"], value = "required", adds = ["read_secrets"] }
+
+[shell.label.operands.operands]
+adds = ["read_secrets", "write_secrets"]
+# Any word that contains `secret`, in any case, because the type is not a separate field.
+like = [
+  "*secret*", "*secreT*", "*secrEt*", "*secrET*", "*secRet*", "*secReT*",
+  "*secREt*", "*secRET*", "*seCret*", "*seCreT*", "*seCrEt*", "*seCrET*",
+  "*seCRet*", "*seCReT*", "*seCREt*", "*seCRET*", "*sEcret*", "*sEcreT*",
+  "*sEcrEt*", "*sEcrET*", "*sEcRet*", "*sEcReT*", "*sEcREt*", "*sEcRET*",
+  "*sECret*", "*sECreT*", "*sECrEt*", "*sECrET*", "*sECRet*", "*sECReT*",
+  "*sECREt*", "*sECRET*", "*Secret*", "*SecreT*", "*SecrEt*", "*SecrET*",
+  "*SecRet*", "*SecReT*", "*SecREt*", "*SecRET*", "*SeCret*", "*SeCreT*",
+  "*SeCrEt*", "*SeCrET*", "*SeCRet*", "*SeCReT*", "*SeCREt*", "*SeCRET*",
+  "*SEcret*", "*SEcreT*", "*SEcrEt*", "*SEcrET*", "*SEcRet*", "*SEcReT*",
+  "*SEcREt*", "*SEcRET*", "*SECret*", "*SECreT*", "*SECrEt*", "*SECrET*",
+  "*SECRet*", "*SECReT*", "*SECREt*", "*SECRET*",
+]
 
 [shell.annotate]
 usage = "kubectl [global options] annotate [options] [<operands>...]"
@@ -517,19 +763,36 @@ adds  = ["cluster_write"]
 options.all       = { flag = ["--all"], value = "optional" }
 options.all_namespaces = { flag = ["-A", "--all-namespaces"] }
 options.allow_missing_template_keys = { flag = ["--allow-missing-template-keys"], value = "optional" }
-options.dry_run   = { flag = ["--dry-run"], value = "optional", like = ["", "unchanged", "client", "server", "true", "True", "TRUE", "t", "T", "1"], removes = ["cluster_write"] }
+options.dry_run   = { flag = ["--dry-run"], value = "optional", like = ["", "unchanged", "client", "server", "true", "True", "TRUE", "t", "T", "1"], removes = ["cluster_write", "write_secrets"] }
 options.field_manager = { flag = ["--field-manager"], value = "required" }
 options.field_selector = { flag = ["--field-selector"], value = "required" }
 options.filename  = { flag = ["-f", "--filename"], value = "required", repeated = true, adds = ["manifest_input"] }
 options.kustomize = { flag = ["-k", "--kustomize"], value = "required", adds = ["manifest_input"] }
-options.local     = { flag = ["--local"], value = "optional", like = ["", "true", "True", "TRUE", "t", "T", "1"], removes = ["cluster_write"] }
-options.output    = { flag = ["-o", "--output"], value = "required" }
+options.local     = { flag = ["--local"], value = "optional", like = ["", "true", "True", "TRUE", "t", "T", "1"], removes = ["cluster_write", "write_secrets"] }
+options.output    = { flag = ["-o", "--output"], value = "required", adds = ["read_secrets"] }
 options.overwrite = { flag = ["--overwrite"], value = "optional" }
 options.recursive = { flag = ["-R", "--recursive"] }
 options.resource_version = { flag = ["--resource-version"], value = "required" }
 options.selector  = { flag = ["-l", "--selector"], value = "required" }
 options.show_managed_fields = { flag = ["--show-managed-fields"], value = "optional" }
-options.template  = { flag = ["--template"], value = "required" }
+options.template  = { flag = ["--template"], value = "required", adds = ["read_secrets"] }
+
+[shell.annotate.operands.operands]
+adds = ["read_secrets", "write_secrets"]
+# Any word that contains `secret`, in any case, because the type is not a separate field.
+like = [
+  "*secret*", "*secreT*", "*secrEt*", "*secrET*", "*secRet*", "*secReT*",
+  "*secREt*", "*secRET*", "*seCret*", "*seCreT*", "*seCrEt*", "*seCrET*",
+  "*seCRet*", "*seCReT*", "*seCREt*", "*seCRET*", "*sEcret*", "*sEcreT*",
+  "*sEcrEt*", "*sEcrET*", "*sEcRet*", "*sEcReT*", "*sEcREt*", "*sEcRET*",
+  "*sECret*", "*sECreT*", "*sECrEt*", "*sECrET*", "*sECRet*", "*sECReT*",
+  "*sECREt*", "*sECRET*", "*Secret*", "*SecreT*", "*SecrEt*", "*SecrET*",
+  "*SecRet*", "*SecReT*", "*SecREt*", "*SecRET*", "*SeCret*", "*SeCreT*",
+  "*SeCrEt*", "*SeCrET*", "*SeCRet*", "*SeCReT*", "*SeCREt*", "*SeCRET*",
+  "*SEcret*", "*SEcreT*", "*SEcrEt*", "*SEcrET*", "*SEcRet*", "*SEcReT*",
+  "*SEcREt*", "*SEcRET*", "*SECret*", "*SECreT*", "*SECrEt*", "*SECrET*",
+  "*SECRet*", "*SECReT*", "*SECREt*", "*SECRET*",
+]
 
 [shell.scale]
 usage = "kubectl [global options] scale [options] [<type>] [<name>...]"
@@ -540,14 +803,48 @@ options.current_replicas = { flag = ["--current-replicas"], value = "required" }
 options.dry_run   = { flag = ["--dry-run"], value = "optional", like = ["", "unchanged", "client", "server", "true", "True", "TRUE", "t", "T", "1"], removes = ["cluster_write"] }
 options.filename  = { flag = ["-f", "--filename"], value = "required", repeated = true, adds = ["manifest_input"] }
 options.kustomize = { flag = ["-k", "--kustomize"], value = "required", adds = ["manifest_input"] }
-options.output    = { flag = ["-o", "--output"], value = "required" }
+options.output    = { flag = ["-o", "--output"], value = "required", adds = ["read_secrets"] }
 options.recursive = { flag = ["-R", "--recursive"] }
 options.replicas  = { flag = ["--replicas"], value = "required" }
 options.resource_version = { flag = ["--resource-version"], value = "required" }
 options.selector  = { flag = ["-l", "--selector"], value = "required" }
 options.show_managed_fields = { flag = ["--show-managed-fields"], value = "optional" }
-options.template  = { flag = ["--template"], value = "required" }
+options.template  = { flag = ["--template"], value = "required", adds = ["read_secrets"] }
 options.timeout   = { flag = ["--timeout"], value = "required" }
+
+[shell.scale.operands.type]
+adds = ["read_secrets"]
+# Every upper and lower case spelling of `secret`.
+like = [
+  "*secret*", "*secreT*", "*secrEt*", "*secrET*", "*secRet*", "*secReT*",
+  "*secREt*", "*secRET*", "*seCret*", "*seCreT*", "*seCrEt*", "*seCrET*",
+  "*seCRet*", "*seCReT*", "*seCREt*", "*seCRET*", "*sEcret*", "*sEcreT*",
+  "*sEcrEt*", "*sEcrET*", "*sEcRet*", "*sEcReT*", "*sEcREt*", "*sEcRET*",
+  "*sECret*", "*sECreT*", "*sECrEt*", "*sECrET*", "*sECRet*", "*sECReT*",
+  "*sECREt*", "*sECRET*", "*Secret*", "*SecreT*", "*SecrEt*", "*SecrET*",
+  "*SecRet*", "*SecReT*", "*SecREt*", "*SecRET*", "*SeCret*", "*SeCreT*",
+  "*SeCrEt*", "*SeCrET*", "*SeCRet*", "*SeCReT*", "*SeCREt*", "*SeCRET*",
+  "*SEcret*", "*SEcreT*", "*SEcrEt*", "*SEcrET*", "*SEcRet*", "*SEcReT*",
+  "*SEcREt*", "*SEcRET*", "*SECret*", "*SECreT*", "*SECrEt*", "*SECrET*",
+  "*SECRet*", "*SECReT*", "*SECREt*", "*SECRET*",
+]
+
+[shell.scale.operands.name]
+adds = ["read_secrets"]
+# A TYPE/NAME word whose type is a Secret, in any case.
+like = [
+  "*secret*/*", "*secreT*/*", "*secrEt*/*", "*secrET*/*", "*secRet*/*", "*secReT*/*",
+  "*secREt*/*", "*secRET*/*", "*seCret*/*", "*seCreT*/*", "*seCrEt*/*", "*seCrET*/*",
+  "*seCRet*/*", "*seCReT*/*", "*seCREt*/*", "*seCRET*/*", "*sEcret*/*", "*sEcreT*/*",
+  "*sEcrEt*/*", "*sEcrET*/*", "*sEcRet*/*", "*sEcReT*/*", "*sEcREt*/*", "*sEcRET*/*",
+  "*sECret*/*", "*sECreT*/*", "*sECrEt*/*", "*sECrET*/*", "*sECRet*/*", "*sECReT*/*",
+  "*sECREt*/*", "*sECRET*/*", "*Secret*/*", "*SecreT*/*", "*SecrEt*/*", "*SecrET*/*",
+  "*SecRet*/*", "*SecReT*/*", "*SecREt*/*", "*SecRET*/*", "*SeCret*/*", "*SeCreT*/*",
+  "*SeCrEt*/*", "*SeCrET*/*", "*SeCRet*/*", "*SeCReT*/*", "*SeCREt*/*", "*SeCRET*/*",
+  "*SEcret*/*", "*SEcreT*/*", "*SEcrEt*/*", "*SEcrET*/*", "*SEcRet*/*", "*SEcReT*/*",
+  "*SEcREt*/*", "*SEcRET*/*", "*SECret*/*", "*SECreT*/*", "*SECrEt*/*", "*SECrET*/*",
+  "*SECRet*/*", "*SECReT*/*", "*SECREt*/*", "*SECRET*/*",
+]
 
 [shell.rollout_restart]
 usage = "kubectl [global options] rollout restart [options] [<type>] [<name>...]"

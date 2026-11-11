@@ -28,7 +28,8 @@ ends in `kubectl`; restart the box after `brew upgrade`. Print the tables with:
 ./scripts/render.sh kubectl --label kubectl --command /usr/local/bin/kubectl
 ```
 
-It prints a block that starts like this, followed by every `[tool.kubectl.grammar.*]` table:
+It prints the `[experimental-features]`, `[tool.kubectl]`, and every `[tool.kubectl.grammar.*]`
+table. Add the `env` line yourself; `render.sh` does not print it:
 
 ```toml
 [experimental-features]
@@ -53,12 +54,12 @@ settings.
 
 | Family | Actions | Effects |
 |---|---|---|
-| Reads | `get`, `describe`, `logs`, `explain`, `api-resources`, `api-versions`, `cluster-info`, `top pod` (`pods`, `po`), `top node` (`nodes`, `no`), `auth can-i`, `auth whoami`, `rollout status`, `rollout history` | `cluster_read`; `get` of a Secret adds `read_secrets` |
+| Reads | `get`, `describe`, `logs`, `explain`, `api-resources`, `api-versions`, `cluster-info`, `top pod` (`pods`, `po`), `top node` (`nodes`, `no`), `auth can-i`, `auth whoami`, `rollout status`, `rollout history` | `cluster_read`; `get` or `describe` of a Secret, or with `-f`/`-k`, adds `read_secrets` |
 | Version | `version` | `cluster_read`, removed by `--client` |
-| Kubeconfig | `config view`, `config get-contexts`, `config current-context`, `config use-context` (`use`) | none; `view --raw` or `--flatten` adds `read_secrets`; `use-context` adds `override_config` |
+| Kubeconfig | `config view`, `config get-contexts`, `config current-context`, `config use-context` (`use`) | `config view` always adds `read_secrets`; `use-context` adds `override_config` and `change_target` |
 | Apply and create | `apply`, `create -f`, `create namespace` (`ns`), `create secret generic`, `create configmap` (`cm`), `create deployment` (`deploy`) | `cluster_write`; `-f`/`-k` add `manifest_input`; `apply --prune` adds `cluster_delete` and `broad_delete`; `--from-file` adds `upload_files` |
-| Change | `patch`, `label`, `annotate`, `scale`, `rollout restart`, `rollout pause`, `rollout resume`, `rollout undo` | `cluster_write`; a patch to a Secret adds `write_secrets` |
-| Delete | `delete` | `cluster_delete`; `--all`, `-A`, `-l`, `--field-selector` add `broad_delete` |
+| Change | `patch`, `label`, `annotate`, `scale`, `rollout restart`, `rollout pause`, `rollout resume`, `rollout undo` | `cluster_write`; a Secret target adds `read_secrets` (and `write_secrets` on `patch`, `label`, `annotate`); `-o`/`--template` add `read_secrets` |
+| Delete | `delete` | `cluster_delete`; `--all`, `-A`, `-l`, `--field-selector`, `-R`, `-k`, a Namespace, or a CRD add `broad_delete`; a Secret adds `write_secrets` |
 | Containers | `exec POD -- CMD...`, `cp`, `port-forward` | `run_program`; `cp` adds `upload_files` or `write_local_files`; `port-forward` adds `network_listen`, and `--address` adds `listen_address` |
 
 The persistent flags `-n/--namespace`, `--context`, `--kubeconfig`, `--cluster`, `--user`,
@@ -67,7 +68,11 @@ The persistent flags `-n/--namespace`, `--context`, `--kubeconfig`, `--cluster`,
 `--match-server-version` are accepted before, between, and after the command words.
 
 `--dry-run=client`, `--dry-run=server`, a bare `--dry-run`, and a true boolean value remove the
-write and delete effects. `--dry-run=none` and `--dry-run=false` keep them.
+write and delete effects. `--dry-run=none` and `--dry-run=false` keep them. A dry run never removes
+`read_secrets`: with `-o`, a dry run prints the object that it fetched.
+
+On `apply`, `create -f`, `create secret generic`, `patch`, `label`, `annotate`, and `scale`,
+`-o` and `--template` add `read_secrets`, because the printed object can be a Secret.
 
 ## Effects
 
@@ -77,7 +82,7 @@ write and delete effects. `--dry-run=none` and `--dry-run=false` keep them.
 | `cluster_write` | Creates or changes objects in the cluster |
 | `cluster_delete` | Deletes objects in the cluster |
 | `broad_delete` | Can delete many objects at once: `--all`, `--all-namespaces`, a selector, or `--prune` |
-| `read_secrets` | Reads Secret objects, or kubeconfig credentials without redaction |
+| `read_secrets` | Reads Secret objects, or kubeconfig credentials |
 | `write_secrets` | Creates or changes a Secret |
 | `run_program` | Runs a program inside a container (`exec`, and the `tar` that `cp` runs) |
 | `network_listen` | Opens a listening port on this host that forwards to the cluster |
@@ -110,11 +115,12 @@ when { context.input.effects.contains(Tool::kubectl::Effect::"cluster_write") ||
 forbid (principal, action in Tool::kubectl::Action::"*", resource)
 when { context.input.effects.contains(Tool::kubectl::Effect::"read_secrets") };
 
-// Stay on the current context and identity.
+// Stay on the current context and identity, and do not change the kubeconfig.
 @id("kubectl_one_target")
 forbid (principal, action in Tool::kubectl::Action::"*", resource)
 when { context.input.effects.contains(Tool::kubectl::Effect::"change_target") ||
-       context.input.effects.contains(Tool::kubectl::Effect::"impersonate") };
+       context.input.effects.contains(Tool::kubectl::Effect::"impersonate") ||
+       context.input.effects.contains(Tool::kubectl::Effect::"override_config") };
 
 // Keep the agent out of kube-system.
 @id("kubectl_not_kube_system")
@@ -157,12 +163,20 @@ These are deliberately `unmodeled`:
   `"false"` and its effects do not apply.
 - **Secrets.** `read_secrets` follows the resource type, in any case: `secret`, `secrets`,
   `secret/x`, `pods,secrets`, `Secret/x`. It also matches any type whose name contains `secret`,
-  such as a custom resource. Objects named only in a `-f` file carry `manifest_input`, not
-  `read_secrets`. `describe secret` prints key names and sizes, not values, so it carries no
-  `read_secrets`. `apply` and `create -f` of a Secret manifest carry `manifest_input`.
+  such as a custom resource, and on `label` and `annotate` any word that contains `secret`
+  (a label value too), because those verbs have no separate type field. `describe` of a Secret
+  prints a service-account token in clear, so it carries `read_secrets`. `get` and `describe` with
+  `-f` or `-k` always carry it, because the file can name a Secret. `apply` and `create -f` without
+  `-o` print only names, so they carry `manifest_input` only.
+- **config view.** client-go redacts only some kubeconfig fields: auth-provider settings (such as
+  OIDC tokens) and `exec` env values print in clear. So every `config view` carries `read_secrets`.
+- **Broad deletes.** A Namespace (`ns`, `namespace`, any case) or a CRD (`crd` in any case,
+  `customresourcedefinition` in lower, Title, Kind, and upper case) adds `broad_delete`. A
+  mixed-case spelling such as `customResourceDefinitions` does not, but it still carries
+  `cluster_delete`.
 - **Operands.** `label` and `annotate` take the type, names, and `KEY=VAL` words as one set,
   `operands`. In `get`, `delete`, `scale`, and the rollout verbs, the first word is `type` and the
   rest are `name`. `exec` and `create deployment` keep the command after `--` as a set, so word
   order is lost.
-- **Selectors.** `broad_delete` is added for any `-l` or `--field-selector` on `delete`, even one
-  that matches a single object.
+- **Selectors.** `broad_delete` is added for any `-l`, `--field-selector`, `-R`, or `-k` on
+  `delete`, even one that matches a single object.

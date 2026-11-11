@@ -112,14 +112,14 @@ action = "unmodeled"
 argv = ["kubectl", "get", "-f", "pod.yaml", "-o", "json"]
 action = "get"
 fields = { filename = ["pod.yaml"], output = "json" }
-effects = ["cluster_read", "manifest_input"]
+effects = ["cluster_read", "manifest_input", "read_secrets"]
 
 # `kubectl get -k dir/`
 [[case]]
 argv = ["kubectl", "get", "-k", "dir/"]
 action = "get"
 fields = { kustomize = "dir/" }
-effects = ["cluster_read", "manifest_input"]
+effects = ["cluster_read", "manifest_input", "read_secrets"]
 
 # A Secret type reads Secret objects. Spellings: plural, singular, TYPE/NAME, a comma list,
 # a grouped name, and upper case (the RESTMapper lowercases the resource).
@@ -383,18 +383,18 @@ action = "describe"
 fields = { type = "pods", selector = "name=myLabel" }
 effects = ["cluster_read"]
 
-# describe prints the keys and sizes of a Secret, not the values: no read_secrets.
+# describe prints a service-account token in clear (describe.go describeSecret): read_secrets.
 [[case]]
 argv = ["kubectl", "describe", "secret", "db-pass"]
 action = "describe"
 fields = { type = "secret", name = ["db-pass"] }
-effects = ["cluster_read"]
+effects = ["cluster_read", "read_secrets"]
 
 [[case]]
 argv = ["kubectl", "describe", "-f", "pod.json", "--show-events=false"]
 action = "describe"
 fields = { filename = ["pod.json"], show_events = "false" }
-effects = ["cluster_read", "manifest_input"]
+effects = ["cluster_read", "manifest_input", "read_secrets"]
 
 [[case]]
 argv = ["kubectl", "describe", "pods", "-o", "yaml"]
@@ -590,12 +590,13 @@ action = "unmodeled"
 # config (kubectl config <cmd> --help; config/view.go, config/use_context.go)
 # ---------------------------------------------------------------------------------------------
 
-# config view redacts; --raw and --flatten print credentials.
+# config view redacts only datapolicy fields; auth-provider and exec env values print in clear,
+# so every config view reads secrets.
 [[case]]
 argv = ["kubectl", "config", "view", "--minify"]
 action = "config_view"
 fields = { minify = "" }
-effects = []
+effects = ["read_secrets"]
 
 [[case]]
 argv = ["kubectl", "config", "view", "--raw"]
@@ -613,7 +614,7 @@ effects = ["read_secrets"]
 argv = ["kubectl", "config", "view", "--raw=false"]
 action = "config_view"
 fields = { raw = "false" }
-effects = []
+effects = ["read_secrets"]
 
 # config view takes no operand.
 [[case]]
@@ -636,7 +637,7 @@ effects = []
 argv = ["kubectl", "config", "use-context", "minikube"]
 action = "config_use_context"
 fields = { context_name = "minikube" }
-effects = ["override_config"]
+effects = ["change_target", "override_config"]
 
 [[case]]
 argv = ["kubectl", "config", "use", "prod", "--kubeconfig", "/tmp/k"]
@@ -810,7 +811,7 @@ effects = ["cluster_write", "upload_files", "write_secrets"]
 argv = ["kubectl", "create", "secret", "generic", "s", "--from-env-file", "a.env", "--dry-run=client", "-o", "yaml"]
 action = "create_secret_generic"
 fields = { name = "s", from_env_file = ["a.env"], dry_run = "client", output = "yaml" }
-effects = []
+effects = ["read_secrets"]
 
 [[case]]
 argv = ["kubectl", "create", "secret", "generic", "s", "--from-file=k=key.pem", "--dry-run=server"]
@@ -966,19 +967,19 @@ effects = ["cluster_write", "manifest_input"]
 argv = ["kubectl", "patch", "secret", "db", "-p", "{}"]
 action = "patch"
 fields = { type = "secret", name = "db", patch = "{}" }
-effects = ["cluster_write", "write_secrets"]
+effects = ["cluster_write", "read_secrets", "write_secrets"]
 
 [[case]]
 argv = ["kubectl", "patch", "SECRETS/db", "-p", "{}", "--dry-run=client"]
 action = "patch"
 fields = { type = "SECRETS/db", patch = "{}", dry_run = "client" }
-effects = []
+effects = ["read_secrets"]
 
 [[case]]
 argv = ["kubectl", "patch", "-f", "s.yaml", "-p", "{}", "--local", "-o", "yaml"]
 action = "patch"
 fields = { filename = ["s.yaml"], patch = "{}", local = "", output = "yaml" }
-effects = ["manifest_input"]
+effects = ["manifest_input", "read_secrets"]
 
 [[case]]
 argv = ["kubectl", "patch", "a", "b", "c"]
@@ -1272,14 +1273,14 @@ effects = ["cluster_read", "read_secrets"]
 argv = ["kubectl", "get", "secret", "db", "-n=prod"]
 action = "unmodeled"
 
-# A Secret read through a -f file is only manifest_input.
+# A -f file can name a Secret, so get -f adds read_secrets (verifier case changed: M4 fix).
 [[case]]
 argv = ["kubectl", "get", "-f", "secret.yaml", "-o", "yaml"]
 action = "get"
 fields = { filename = ["secret.yaml"], output = "yaml" }
-effects = ["cluster_read", "manifest_input"]
+effects = ["cluster_read", "manifest_input", "read_secrets"]
 
-# EXPECTED-FAIL. describe.go describeSecret prints the `token` key of a
+# Was EXPECTED-FAIL, now fixed. describe.go describeSecret prints the `token` key of a
 # kubernetes.io/service-account-token Secret in clear text.
 [[case]]
 argv = ["kubectl", "describe", "secret", "build-robot-token"]
@@ -1287,7 +1288,7 @@ action = "describe"
 fields = { type = "secret", name = ["build-robot-token"] }
 effects = ["cluster_read", "read_secrets"]
 
-# EXPECTED-FAIL. patch.go: a client dry run GETs the object, applies the patch locally, and prints
+# Was EXPECTED-FAIL, now fixed. patch.go: a client dry run GETs the object, applies the patch locally, and prints
 # it with the -o printer, so the Secret data is printed and nothing is written.
 [[case]]
 argv = ["kubectl", "patch", "secret", "db", "-p", "{}", "--dry-run=client", "-o", "yaml"]
@@ -1295,21 +1296,21 @@ action = "patch"
 fields = { type = "secret", name = "db", patch = "{}", dry_run = "client", output = "yaml" }
 effects = ["read_secrets"]
 
-# EXPECTED-FAIL. label.go: a client dry run prints info.Object (fetched from the server).
+# Was EXPECTED-FAIL, now fixed. label.go: a client dry run prints info.Object (fetched from the server).
 [[case]]
 argv = ["kubectl", "label", "secret", "db", "a=b", "--dry-run=client", "-o", "yaml"]
 action = "label"
 fields = { operands = ["secret", "db", "a=b"], dry_run = "client", output = "yaml" }
 effects = ["read_secrets"]
 
-# EXPECTED-FAIL. annotate.go: same as label; --all fetches every Secret in the namespace.
+# Was EXPECTED-FAIL, now fixed. annotate.go: same as label; --all fetches every Secret in the namespace.
 [[case]]
 argv = ["kubectl", "annotate", "secrets", "--all", "a=b", "--dry-run=server", "-o", "json"]
 action = "annotate"
 fields = { operands = ["secrets", "a=b"], all = "", dry_run = "server", output = "json" }
 effects = ["read_secrets"]
 
-# EXPECTED-FAIL. scale.go: a client dry run calls updateReplicas (no error for core-group kinds)
+# Was EXPECTED-FAIL, now fixed. scale.go: a client dry run calls updateReplicas (no error for core-group kinds)
 # and prints info.Object, so a Secret's data is printed.
 [[case]]
 argv = ["kubectl", "scale", "secret", "db", "--replicas=1", "--dry-run=client", "-o", "yaml"]
@@ -1324,7 +1325,7 @@ action = "delete"
 fields = { dry_run = "", type = "server", name = ["pods"] }
 effects = []
 
-# EXPECTED-FAIL. Deleting a Namespace deletes every object in it (namespace controller).
+# Was EXPECTED-FAIL, now fixed. Deleting a Namespace deletes every object in it (namespace controller).
 [[case]]
 argv = ["kubectl", "delete", "namespace", "prod"]
 action = "delete"
@@ -1354,7 +1355,7 @@ effects = ["cluster_delete", "broad_delete"]
 argv = ["kubectl", "--namespace=kube-system", "delete", "secret", "--all"]
 action = "delete"
 fields = { namespace = "kube-system", type = "secret", all = "" }
-effects = ["cluster_delete", "broad_delete"]
+effects = ["cluster_delete", "broad_delete", "write_secrets"]
 
 [[case]]
 argv = ["kubectl", "delete", "pods", "--al"]
@@ -1423,7 +1424,7 @@ action = "cp"
 fields = { file_spec_src = "./x", file_spec_dest = "web:/tmp/x", container = "app" }
 effects = ["run_program", "upload_files"]
 
-# EXPECTED-FAIL. use-context makes every later kubectl line target another cluster.
+# Was EXPECTED-FAIL, now fixed. use-context makes every later kubectl line target another cluster.
 [[case]]
 argv = ["kubectl", "config", "use-context", "prod"]
 action = "config_use_context"
@@ -1434,7 +1435,7 @@ effects = ["override_config", "change_target"]
 argv = ["kubectl", "config", "use", "prod"]
 action = "config_use_context"
 fields = { context_name = "prod" }
-effects = ["override_config"]
+effects = ["override_config", "change_target"]
 
 [[case]]
 argv = ["kubectl", "--as", "system:admin", "--as-group", "system:masters", "delete", "pods", "x"]
@@ -1523,3 +1524,149 @@ effects = ["cluster_read"]
 [[case]]
 argv = ["kubectl", "--context", "dev", "get", "pods", "--context", "prod"]
 action = "unmodeled"
+
+# ---------------------------------------------------------------------------------------------
+# Fixes for the verifier findings (VERIFY.md B1-B4, M1-M4, m1, m4)
+# ---------------------------------------------------------------------------------------------
+
+# M2: deleting a Namespace or a CustomResourceDefinition removes every object in it.
+[[case]]
+argv = ["kubectl", "delete", "ns", "dev"]
+action = "delete"
+fields = { type = "ns", name = ["dev"] }
+effects = ["broad_delete", "cluster_delete"]
+
+[[case]]
+argv = ["kubectl", "delete", "NameSpaces", "a", "b"]
+action = "delete"
+fields = { type = "NameSpaces", name = ["a", "b"] }
+effects = ["broad_delete", "cluster_delete"]
+
+[[case]]
+argv = ["kubectl", "delete", "pods,ns", "x"]
+action = "delete"
+fields = { type = "pods,ns", name = ["x"] }
+effects = ["broad_delete", "cluster_delete"]
+
+[[case]]
+argv = ["kubectl", "delete", "pod/a", "Ns/b"]
+action = "delete"
+fields = { type = "pod/a", name = ["Ns/b"] }
+effects = ["broad_delete", "cluster_delete"]
+
+[[case]]
+argv = ["kubectl", "delete", "crd", "widgets.example.com"]
+action = "delete"
+fields = { type = "crd", name = ["widgets.example.com"] }
+effects = ["broad_delete", "cluster_delete"]
+
+[[case]]
+argv = ["kubectl", "delete", "customresourcedefinitions.apiextensions.k8s.io/widgets.example.com"]
+action = "delete"
+fields = { type = "customresourcedefinitions.apiextensions.k8s.io/widgets.example.com" }
+effects = ["broad_delete", "cluster_delete"]
+
+[[case]]
+argv = ["kubectl", "delete", "CustomResourceDefinition", "w"]
+action = "delete"
+fields = { type = "CustomResourceDefinition", name = ["w"] }
+effects = ["broad_delete", "cluster_delete"]
+
+# A type that only holds the letters `ns` inside a word is not a Namespace.
+[[case]]
+argv = ["kubectl", "delete", "daemonsets", "x"]
+action = "delete"
+fields = { type = "daemonsets", name = ["x"] }
+effects = ["cluster_delete"]
+
+# m4: -R and -k can name many objects.
+[[case]]
+argv = ["kubectl", "delete", "-f", "dir/", "-R"]
+action = "delete"
+fields = { filename = ["dir/"], recursive = true }
+effects = ["broad_delete", "cluster_delete", "manifest_input"]
+
+[[case]]
+argv = ["kubectl", "delete", "-k", "overlays/dev"]
+action = "delete"
+fields = { kustomize = "overlays/dev" }
+effects = ["broad_delete", "cluster_delete", "manifest_input"]
+
+# m1: a Secret delete adds write_secrets; a dry run removes it with the delete.
+[[case]]
+argv = ["kubectl", "delete", "secret", "db"]
+action = "delete"
+fields = { type = "secret", name = ["db"] }
+effects = ["cluster_delete", "write_secrets"]
+
+[[case]]
+argv = ["kubectl", "delete", "secret", "db", "--dry-run=client"]
+action = "delete"
+fields = { type = "secret", name = ["db"], dry_run = "client" }
+effects = []
+
+# B3/m1: label and annotate on a Secret read and change it, without -o too; --local only
+# removes the change.
+[[case]]
+argv = ["kubectl", "label", "Secrets", "db", "a=b"]
+action = "label"
+fields = { operands = ["Secrets", "db", "a=b"] }
+effects = ["cluster_write", "read_secrets", "write_secrets"]
+
+[[case]]
+argv = ["kubectl", "annotate", "secret/db", "a=b", "--local", "-f", "s.yaml"]
+action = "annotate"
+fields = { operands = ["a=b", "secret/db"], local = "", filename = ["s.yaml"] }
+effects = ["manifest_input", "read_secrets"]
+
+# B4: scale on a Secret keeps read_secrets through a dry run.
+[[case]]
+argv = ["kubectl", "scale", "secret/db", "--replicas=1"]
+action = "scale"
+fields = { type = "secret/db", replicas = "1" }
+effects = ["cluster_write", "read_secrets"]
+
+# B2-B4, M4: -o and --template on a write verb print the object, which -f can make a Secret.
+[[case]]
+argv = ["kubectl", "patch", "deploy", "web", "-p", "{}", "-o", "yaml"]
+action = "patch"
+fields = { type = "deploy", name = "web", patch = "{}", output = "yaml" }
+effects = ["cluster_write", "read_secrets"]
+
+[[case]]
+argv = ["kubectl", "apply", "-f", "s.yaml", "-o", "yaml", "--dry-run=server"]
+action = "apply"
+fields = { filename = ["s.yaml"], output = "yaml", dry_run = "server" }
+effects = ["manifest_input", "read_secrets"]
+
+[[case]]
+argv = ["kubectl", "create", "-f", "s.yaml", "--template={{.data}}"]
+action = "create"
+fields = { filename = ["s.yaml"], template = "{{.data}}" }
+effects = ["cluster_write", "manifest_input", "read_secrets"]
+
+[[case]]
+argv = ["kubectl", "label", "-f", "s.yaml", "a=b", "-oyaml"]
+action = "label"
+fields = { filename = ["s.yaml"], operands = ["a=b"], output = "yaml" }
+effects = ["cluster_write", "manifest_input", "read_secrets"]
+
+# create namespace builds the object locally, so its -o prints no Secret.
+[[case]]
+argv = ["kubectl", "create", "namespace", "dev", "-o", "yaml"]
+action = "create_namespace"
+fields = { name = "dev", output = "yaml" }
+effects = ["cluster_write"]
+
+# B1, M4: describe of a Secret type, and of a kustomization.
+[[case]]
+argv = ["kubectl", "describe", "SECRET/robot-token"]
+action = "describe"
+fields = { type = "SECRET/robot-token" }
+effects = ["cluster_read", "read_secrets"]
+
+[[case]]
+argv = ["kubectl", "describe", "-k", "dir/"]
+action = "describe"
+fields = { kustomize = "dir/" }
+effects = ["cluster_read", "manifest_input", "read_secrets"]
