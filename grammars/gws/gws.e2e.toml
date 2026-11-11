@@ -42,11 +42,12 @@ argv = ["gws", "gmail", "users", "messages", "send", "--dry-run", "--params", '{
 exit = 0
 stdout = "stub-argv: [gmail] [users] [messages] [send] [--dry-run]"
 
-# A share with one user is permitted.
+# A share with one user also emails the user (sendNotificationEmail defaults to true), so the
+# send rule refuses it.
 [[case]]
 argv = ["gws", "drive", "permissions", "create", "--params", '{"fileId":"f1"}', "--json", '{"role":"reader","type":"user","emailAddress":"alex@example.com"}']
-exit = 0
-stdout = "stub-argv: [drive] [permissions] [create]"
+exit = 126
+stderr = "[policy: no_send_email]"
 
 # A share with anyone is refused.
 [[case]]

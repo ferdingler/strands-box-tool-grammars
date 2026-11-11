@@ -14,8 +14,12 @@
 # unmodeled.
 #
 # --params and --json hold JSON. The grammar records each as one string field and cannot read its
-# content. The only exceptions are the `like` patterns below, which flag `make_public` on
-# `drive permissions create` and `send_email` on calendar event writes. A policy that needs the
+# content. The only exceptions are the `like` patterns below. Each one is a substring test that
+# over-flags: every letter case of the key word, and any `\u` escape. They flag `make_public` on
+# `drive permissions create` (`anyone`) and `drive revisions update` (`publish`), `share_external`
+# on `drive files create|copy|update` (`parents`, which covers `addParents`), `trash_data` on Gmail
+# `modify` (`trash`), and `send_email` on calendar event writes (`sendUpdates`, `sendNotifications`,
+# and their snake_case forms). A policy that needs the
 # target file, message, or recipient must read the string with `like`, and must allow for JSON
 # escapes (`a`) and for any key order.
 #
@@ -49,9 +53,9 @@ read_data        = "Reads data from the user's Google Workspace account"
 write_data       = "Creates or changes Workspace data (a file, message, label, event, calendar, sheet, or document)"
 delete_data      = "Permanently deletes or clears Workspace data, including a permission or ACL rule"
 trash_data       = "Moves a Gmail message or thread to the trash, where it can be restored"
-send_email       = "Sends email: a message, a draft, or event notifications that --params asks for"
-share_external   = "Grants or changes access to a file, drive, or calendar for another user, group, domain, or anyone"
-make_public      = "Can grant access to anyone: a Drive permission body that names 'anyone', or any calendar ACL write"
+send_email       = "Sends email: a message, a draft, a Drive share or calendar ACL notification, or event notifications"
+share_external   = "Grants or changes access for another user, group, domain, or anyone, or puts a file in a folder whose audience it then gets"
+make_public      = "Can grant access to anyone: a Drive permission or revision publish, a Drive permission update, or any calendar ACL write"
 upload_file      = "Sends the content of a local file (--upload) to Google"
 write_local_file = "Writes the response to a local file (-o, --output)"
 read_credentials = "Reads the stored Google credentials and asks Google which account they belong to"
@@ -134,7 +138,27 @@ options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data"
 usage = "gws drive files copy [options]"
 adds  = ["write_data"]
 options.params    = { flag = ["--params"], value = "required" }
-options.json      = { flag = ["--json"], value = "required" }
+options.json = { flag = ["--json"], value = "required", when = [
+  { adds = ["share_external"], like = [
+    '*parents*', '*parentS*', '*parenTs*', '*parenTS*', '*pareNts*', '*pareNtS*', '*pareNTs*', '*pareNTS*',
+    '*parEnts*', '*parEntS*', '*parEnTs*', '*parEnTS*', '*parENts*', '*parENtS*', '*parENTs*', '*parENTS*',
+    '*paRents*', '*paRentS*', '*paRenTs*', '*paRenTS*', '*paReNts*', '*paReNtS*', '*paReNTs*', '*paReNTS*',
+    '*paREnts*', '*paREntS*', '*paREnTs*', '*paREnTS*', '*paRENts*', '*paRENtS*', '*paRENTs*', '*paRENTS*',
+    '*pArents*', '*pArentS*', '*pArenTs*', '*pArenTS*', '*pAreNts*', '*pAreNtS*', '*pAreNTs*', '*pAreNTS*',
+    '*pArEnts*', '*pArEntS*', '*pArEnTs*', '*pArEnTS*', '*pArENts*', '*pArENtS*', '*pArENTs*', '*pArENTS*',
+    '*pARents*', '*pARentS*', '*pARenTs*', '*pARenTS*', '*pAReNts*', '*pAReNtS*', '*pAReNTs*', '*pAReNTS*',
+    '*pAREnts*', '*pAREntS*', '*pAREnTs*', '*pAREnTS*', '*pARENts*', '*pARENtS*', '*pARENTs*', '*pARENTS*',
+    '*Parents*', '*ParentS*', '*ParenTs*', '*ParenTS*', '*PareNts*', '*PareNtS*', '*PareNTs*', '*PareNTS*',
+    '*ParEnts*', '*ParEntS*', '*ParEnTs*', '*ParEnTS*', '*ParENts*', '*ParENtS*', '*ParENTs*', '*ParENTS*',
+    '*PaRents*', '*PaRentS*', '*PaRenTs*', '*PaRenTS*', '*PaReNts*', '*PaReNtS*', '*PaReNTs*', '*PaReNTS*',
+    '*PaREnts*', '*PaREntS*', '*PaREnTs*', '*PaREnTS*', '*PaRENts*', '*PaRENtS*', '*PaRENTs*', '*PaRENTS*',
+    '*PArents*', '*PArentS*', '*PArenTs*', '*PArenTS*', '*PAreNts*', '*PAreNtS*', '*PAreNTs*', '*PAreNTS*',
+    '*PArEnts*', '*PArEntS*', '*PArEnTs*', '*PArEnTS*', '*PArENts*', '*PArENtS*', '*PArENTs*', '*PArENTS*',
+    '*PARents*', '*PARentS*', '*PARenTs*', '*PARenTS*', '*PAReNts*', '*PAReNtS*', '*PAReNTs*', '*PAReNTS*',
+    '*PAREnts*', '*PAREntS*', '*PAREnTs*', '*PAREnTS*', '*PARENts*', '*PARENtS*', '*PARENTs*', '*PARENTS*',
+    '*\u*',
+  ] },
+] }
 options.output    = { flag = ["-o", "--output"], value = "required", adds = ["write_local_file"] }
 options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
@@ -146,7 +170,27 @@ options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data"
 usage = "gws drive files create [options]"
 adds  = ["write_data"]
 options.params    = { flag = ["--params"], value = "required" }
-options.json      = { flag = ["--json"], value = "required" }
+options.json = { flag = ["--json"], value = "required", when = [
+  { adds = ["share_external"], like = [
+    '*parents*', '*parentS*', '*parenTs*', '*parenTS*', '*pareNts*', '*pareNtS*', '*pareNTs*', '*pareNTS*',
+    '*parEnts*', '*parEntS*', '*parEnTs*', '*parEnTS*', '*parENts*', '*parENtS*', '*parENTs*', '*parENTS*',
+    '*paRents*', '*paRentS*', '*paRenTs*', '*paRenTS*', '*paReNts*', '*paReNtS*', '*paReNTs*', '*paReNTS*',
+    '*paREnts*', '*paREntS*', '*paREnTs*', '*paREnTS*', '*paRENts*', '*paRENtS*', '*paRENTs*', '*paRENTS*',
+    '*pArents*', '*pArentS*', '*pArenTs*', '*pArenTS*', '*pAreNts*', '*pAreNtS*', '*pAreNTs*', '*pAreNTS*',
+    '*pArEnts*', '*pArEntS*', '*pArEnTs*', '*pArEnTS*', '*pArENts*', '*pArENtS*', '*pArENTs*', '*pArENTS*',
+    '*pARents*', '*pARentS*', '*pARenTs*', '*pARenTS*', '*pAReNts*', '*pAReNtS*', '*pAReNTs*', '*pAReNTS*',
+    '*pAREnts*', '*pAREntS*', '*pAREnTs*', '*pAREnTS*', '*pARENts*', '*pARENtS*', '*pARENTs*', '*pARENTS*',
+    '*Parents*', '*ParentS*', '*ParenTs*', '*ParenTS*', '*PareNts*', '*PareNtS*', '*PareNTs*', '*PareNTS*',
+    '*ParEnts*', '*ParEntS*', '*ParEnTs*', '*ParEnTS*', '*ParENts*', '*ParENtS*', '*ParENTs*', '*ParENTS*',
+    '*PaRents*', '*PaRentS*', '*PaRenTs*', '*PaRenTS*', '*PaReNts*', '*PaReNtS*', '*PaReNTs*', '*PaReNTS*',
+    '*PaREnts*', '*PaREntS*', '*PaREnTs*', '*PaREnTS*', '*PaRENts*', '*PaRENtS*', '*PaRENTs*', '*PaRENTS*',
+    '*PArents*', '*PArentS*', '*PArenTs*', '*PArenTS*', '*PAreNts*', '*PAreNtS*', '*PAreNTs*', '*PAreNTS*',
+    '*PArEnts*', '*PArEntS*', '*PArEnTs*', '*PArEnTS*', '*PArENts*', '*PArENtS*', '*PArENTs*', '*PArENTS*',
+    '*PARents*', '*PARentS*', '*PARenTs*', '*PARenTS*', '*PAReNts*', '*PAReNtS*', '*PAReNTs*', '*PAReNTS*',
+    '*PAREnts*', '*PAREntS*', '*PAREnTs*', '*PAREnTS*', '*PARENts*', '*PARENtS*', '*PARENTs*', '*PARENTS*',
+    '*\u*',
+  ] },
+] }
 options.upload    = { flag = ["--upload"], value = "required", adds = ["upload_file"] }
 options.upload_content_type = { flag = ["--upload-content-type"], value = "required" }
 options.output    = { flag = ["-o", "--output"], value = "required", adds = ["write_local_file"] }
@@ -159,8 +203,48 @@ options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data"
 [shell.drive_files_update]
 usage = "gws drive files update [options]"
 adds  = ["write_data"]
-options.params    = { flag = ["--params"], value = "required" }
-options.json      = { flag = ["--json"], value = "required" }
+options.params = { flag = ["--params"], value = "required", when = [
+  { adds = ["share_external"], like = [
+    '*parents*', '*parentS*', '*parenTs*', '*parenTS*', '*pareNts*', '*pareNtS*', '*pareNTs*', '*pareNTS*',
+    '*parEnts*', '*parEntS*', '*parEnTs*', '*parEnTS*', '*parENts*', '*parENtS*', '*parENTs*', '*parENTS*',
+    '*paRents*', '*paRentS*', '*paRenTs*', '*paRenTS*', '*paReNts*', '*paReNtS*', '*paReNTs*', '*paReNTS*',
+    '*paREnts*', '*paREntS*', '*paREnTs*', '*paREnTS*', '*paRENts*', '*paRENtS*', '*paRENTs*', '*paRENTS*',
+    '*pArents*', '*pArentS*', '*pArenTs*', '*pArenTS*', '*pAreNts*', '*pAreNtS*', '*pAreNTs*', '*pAreNTS*',
+    '*pArEnts*', '*pArEntS*', '*pArEnTs*', '*pArEnTS*', '*pArENts*', '*pArENtS*', '*pArENTs*', '*pArENTS*',
+    '*pARents*', '*pARentS*', '*pARenTs*', '*pARenTS*', '*pAReNts*', '*pAReNtS*', '*pAReNTs*', '*pAReNTS*',
+    '*pAREnts*', '*pAREntS*', '*pAREnTs*', '*pAREnTS*', '*pARENts*', '*pARENtS*', '*pARENTs*', '*pARENTS*',
+    '*Parents*', '*ParentS*', '*ParenTs*', '*ParenTS*', '*PareNts*', '*PareNtS*', '*PareNTs*', '*PareNTS*',
+    '*ParEnts*', '*ParEntS*', '*ParEnTs*', '*ParEnTS*', '*ParENts*', '*ParENtS*', '*ParENTs*', '*ParENTS*',
+    '*PaRents*', '*PaRentS*', '*PaRenTs*', '*PaRenTS*', '*PaReNts*', '*PaReNtS*', '*PaReNTs*', '*PaReNTS*',
+    '*PaREnts*', '*PaREntS*', '*PaREnTs*', '*PaREnTS*', '*PaRENts*', '*PaRENtS*', '*PaRENTs*', '*PaRENTS*',
+    '*PArents*', '*PArentS*', '*PArenTs*', '*PArenTS*', '*PAreNts*', '*PAreNtS*', '*PAreNTs*', '*PAreNTS*',
+    '*PArEnts*', '*PArEntS*', '*PArEnTs*', '*PArEnTS*', '*PArENts*', '*PArENtS*', '*PArENTs*', '*PArENTS*',
+    '*PARents*', '*PARentS*', '*PARenTs*', '*PARenTS*', '*PAReNts*', '*PAReNtS*', '*PAReNTs*', '*PAReNTS*',
+    '*PAREnts*', '*PAREntS*', '*PAREnTs*', '*PAREnTS*', '*PARENts*', '*PARENtS*', '*PARENTs*', '*PARENTS*',
+    '*\u*',
+  ] },
+] }
+options.json = { flag = ["--json"], value = "required", when = [
+  { adds = ["share_external"], like = [
+    '*parents*', '*parentS*', '*parenTs*', '*parenTS*', '*pareNts*', '*pareNtS*', '*pareNTs*', '*pareNTS*',
+    '*parEnts*', '*parEntS*', '*parEnTs*', '*parEnTS*', '*parENts*', '*parENtS*', '*parENTs*', '*parENTS*',
+    '*paRents*', '*paRentS*', '*paRenTs*', '*paRenTS*', '*paReNts*', '*paReNtS*', '*paReNTs*', '*paReNTS*',
+    '*paREnts*', '*paREntS*', '*paREnTs*', '*paREnTS*', '*paRENts*', '*paRENtS*', '*paRENTs*', '*paRENTS*',
+    '*pArents*', '*pArentS*', '*pArenTs*', '*pArenTS*', '*pAreNts*', '*pAreNtS*', '*pAreNTs*', '*pAreNTS*',
+    '*pArEnts*', '*pArEntS*', '*pArEnTs*', '*pArEnTS*', '*pArENts*', '*pArENtS*', '*pArENTs*', '*pArENTS*',
+    '*pARents*', '*pARentS*', '*pARenTs*', '*pARenTS*', '*pAReNts*', '*pAReNtS*', '*pAReNTs*', '*pAReNTS*',
+    '*pAREnts*', '*pAREntS*', '*pAREnTs*', '*pAREnTS*', '*pARENts*', '*pARENtS*', '*pARENTs*', '*pARENTS*',
+    '*Parents*', '*ParentS*', '*ParenTs*', '*ParenTS*', '*PareNts*', '*PareNtS*', '*PareNTs*', '*PareNTS*',
+    '*ParEnts*', '*ParEntS*', '*ParEnTs*', '*ParEnTS*', '*ParENts*', '*ParENtS*', '*ParENTs*', '*ParENTS*',
+    '*PaRents*', '*PaRentS*', '*PaRenTs*', '*PaRenTS*', '*PaReNts*', '*PaReNtS*', '*PaReNTs*', '*PaReNTS*',
+    '*PaREnts*', '*PaREntS*', '*PaREnTs*', '*PaREnTS*', '*PaRENts*', '*PaRENtS*', '*PaRENTs*', '*PaRENTS*',
+    '*PArents*', '*PArentS*', '*PArenTs*', '*PArenTS*', '*PAreNts*', '*PAreNtS*', '*PAreNTs*', '*PAreNTS*',
+    '*PArEnts*', '*PArEntS*', '*PArEnTs*', '*PArEnTS*', '*PArENts*', '*PArENtS*', '*PArENTs*', '*PArENTS*',
+    '*PARents*', '*PARentS*', '*PARenTs*', '*PARenTS*', '*PAReNts*', '*PAReNtS*', '*PAReNTs*', '*PAReNTS*',
+    '*PAREnts*', '*PAREntS*', '*PAREnTs*', '*PAREnTS*', '*PARENts*', '*PARENtS*', '*PARENTs*', '*PARENTS*',
+    '*\u*',
+  ] },
+] }
 options.upload    = { flag = ["--upload"], value = "required", adds = ["upload_file"] }
 options.upload_content_type = { flag = ["--upload-content-type"], value = "required" }
 options.output    = { flag = ["-o", "--output"], value = "required", adds = ["write_local_file"] }
@@ -205,9 +289,10 @@ options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data"
 
 [shell.drive_permissions_create]
 usage = "gws drive permissions create [options]"
-adds  = ["share_external"]
+adds  = ["share_external", "send_email"]
 options.params    = { flag = ["--params"], value = "required" }
-options.json = { flag = ["--json"], value = "required", when = [{ adds = ["make_public"], like = [
+options.json = { flag = ["--json"], value = "required", when = [
+  { adds = ["make_public"], like = [
     '*anyone*', '*anyonE*', '*anyoNe*', '*anyoNE*', '*anyOne*', '*anyOnE*', '*anyONe*', '*anyONE*',
     '*anYone*', '*anYonE*', '*anYoNe*', '*anYoNE*', '*anYOne*', '*anYOnE*', '*anYONe*', '*anYONE*',
     '*aNyone*', '*aNyonE*', '*aNyoNe*', '*aNyoNE*', '*aNyOne*', '*aNyOnE*', '*aNyONe*', '*aNyONE*',
@@ -217,7 +302,8 @@ options.json = { flag = ["--json"], value = "required", when = [{ adds = ["make_
     '*ANyone*', '*ANyonE*', '*ANyoNe*', '*ANyoNE*', '*ANyOne*', '*ANyOnE*', '*ANyONe*', '*ANyONE*',
     '*ANYone*', '*ANYonE*', '*ANYoNe*', '*ANYoNE*', '*ANYOne*', '*ANYOnE*', '*ANYONe*', '*ANYONE*',
     '*\u*',
-] }] }
+  ] },
+] }
 options.output    = { flag = ["-o", "--output"], value = "required", adds = ["write_local_file"] }
 options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
@@ -467,7 +553,27 @@ options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data"
 usage = "gws drive revisions update [options]"
 adds  = ["write_data"]
 options.params    = { flag = ["--params"], value = "required" }
-options.json      = { flag = ["--json"], value = "required" }
+options.json = { flag = ["--json"], value = "required", when = [
+  { adds = ["make_public", "share_external"], like = [
+    '*publish*', '*publisH*', '*publiSh*', '*publiSH*', '*publIsh*', '*publIsH*', '*publISh*', '*publISH*',
+    '*pubLish*', '*pubLisH*', '*pubLiSh*', '*pubLiSH*', '*pubLIsh*', '*pubLIsH*', '*pubLISh*', '*pubLISH*',
+    '*puBlish*', '*puBlisH*', '*puBliSh*', '*puBliSH*', '*puBlIsh*', '*puBlIsH*', '*puBlISh*', '*puBlISH*',
+    '*puBLish*', '*puBLisH*', '*puBLiSh*', '*puBLiSH*', '*puBLIsh*', '*puBLIsH*', '*puBLISh*', '*puBLISH*',
+    '*pUblish*', '*pUblisH*', '*pUbliSh*', '*pUbliSH*', '*pUblIsh*', '*pUblIsH*', '*pUblISh*', '*pUblISH*',
+    '*pUbLish*', '*pUbLisH*', '*pUbLiSh*', '*pUbLiSH*', '*pUbLIsh*', '*pUbLIsH*', '*pUbLISh*', '*pUbLISH*',
+    '*pUBlish*', '*pUBlisH*', '*pUBliSh*', '*pUBliSH*', '*pUBlIsh*', '*pUBlIsH*', '*pUBlISh*', '*pUBlISH*',
+    '*pUBLish*', '*pUBLisH*', '*pUBLiSh*', '*pUBLiSH*', '*pUBLIsh*', '*pUBLIsH*', '*pUBLISh*', '*pUBLISH*',
+    '*Publish*', '*PublisH*', '*PubliSh*', '*PubliSH*', '*PublIsh*', '*PublIsH*', '*PublISh*', '*PublISH*',
+    '*PubLish*', '*PubLisH*', '*PubLiSh*', '*PubLiSH*', '*PubLIsh*', '*PubLIsH*', '*PubLISh*', '*PubLISH*',
+    '*PuBlish*', '*PuBlisH*', '*PuBliSh*', '*PuBliSH*', '*PuBlIsh*', '*PuBlIsH*', '*PuBlISh*', '*PuBlISH*',
+    '*PuBLish*', '*PuBLisH*', '*PuBLiSh*', '*PuBLiSH*', '*PuBLIsh*', '*PuBLIsH*', '*PuBLISh*', '*PuBLISH*',
+    '*PUblish*', '*PUblisH*', '*PUbliSh*', '*PUbliSH*', '*PUblIsh*', '*PUblIsH*', '*PUblISh*', '*PUblISH*',
+    '*PUbLish*', '*PUbLisH*', '*PUbLiSh*', '*PUbLiSH*', '*PUbLIsh*', '*PUbLIsH*', '*PUbLISh*', '*PUbLISH*',
+    '*PUBlish*', '*PUBlisH*', '*PUBliSh*', '*PUBliSH*', '*PUBlIsh*', '*PUBlIsH*', '*PUBlISh*', '*PUBlISH*',
+    '*PUBLish*', '*PUBLisH*', '*PUBLiSh*', '*PUBLiSH*', '*PUBLIsh*', '*PUBLIsH*', '*PUBLISh*', '*PUBLISH*',
+    '*\u*',
+  ] },
+] }
 options.output    = { flag = ["-o", "--output"], value = "required", adds = ["write_local_file"] }
 options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
@@ -541,7 +647,15 @@ options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data"
 usage = "gws gmail users messages modify [options]"
 adds  = ["write_data"]
 options.params    = { flag = ["--params"], value = "required" }
-options.json      = { flag = ["--json"], value = "required" }
+options.json = { flag = ["--json"], value = "required", when = [
+  { adds = ["trash_data"], like = [
+    '*trash*', '*trasH*', '*traSh*', '*traSH*', '*trAsh*', '*trAsH*', '*trASh*', '*trASH*',
+    '*tRash*', '*tRasH*', '*tRaSh*', '*tRaSH*', '*tRAsh*', '*tRAsH*', '*tRASh*', '*tRASH*',
+    '*Trash*', '*TrasH*', '*TraSh*', '*TraSH*', '*TrAsh*', '*TrAsH*', '*TrASh*', '*TrASH*',
+    '*TRash*', '*TRasH*', '*TRaSh*', '*TRaSH*', '*TRAsh*', '*TRAsH*', '*TRASh*', '*TRASH*',
+    '*\u*',
+  ] },
+] }
 options.output    = { flag = ["-o", "--output"], value = "required", adds = ["write_local_file"] }
 options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
@@ -722,7 +836,15 @@ options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data"
 usage = "gws gmail users threads modify [options]"
 adds  = ["write_data"]
 options.params    = { flag = ["--params"], value = "required" }
-options.json      = { flag = ["--json"], value = "required" }
+options.json = { flag = ["--json"], value = "required", when = [
+  { adds = ["trash_data"], like = [
+    '*trash*', '*trasH*', '*traSh*', '*traSH*', '*trAsh*', '*trAsH*', '*trASh*', '*trASH*',
+    '*tRash*', '*tRasH*', '*tRaSh*', '*tRaSH*', '*tRAsh*', '*tRAsH*', '*tRASh*', '*tRASH*',
+    '*Trash*', '*TrasH*', '*TraSh*', '*TraSH*', '*TrAsh*', '*TrAsH*', '*TrASh*', '*TrASH*',
+    '*TRash*', '*TRasH*', '*TRaSh*', '*TRaSH*', '*TRAsh*', '*TRAsH*', '*TRASh*', '*TRASH*',
+    '*\u*',
+  ] },
+] }
 options.output    = { flag = ["-o", "--output"], value = "required", adds = ["write_local_file"] }
 options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
@@ -905,9 +1027,11 @@ options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data"
 [shell.calendar_events_insert]
 usage = "gws calendar events insert [options]"
 adds  = ["write_data"]
-options.params = { flag = ["--params"], value = "required", when = [{ adds = ["send_email"], like = [
-    '*sendUpdates*', '*sendNotifications*', '*\u*',
-] }] }
+options.params = { flag = ["--params"], value = "required", when = [
+  { adds = ["send_email"], like = [
+    '*sendUpdates*', '*sendNotifications*', '*send_updates*', '*send_notifications*', '*\u*',
+  ] },
+] }
 options.json      = { flag = ["--json"], value = "required" }
 options.output    = { flag = ["-o", "--output"], value = "required", adds = ["write_local_file"] }
 options.format    = { flag = ["--format"], value = "required" }
@@ -919,9 +1043,11 @@ options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data"
 [shell.calendar_events_patch]
 usage = "gws calendar events patch [options]"
 adds  = ["write_data"]
-options.params = { flag = ["--params"], value = "required", when = [{ adds = ["send_email"], like = [
-    '*sendUpdates*', '*sendNotifications*', '*\u*',
-] }] }
+options.params = { flag = ["--params"], value = "required", when = [
+  { adds = ["send_email"], like = [
+    '*sendUpdates*', '*sendNotifications*', '*send_updates*', '*send_notifications*', '*\u*',
+  ] },
+] }
 options.json      = { flag = ["--json"], value = "required" }
 options.output    = { flag = ["-o", "--output"], value = "required", adds = ["write_local_file"] }
 options.format    = { flag = ["--format"], value = "required" }
@@ -933,9 +1059,11 @@ options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data"
 [shell.calendar_events_update]
 usage = "gws calendar events update [options]"
 adds  = ["write_data"]
-options.params = { flag = ["--params"], value = "required", when = [{ adds = ["send_email"], like = [
-    '*sendUpdates*', '*sendNotifications*', '*\u*',
-] }] }
+options.params = { flag = ["--params"], value = "required", when = [
+  { adds = ["send_email"], like = [
+    '*sendUpdates*', '*sendNotifications*', '*send_updates*', '*send_notifications*', '*\u*',
+  ] },
+] }
 options.json      = { flag = ["--json"], value = "required" }
 options.output    = { flag = ["-o", "--output"], value = "required", adds = ["write_local_file"] }
 options.format    = { flag = ["--format"], value = "required" }
@@ -947,9 +1075,11 @@ options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data"
 [shell.calendar_events_move]
 usage = "gws calendar events move [options]"
 adds  = ["write_data"]
-options.params = { flag = ["--params"], value = "required", when = [{ adds = ["send_email"], like = [
-    '*sendUpdates*', '*sendNotifications*', '*\u*',
-] }] }
+options.params = { flag = ["--params"], value = "required", when = [
+  { adds = ["send_email"], like = [
+    '*sendUpdates*', '*sendNotifications*', '*send_updates*', '*send_notifications*', '*\u*',
+  ] },
+] }
 options.output    = { flag = ["-o", "--output"], value = "required", adds = ["write_local_file"] }
 options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
@@ -972,9 +1102,11 @@ options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data"
 [shell.calendar_events_delete]
 usage = "gws calendar events delete [options]"
 adds  = ["delete_data"]
-options.params = { flag = ["--params"], value = "required", when = [{ adds = ["send_email"], like = [
-    '*sendUpdates*', '*sendNotifications*', '*\u*',
-] }] }
+options.params = { flag = ["--params"], value = "required", when = [
+  { adds = ["send_email"], like = [
+    '*sendUpdates*', '*sendNotifications*', '*send_updates*', '*send_notifications*', '*\u*',
+  ] },
+] }
 options.output    = { flag = ["-o", "--output"], value = "required", adds = ["write_local_file"] }
 options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
@@ -1075,7 +1207,7 @@ options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data"
 
 [shell.calendar_acl_insert]
 usage = "gws calendar acl insert [options]"
-adds  = ["share_external", "make_public"]
+adds  = ["share_external", "make_public", "send_email"]
 options.params    = { flag = ["--params"], value = "required" }
 options.json      = { flag = ["--json"], value = "required" }
 options.output    = { flag = ["-o", "--output"], value = "required", adds = ["write_local_file"] }
@@ -1087,7 +1219,7 @@ options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data"
 
 [shell.calendar_acl_patch]
 usage = "gws calendar acl patch [options]"
-adds  = ["share_external", "make_public"]
+adds  = ["share_external", "make_public", "send_email"]
 options.params    = { flag = ["--params"], value = "required" }
 options.json      = { flag = ["--json"], value = "required" }
 options.output    = { flag = ["-o", "--output"], value = "required", adds = ["write_local_file"] }
@@ -1099,7 +1231,7 @@ options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data"
 
 [shell.calendar_acl_update]
 usage = "gws calendar acl update [options]"
-adds  = ["share_external", "make_public"]
+adds  = ["share_external", "make_public", "send_email"]
 options.params    = { flag = ["--params"], value = "required" }
 options.json      = { flag = ["--json"], value = "required" }
 options.output    = { flag = ["-o", "--output"], value = "required", adds = ["write_local_file"] }

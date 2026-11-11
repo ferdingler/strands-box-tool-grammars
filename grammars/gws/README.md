@@ -59,28 +59,29 @@ request body also takes `--json <JSON>`. A method that supports media upload als
 | Family | Methods | Effects |
 |---|---|---|
 | `drive files` | `list`, `get`, `export`, `download` | `read_data` |
-| | `copy`, `create`, `update` | `write_data` |
+| | `copy`, `create`, `update` | `write_data`, plus `share_external` when the body or `--params` names `parents` (such as `addParents`) |
 | | `delete` | `delete_data` |
 | `drive permissions` | `list`, `get` | `read_data` |
-| | `create` | `share_external`, plus `make_public` when the body may name `anyone` |
+| | `create` | `share_external`, `send_email`, plus `make_public` when the body may name `anyone` |
 | | `update` | `share_external`, `make_public` |
 | | `delete` | `delete_data` |
 | `drive drives`, `comments`, `replies`, `revisions` | `list`, `get` / `create`, `update`, `hide`, `unhide` / `delete` | `read_data` / `write_data` / `delete_data` |
+| | `revisions update` | `write_data`, plus `make_public` and `share_external` when the body names `publish` (such as `published`) |
 | `drive about get`, `drive changes list` | | `read_data` |
 | `gmail users messages` | `list`, `get`, `attachments get` | `read_data` |
 | | `send` | `send_email` |
-| | `modify`, `import`, `insert`, `untrash` | `write_data` |
+| | `modify`, `import`, `insert`, `untrash` | `write_data`; `modify` also `trash_data` when the body names `trash` |
 | | `trash` | `trash_data` |
 | | `delete` | `delete_data` |
 | `gmail users drafts` | `list`, `get` / `create`, `update` / `send` / `delete` | `read_data` / `write_data` / `send_email` / `delete_data` |
-| `gmail users threads` | `list`, `get` / `modify`, `untrash` / `trash` / `delete` | `read_data` / `write_data` / `trash_data` / `delete_data` |
+| `gmail users threads` | `list`, `get` / `modify`, `untrash` / `trash` / `delete` | `read_data` / `write_data` (`modify` as for messages) / `trash_data` / `delete_data` |
 | `gmail users labels` | `list`, `get` / `create`, `patch`, `update` / `delete` | `read_data` / `write_data` / `delete_data` |
 | `gmail users history list`, `gmail users settings filters list`, `get` | | `read_data` |
 | `calendar events` | `list`, `get`, `instances` | `read_data` |
-| | `insert`, `patch`, `update`, `move`, `import` | `write_data`, plus `send_email` when `--params` names `sendUpdates` or `sendNotifications` |
+| | `insert`, `patch`, `update`, `move`, `import` | `write_data`, plus `send_email` (not on `import`) when `--params` names `sendUpdates` or `sendNotifications` |
 | | `delete` | `delete_data`, plus `send_email` as above |
 | `calendar calendars` | `get` / `insert`, `patch`, `update` / `clear`, `delete` | `read_data` / `write_data` / `delete_data` |
-| `calendar acl` | `list`, `get` / `insert`, `patch`, `update` / `delete` | `read_data` / `share_external`, `make_public` / `delete_data` |
+| `calendar acl` | `list`, `get` / `insert`, `patch`, `update` / `delete` | `read_data` / `share_external`, `make_public`, `send_email` / `delete_data` |
 | `calendar freebusy query`, `colors get`, `settings list`, `get` | | `read_data` |
 | `sheets spreadsheets` | `get` / `create` | `read_data` / `write_data` |
 | `sheets spreadsheets values` | `get` / `append`, `update` / `clear` | `read_data` / `write_data` / `delete_data` |
@@ -99,8 +100,8 @@ Each action is the command words joined with `_`, such as `drive_permissions_cre
 | `write_data` | Creates or changes a file, message, label, event, calendar, sheet, or document. |
 | `delete_data` | Deletes for good, or clears: a file, message, thread, draft, label, event, calendar's events, sheet range, permission, or ACL rule. |
 | `trash_data` | Moves a Gmail message or thread to the trash, where it can be restored. |
-| `send_email` | Sends a message or a draft, or asks Calendar to email the guests. |
-| `share_external` | Grants or changes access for another user, group, domain, or anyone. The grammar cannot tell your own domain from another one. |
+| `send_email` | Sends a message or a draft, or a notification that Google sends for the agent: a Drive share (on by default), a calendar ACL change (on by default), or an event change that `--params` asks for. |
+| `share_external` | Grants or changes access for another user, group, domain, or anyone, publishes a revision, or puts a file in a folder whose audience it then gets. A whole-domain share is `share_external` only, not `make_public`. The grammar cannot tell your own domain from another one. |
 | `make_public` | Can grant access to anyone. See the limits below for how it is decided. |
 | `upload_file` | Sends a local file's content to Google (`--upload`). |
 | `write_local_file` | Writes the response to a local file (`-o`, `--output`). |
@@ -175,19 +176,32 @@ These lines are unmodeled, so a policy refuses them unless it permits `unmodeled
 - **The JSON is opaque.** `--params` and `--json` are single string fields. A rule that needs the
   file ID, the recipient, or the query must match the string with `like`, and must allow for any
   key order, spacing, and JSON `\u` escapes.
-- **`make_public` on Drive is a substring test.** `drive permissions create` adds `make_public`
-  when the `--json` body contains `anyone` in any letter case, or any `\u` escape. That never
-  misses a public share, but it also flags a body such as `"emailAddress":"anyone@example.com"`.
-  `permissions update` always adds it, because it can widen an existing `anyone` permission.
+- **`make_public` on Drive covers permissions and publishing only.** `drive permissions create`
+  adds it when the `--json` body contains `anyone` in any letter case, or any `\u` escape; this
+  also flags a body such as `"emailAddress":"anyone@example.com"`. `permissions update` always adds
+  it, because it can widen an existing `anyone` permission. `revisions update` adds it when the
+  body contains `publish` in any letter case, or any `\u`. It does **not** catch a file that becomes
+  public because it is created, copied, or moved into a folder or shared drive that is already
+  shared with anyone: the grammar cannot see a folder's sharing. Such a line has `share_external`
+  (the `parents` check), so forbid `share_external` if that matters.
+- **A whole-domain share** (`type: domain`) is `share_external` only, not `make_public`.
+- **`send_email` on Drive shares is always added.** `sendNotificationEmail` defaults to true for a
+  user or group, and `emailMessage` carries any text. A `false` in `--params` cannot be proven with
+  `like`, because a later duplicate key overrides it.
 - **`make_public` on Calendar is always added** to an ACL write, because the public scope
   `default` is also the scope a rule gets when its body names none.
-- **`send_email` on Calendar** is added when `--params` names `sendUpdates` or
-  `sendNotifications`, whatever the value, or holds a `\u` escape. Google states that some emails
-  can still be sent without them.
+- **`send_email` on Calendar** is always added to an ACL insert, patch, or update, because
+  `sendNotifications` defaults to true there. On an event write it is added when `--params` names
+  `sendUpdates`, `sendNotifications`, `send_updates`, or `send_notifications`, whatever the value,
+  or holds a `\u` escape. Google states that some emails can still be sent without them.
 - **`share_external` covers every share.** The grammar cannot tell an address in your own domain
   from one outside it.
 - **Drive trash is a write.** `files update --json '{"trashed":true}'` moves a file to the trash
-  and is `write_data`.
+  and is `write_data`. Gmail `modify` with the `TRASH` label is `trash_data`, because the body
+  names `trash`.
+- **The `like` checks over-flag.** Each one is a substring test over every letter case of its
+  word, plus any `\u` escape, so it also fires on unrelated text that contains the word.
+- **`-o=PATH`** is accepted by gws but unmodeled here; use `-o PATH`, `-oPATH`, or `--output=PATH`.
 - **Which account is used** depends on environment variables (`GOOGLE_WORKSPACE_CLI_TOKEN`,
   `GOOGLE_WORKSPACE_CLI_CREDENTIALS_FILE`, `GOOGLE_WORKSPACE_CLI_CONFIG_DIR`), on a `.env` file
   that gws loads from the working directory or a parent, and on the files in its configuration

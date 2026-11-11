@@ -502,12 +502,15 @@ effects = ["delete_data"]
 # ==================================================================================================
 
 # Share with one user (disc: Permission.type `user`). Every share is `share_external`: the grammar
-# cannot tell an address in the user's own domain from one outside it.
+# cannot tell an address in the user's own domain from one outside it. Every share is also
+# `send_email`: `sendNotificationEmail` defaults to true for users and groups, and `emailMessage`
+# carries any text (disc: drive.permissions.create). A `false` in --params cannot be proven with
+# `like` (a duplicate key overrides it), so the grammar never removes it.
 [[case]]
 argv = ["gws", "drive", "permissions", "create", "--params", '{"fileId":"f1"}', "--json", '{"role":"reader","type":"user","emailAddress":"alex@example.com"}']
 action = "drive_permissions_create"
 fields = { params = '{"fileId":"f1"}', json = '{"role":"reader","type":"user","emailAddress":"alex@example.com"}' }
-effects = ["share_external"]
+effects = ["share_external", "send_email"]
 
 # `type: anyone` makes the file public (disc: Permission.type). The body names `anyone`, so
 # `make_public` is added.
@@ -515,14 +518,14 @@ effects = ["share_external"]
 argv = ["gws", "drive", "permissions", "create", "--params", '{"fileId":"f1"}', "--json", '{"role":"reader","type":"anyone"}']
 action = "drive_permissions_create"
 fields = { params = '{"fileId":"f1"}', json = '{"role":"reader","type":"anyone"}' }
-effects = ["make_public", "share_external"]
+effects = ["make_public", "share_external", "send_email"]
 
 # The `--json=` spelling, other spacing, and key order.
 [[case]]
 argv = ["gws", "drive", "permissions", "create", "--json={ \"type\" : \"anyone\", \"role\" : \"writer\" }", "--params", '{"fileId":"f1"}']
 action = "drive_permissions_create"
 fields = { params = '{"fileId":"f1"}', json = "{ \"type\" : \"anyone\", \"role\" : \"writer\" }" }
-effects = ["make_public", "share_external"]
+effects = ["make_public", "share_external", "send_email"]
 
 # Any letter case of `anyone` is flagged, because the grammar does not know whether the API
 # accepts it.
@@ -530,7 +533,7 @@ effects = ["make_public", "share_external"]
 argv = ["gws", "drive", "permissions", "create", "--params", '{"fileId":"f1"}', "--json", '{"role":"reader","type":"AnyOne"}']
 action = "drive_permissions_create"
 fields = { params = '{"fileId":"f1"}', json = '{"role":"reader","type":"AnyOne"}' }
-effects = ["make_public", "share_external"]
+effects = ["make_public", "share_external", "send_email"]
 
 # A JSON `\u` escape can spell `anyone` without the plain letters (gws decodes the body with
 # serde_json). Any `\u` in the body adds `make_public`.
@@ -538,7 +541,7 @@ effects = ["make_public", "share_external"]
 argv = ["gws", "drive", "permissions", "create", "--params", '{"fileId":"f1"}', "--json", '{"role":"reader","type":"anyone"}']
 action = "drive_permissions_create"
 fields = { params = '{"fileId":"f1"}', json = '{"role":"reader","type":"anyone"}' }
-effects = ["make_public", "share_external"]
+effects = ["make_public", "share_external", "send_email"]
 
 # The check is a substring test, so an address that contains `anyone` is also flagged. This
 # over-approximates: it never misses a public share.
@@ -546,14 +549,14 @@ effects = ["make_public", "share_external"]
 argv = ["gws", "drive", "permissions", "create", "--params", '{"fileId":"f1"}', "--json", '{"role":"reader","type":"user","emailAddress":"anyone@example.com"}']
 action = "drive_permissions_create"
 fields = { params = '{"fileId":"f1"}', json = '{"role":"reader","type":"user","emailAddress":"anyone@example.com"}' }
-effects = ["make_public", "share_external"]
+effects = ["make_public", "share_external", "send_email"]
 
 # A domain share is not public.
 [[case]]
 argv = ["gws", "drive", "permissions", "create", "--params", '{"fileId":"f1"}', "--json", '{"role":"reader","type":"domain","domain":"example.com"}']
 action = "drive_permissions_create"
 fields = { params = '{"fileId":"f1"}', json = '{"role":"reader","type":"domain","domain":"example.com"}' }
-effects = ["share_external"]
+effects = ["share_external", "send_email"]
 
 # `--dry-run` removes every effect, `make_public` included.
 [[case]]
@@ -968,18 +971,19 @@ fields = { params = '{"calendarId":"primary","ruleId":"user:alex@example.com"}' 
 effects = ["read_data"]
 
 # An ACL rule with scope type `default` is public, and `default` is the default scope (disc:
-# AclRule.scope.type). Every ACL write adds `make_public`.
+# AclRule.scope.type). Every ACL write adds `make_public`. insert, patch, and update also add
+# `send_email`: `sendNotifications` "The default is True" (disc: calendar.acl.insert).
 [[case]]
 argv = ["gws", "calendar", "acl", "insert", "--params", '{"calendarId":"primary"}', "--json", '{"role":"reader","scope":{"type":"user","value":"alex@example.com"}}']
 action = "calendar_acl_insert"
 fields = { params = '{"calendarId":"primary"}', json = '{"role":"reader","scope":{"type":"user","value":"alex@example.com"}}' }
-effects = ["make_public", "share_external"]
+effects = ["make_public", "share_external", "send_email"]
 
 [[case]]
 argv = ["gws", "calendar", "acl", "patch", "--params", '{"calendarId":"primary","ruleId":"default"}', "--json", '{"role":"writer"}']
 action = "calendar_acl_patch"
 fields = { params = '{"calendarId":"primary","ruleId":"default"}', json = '{"role":"writer"}' }
-effects = ["make_public", "share_external"]
+effects = ["make_public", "share_external", "send_email"]
 
 [[case]]
 argv = ["gws", "calendar", "acl", "update", "--params", '{"calendarId":"primary","ruleId":"r1"}', "--json", '{"role":"reader","scope":{"type":"default"}}', "--dry-run"]
@@ -1095,6 +1099,93 @@ action = "unmodeled"
 argv = ["gws", "docs", "+write", "--document", "d1", "--text", "hello"]
 action = "unmodeled"
 
+# ==================================================================================================
+# Fixes after independent verification (V-1 to V-7)
+# ==================================================================================================
+
+# V-1: `published`, `publishAuto`, and `publishedOutsideDomain` publish a Docs Editors file to the
+# web (disc: drive v3 schemas.Revision). Any letter case of `publish`, or any `\u`, flags it.
+[[case]]
+argv = ["gws", "drive", "revisions", "update", "--params", '{"fileId":"f1","revisionId":"head"}', "--json", '{"Published":true}']
+action = "drive_revisions_update"
+fields = { params = '{"fileId":"f1","revisionId":"head"}', json = '{"Published":true}' }
+effects = ["make_public", "share_external", "write_data"]
+
+[[case]]
+argv = ["gws", "drive", "revisions", "update", "--params", '{"fileId":"f1","revisionId":"head"}', "--json", '{"published_outside_domain":true}']
+action = "drive_revisions_update"
+fields = { params = '{"fileId":"f1","revisionId":"head"}', json = '{"published_outside_domain":true}' }
+effects = ["make_public", "share_external", "write_data"]
+
+[[case]]
+argv = ["gws", "drive", "revisions", "update", "--params", '{"fileId":"f1","revisionId":"head"}', "--json", '{"published":true}']
+action = "drive_revisions_update"
+fields = { params = '{"fileId":"f1","revisionId":"head"}', json = '{"published":true}' }
+effects = ["make_public", "share_external", "write_data"]
+
+# The same dry run removes them.
+[[case]]
+argv = ["gws", "drive", "revisions", "update", "--dry-run", "--params", '{"fileId":"f1","revisionId":"head"}', "--json", '{"published":true}']
+action = "drive_revisions_update"
+fields = { dry_run = true, params = '{"fileId":"f1","revisionId":"head"}', json = '{"published":true}' }
+
+# V-2: a share with a group also sends the notification email.
+[[case]]
+argv = ["gws", "drive", "permissions", "create", "--params", '{"fileId":"f1","sendNotificationEmail":false}', "--json", '{"role":"reader","type":"group","emailAddress":"team@example.com"}']
+action = "drive_permissions_create"
+fields = { params = '{"fileId":"f1","sendNotificationEmail":false}', json = '{"role":"reader","type":"group","emailAddress":"team@example.com"}' }
+effects = ["send_email", "share_external"]
+
+# V-3: a calendar ACL update notifies by default.
+[[case]]
+argv = ["gws", "calendar", "acl", "update", "--params", '{"calendarId":"primary","ruleId":"r1"}', "--json", '{"role":"reader","scope":{"type":"user","value":"alex@example.com"}}']
+action = "calendar_acl_update"
+fields = { params = '{"calendarId":"primary","ruleId":"r1"}', json = '{"role":"reader","scope":{"type":"user","value":"alex@example.com"}}' }
+effects = ["make_public", "send_email", "share_external"]
+
+# V-4: a file put in a folder gets that folder's audience. `parents` in the create or copy body, or
+# `addParents` in update's --params, adds share_external (disc: File.parents,
+# drive.files.update addParents).
+[[case]]
+argv = ["gws", "drive", "files", "create", "--json", '{"name":"a.txt","parents":["folder1"]}', "--upload", "a.txt"]
+action = "drive_files_create"
+fields = { json = '{"name":"a.txt","parents":["folder1"]}', upload = "a.txt" }
+effects = ["share_external", "upload_file", "write_data"]
+
+[[case]]
+argv = ["gws", "drive", "files", "copy", "--params", '{"fileId":"f1"}', "--json", '{"parents":["0AsharedDrive"]}']
+action = "drive_files_copy"
+fields = { params = '{"fileId":"f1"}', json = '{"parents":["0AsharedDrive"]}' }
+effects = ["share_external", "write_data"]
+
+[[case]]
+argv = ["gws", "drive", "files", "update", "--params", '{"fileId":"f1","add_parents":"folder1"}']
+action = "drive_files_update"
+fields = { params = '{"fileId":"f1","add_parents":"folder1"}' }
+effects = ["share_external", "write_data"]
+
+# A copy without `parents` stays in the user's own space: write_data only.
+[[case]]
+argv = ["gws", "drive", "files", "copy", "--params", '{"fileId":"f1"}', "--json", '{"name":"draft"}']
+action = "drive_files_copy"
+fields = { params = '{"fileId":"f1"}', json = '{"name":"draft"}' }
+effects = ["write_data"]
+
+# V-5: adding the TRASH label to a thread trashes it.
+[[case]]
+argv = ["gws", "gmail", "users", "threads", "modify", "--params", '{"userId":"me","id":"t1"}', "--json", '{"addLabelIds":["Trash"]}']
+action = "gmail_users_threads_modify"
+fields = { params = '{"userId":"me","id":"t1"}', json = '{"addLabelIds":["Trash"]}' }
+effects = ["trash_data", "write_data"]
+
+# V-6: the snake_case query names are flagged too.
+[[case]]
+argv = ["gws", "calendar", "events", "insert", "--params", '{"calendarId":"primary","send_updates":"all"}', "--json", '{"summary":"x"}']
+action = "calendar_events_insert"
+fields = { params = '{"calendarId":"primary","send_updates":"all"}', json = '{"summary":"x"}' }
+effects = ["send_email", "write_data"]
+
+
 # A service the grammar does not cover is unmodeled.
 [[case]]
 argv = ["gws", "chat", "spaces", "list"]
@@ -1209,20 +1300,20 @@ effects = ["read_data"]
 argv = ["gws", "drive", "permissions", "create", "--params", '{"fileId":"f1"}', "--json", '{"role":"reader","type":"anyone"}']
 action = "drive_permissions_create"
 fields = { params = '{"fileId":"f1"}', json = '{"role":"reader","type":"anyone"}' }
-effects = ["share_external", "make_public"]
+effects = ["share_external", "make_public", "send_email"]
 
 [[case]]
 argv = ["gws", "drive", "permissions", "create", '--json={ "type" : "ANYONE", "role" : "reader" }']
 action = "drive_permissions_create"
 fields = { json = '{ "type" : "ANYONE", "role" : "reader" }' }
-effects = ["share_external", "make_public"]
+effects = ["share_external", "make_public", "send_email"]
 
 # A domain-wide share is not "anyone"; the grammar gives share_external only.
 [[case]]
 argv = ["gws", "drive", "permissions", "create", "--params", '{"fileId":"f1"}', "--json", '{"type":"domain","domain":"example.com","role":"writer","allowFileDiscovery":true}']
 action = "drive_permissions_create"
 fields = { params = '{"fileId":"f1"}', json = '{"type":"domain","domain":"example.com","role":"writer","allowFileDiscovery":true}' }
-effects = ["share_external"]
+effects = ["share_external", "send_email"]
 
 # Dry run removes make_public too.
 [[case]]
@@ -1250,20 +1341,21 @@ action = "gmail_users_messages_send"
 fields = { params = '{"userId":"me"}', upload_content_type = "message/rfc822", upload = "m.eml" }
 effects = ["send_email", "upload_file"]
 
-# Adding the TRASH label through modify trashes a message, but it reads as write_data (noted, not failed).
+# Adding the TRASH label through modify trashes a message. The --json body names `trash`, so
+# trash_data is added (author fix for V-5).
 [[case]]
 argv = ["gws", "gmail", "users", "messages", "modify", "--params", '{"userId":"me","id":"m1"}', "--json", '{"addLabelIds":["TRASH"]}']
 action = "gmail_users_messages_modify"
 fields = { params = '{"userId":"me","id":"m1"}', json = '{"addLabelIds":["TRASH"]}' }
-effects = ["write_data"]
+effects = ["write_data", "trash_data"]
 
 # Moving a file into another folder (addParents) can widen who sees it; the grammar cannot see the
-# folder's sharing, so write_data only (noted, not failed).
+# folder's sharing, so `parents` in --params adds share_external (author fix for V-4).
 [[case]]
 argv = ["gws", "drive", "files", "update", "--params", '{"fileId":"f1","addParents":"publicFolder"}']
 action = "drive_files_update"
 fields = { params = '{"fileId":"f1","addParents":"publicFolder"}' }
-effects = ["write_data"]
+effects = ["write_data", "share_external"]
 
 [[case]]
 argv = ["gws", "schema", "drive.files.delete", "--resolve-refs"]
@@ -1278,12 +1370,13 @@ action = "unmodeled"
 # --- verifier cases that FAIL on 239b7ed (they pin a finding) ---
 
 # V-1: Revision.published / publishedOutsideDomain publish a Docs Editors file to the web
-# (Discovery drive v3 schemas.Revision). Expected make_public; the grammar gives write_data only.
+# (Discovery drive v3 schemas.Revision). make_public, and share_external too, because publishing is a
+# grant to anyone (author fix for V-1).
 [[case]]
 argv = ["gws", "drive", "revisions", "update", "--params", '{"fileId":"f1","revisionId":"head"}', "--json", '{"published":true,"publishAuto":true,"publishedOutsideDomain":true}']
 action = "drive_revisions_update"
 fields = { params = '{"fileId":"f1","revisionId":"head"}', json = '{"published":true,"publishAuto":true,"publishedOutsideDomain":true}' }
-effects = ["write_data", "make_public"]
+effects = ["write_data", "make_public", "share_external"]
 
 # V-2: permissions.create sends a notification email by default for user and group grantees, with
 # agent-chosen text in emailMessage (Discovery: sendNotificationEmail "defaults to true").
