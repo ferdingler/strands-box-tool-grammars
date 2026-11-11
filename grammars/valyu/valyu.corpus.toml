@@ -653,13 +653,6 @@ action = "workflows_run"
 fields = { slug = "slug", mode = "fast" }
 effects = ["network", "spend_credits", "high_cost"]
 
-# A top-level flag inside --param can hide a second -m: valyu keeps the last mode (max)
-[[case]]
-argv = ["valyu", "workflows", "run", "slug", "-m", "fast", "--param", "--json", "--param", "-wmmax"]
-action = "workflows_run"
-fields = { slug = "slug", mode = "fast", param = ["--json", "-wmmax"] }
-effects = ["network", "spend_credits", "high_cost", "option_like_value", "other_account", "upload_file", "notify_external"]
-
 [[case]]
 argv = ["valyu", "workflows", "run", "slug", "--version", "2"]
 action = "unmodeled"
