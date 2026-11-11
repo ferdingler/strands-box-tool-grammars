@@ -1196,3 +1196,246 @@ action = "unmodeled"
 [[case]]
 argv = ["npm", "token", "list"]
 action = "unmodeled"
+
+# --- independent verifier cases ---
+# Written from the npm 12.2.2 source (nopt 10.0.1 lib/nopt-lib.js, @npmcli/config definitions,
+# lib/utils/cmd-list.js, lib/commands/*.js), not from the grammar's output.
+
+# nopt reads `false` after a boolean flag as its value: scripts run. The grammar must flag it.
+[[case]]
+argv = ["npm", "install", "--ignore-scripts", "false"]
+action = "install"
+fields = { ignore_scripts = true, package_spec = ["false"] }
+effects = ["network", "modify_node_modules", "modify_lockfile", "modify_package_json", "ambiguous_argv"]
+
+# nopt: dry-run=false, so this publishes. The grammar must flag it.
+[[case]]
+argv = ["npm", "publish", "--dry-run", "false"]
+action = "publish"
+fields = { dry_run = true, package_spec = "false" }
+effects = ["network", "run_lifecycle_scripts", "ambiguous_argv"]
+
+[[case]]
+argv = ["npm", "publish", "--dry-run", "false", "."]
+action = "unmodeled"
+
+[[case]]
+argv = ["npm", "publish", "--dry-run=false"]
+action = "unmodeled"
+
+# nopt: --tag is String, so a next word that looks like a flag gives tag="" and --access=public is read.
+[[case]]
+argv = ["npm", "publish", "--tag", "--access=public"]
+action = "publish"
+fields = { tag = "--access=public" }
+effects = ["network", "publish", "run_lifecycle_scripts", "ambiguous_argv"]
+
+# nopt splices `--tag=-x` into `--tag -x`, then the String rule re-reads `-x` as a flag.
+[[case]]
+argv = ["npm", "publish", "--tag=-x"]
+action = "publish"
+fields = { tag = "-x" }
+effects = ["network", "publish", "run_lifecycle_scripts", "ambiguous_argv"]
+
+[[case]]
+argv = ["npm", "publish", "--access=public", "--dry-run"]
+action = "publish"
+fields = { access = "public", dry_run = true }
+effects = ["network", "run_lifecycle_scripts"]
+
+[[case]]
+argv = ["npm", "ci", "--ignore-scripts", "false"]
+action = "unmodeled"
+
+# nopt cluster: g and E are single-char shorthands, so -gE is --global --save-exact.
+[[case]]
+argv = ["npm", "i", "-gE", "foo"]
+action = "install"
+fields = { global = true, save_exact = true, package_spec = ["foo"] }
+effects = ["network", "modify_node_modules", "run_lifecycle_scripts", "global_install"]
+
+# npm 12 refuses an abbreviated flag (Config.abbrevHandler throws EUNKNOWNCONFIG).
+[[case]]
+argv = ["npm", "install", "--dry"]
+action = "unmodeled"
+
+[[case]]
+argv = ["npm", "--registry", "https://r.example", "install", "foo"]
+action = "install"
+fields = { registry = "https://r.example", package_spec = ["foo"] }
+effects = ["network", "modify_node_modules", "modify_lockfile", "modify_package_json", "run_lifecycle_scripts", "override_registry"]
+
+# A config flag between `audit` and `fix`: nopt still reads `audit fix`.
+[[case]]
+argv = ["npm", "audit", "--registry", "https://r.example", "fix"]
+action = "audit_fix"
+fields = { registry = "https://r.example" }
+effects = ["network", "modify_node_modules", "modify_lockfile", "modify_package_json", "run_lifecycle_scripts", "override_registry"]
+
+# nopt reads `audit fix` here too; the grammar must not read it as a plain `audit`.
+[[case]]
+argv = ["npm", "audit", "--json", "fix"]
+action = "unmodeled"
+
+# Words after `--` go to the script, not to npm.
+[[case]]
+argv = ["npm", "run", "build", "--", "--registry", "x"]
+action = "run"
+fields = { command = "build", script_args = ["--registry", "x"] }
+effects = ["run_program"]
+
+# nopt: remain = [run, build], so the script runs.
+[[case]]
+argv = ["npm", "run", "--", "build"]
+action = "run"
+fields = { script_args = ["build"] }
+effects = ["run_program"]
+
+[[case]]
+argv = ["npm", "urn"]
+action = "run"
+
+[[case]]
+argv = ["npm", "x", "--", "eslint", "--fix"]
+action = "exec"
+fields = { command = ["eslint", "--fix"] }
+effects = ["network", "run_program"]
+
+# nopt: git-tag-version = !false = true, newversion = patch: commits and tags.
+[[case]]
+argv = ["npm", "version", "--no-git-tag-version", "false", "patch"]
+action = "unmodeled"
+
+[[case]]
+argv = ["npm", "verison", "patch", "--no-git-tag-version"]
+action = "version"
+fields = { newversion = "patch", no_git_tag_version = true }
+effects = ["modify_package_json", "modify_lockfile", "run_lifecycle_scripts"]
+
+[[case]]
+argv = ["npm", "c", "set", "registry", "https://evil.example"]
+action = "config_set"
+fields = { entry = ["registry", "https://evil.example"] }
+effects = ["override_config", "override_registry"]
+
+[[case]]
+argv = ["npm", "config", "set", "@acme:registry=https://evil.example"]
+action = "config_set"
+fields = { entry = ["@acme:registry=https://evil.example"] }
+effects = ["override_config", "override_registry"]
+
+[[case]]
+argv = ["npm", "set", "//registry.npmjs.org/:_authToken=x"]
+action = "set"
+fields = { entry = ["//registry.npmjs.org/:_authToken=x"] }
+effects = ["override_config"]
+
+# nopt: `all` is an exact config key, so -all is --all (no --long). Harmless difference for a read.
+[[case]]
+argv = ["npm", "ls", "-all"]
+action = "ls"
+fields = { all = true, long = true }
+effects = []
+
+[[case]]
+argv = ["npm", "ls", "-glp"]
+action = "ls"
+fields = { global = true, long = true, parseable = true }
+effects = []
+
+[[case]]
+argv = ["npm", "install", "-wg", "foo"]
+action = "unmodeled"
+
+[[case]]
+argv = ["npm", "install", "--global=true", "foo"]
+action = "unmodeled"
+
+[[case]]
+argv = ["npm", "uninstall", "foo", "-g", "false"]
+action = "uninstall"
+fields = { pkg = ["foo", "false"], global = true }
+effects = ["network", "modify_node_modules", "run_lifecycle_scripts", "global_install", "ambiguous_argv"]
+
+# link.js refuses --global.
+[[case]]
+argv = ["npm", "ln", "-g"]
+action = "unmodeled"
+
+[[case]]
+argv = ["npm", "cache", "clear", "-f"]
+action = "cache_clean"
+fields = { force = true }
+effects = ["delete_cache", "force"]
+
+# libnpmpack runs prepack/prepare/postpack under --dry-run.
+[[case]]
+argv = ["npm", "pack", "--dry-run"]
+action = "pack"
+fields = { dry_run = true }
+effects = ["run_lifecycle_scripts"]
+
+[[case]]
+argv = ["npm", "pack", "--ignore-scripts", "false"]
+action = "pack"
+fields = { ignore_scripts = true, package_spec = ["false"] }
+effects = ["network", "ambiguous_argv"]
+
+# init.js `update()` -> updateWorkspaces reifies the tree after creating a workspace.
+[[case]]
+argv = ["npm", "init", "--workspace", "pkgs/a"]
+action = "init"
+fields = { workspace = ["pkgs/a"] }
+effects = ["modify_package_json", "network", "modify_node_modules", "modify_lockfile", "run_lifecycle_scripts"]
+
+[[case]]
+argv = ["npm", "i", "--ignore-scripts", "--dangerously-allow-all-scripts"]
+action = "install"
+fields = { ignore_scripts = true, dangerously_allow_all_scripts = true }
+effects = ["network", "modify_node_modules", "modify_lockfile", "bypass_script_policy"]
+
+[[case]]
+argv = ["npm", "update", "--dry-run", "false"]
+action = "update"
+fields = { dry_run = true, pkg = ["false"] }
+effects = ["network", "ambiguous_argv"]
+
+[[case]]
+argv = ["npm", "test", "unit"]
+action = "unmodeled"
+
+[[case]]
+argv = ["npm", "t", "--", "unit"]
+action = "test"
+fields = { script_args = ["unit"] }
+effects = ["run_program"]
+
+[[case]]
+argv = ["npm", "--prefix", "/tmp/x", "ci", "--offline"]
+action = "ci"
+fields = { prefix = "/tmp/x", offline = true }
+effects = ["modify_node_modules", "run_lifecycle_scripts", "override_prefix"]
+
+[[case]]
+argv = ["npm", "create", "vite", "--", "--template", "react"]
+action = "init"
+fields = { package_spec = "vite", initializer_args = ["--template", "react"] }
+effects = ["modify_package_json", "network", "run_program"]
+
+[[case]]
+argv = ["npm", "init", "vite", "--template", "react"]
+action = "unmodeled"
+
+# nopt: a value that is exactly `--` is not consumed (registry=true, then `--` ends options and
+# `publish` is the command). The grammar takes `--` as the value and flags it.
+[[case]]
+argv = ["npm", "--registry", "--", "publish"]
+action = "publish"
+fields = { registry = "--" }
+effects = ["network", "publish", "run_lifecycle_scripts", "override_registry", "ambiguous_argv"]
+
+[[case]]
+argv = ["npm", "isntall", "foo", "--omit", "dev", "--omit=optional"]
+action = "install"
+fields = { package_spec = ["foo"], omit = ["dev", "optional"] }
+effects = ["network", "modify_node_modules", "modify_lockfile", "modify_package_json", "run_lifecycle_scripts"]
