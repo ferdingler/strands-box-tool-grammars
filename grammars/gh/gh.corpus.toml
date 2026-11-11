@@ -1467,3 +1467,83 @@ action = "unmodeled"
 [[case]]
 argv = ["gh", "issue", "delete", "5", "--yes"]
 action = "unmodeled"
+
+# --- independent verifier cases, round 2 ---
+# From cli/cli v2.103.3: pr/create/create.go (handlePush, skipPushRefs), release/create/create.go
+# (draft, draftWhileUploading, publishRelease), auth/token/token.go (getTokenWithRefresh).
+
+[[case]]
+argv = ["gh", "pr", "create", "--dry-run", "--fill"]
+action = "pr_create"
+fields = { dry_run = true, fill = true }
+effects = ["write_remote", "git_push", "write_local"]
+
+[[case]]
+argv = ["gh", "pr", "new", "-w", "--attach", "a.png"]
+action = "pr_create"
+fields = { web = true, attach = ["a.png"] }
+effects = ["write_remote", "git_push", "write_local", "open_browser"]
+
+[[case]]
+argv = ["gh", "pr", "create", "--head=o:feat", "--dry-run", "-t", "x", "-b", "y"]
+action = "pr_create"
+fields = { head = "o:feat", dry_run = true, title = "x", body = "y" }
+effects = ["write_remote"]
+
+[[case]]
+argv = ["gh", "pr", "create", "-Hfeat", "-F", "body.md"]
+action = "pr_create"
+fields = { head = "feat", body_file = "body.md" }
+effects = ["write_remote", "upload_file"]
+
+[[case]]
+argv = ["gh", "pr", "create", "--dry-run=true"]
+action = "unmodeled"
+
+[[case]]
+argv = ["gh", "release", "create", "v1", "--draft", "--latest", "./a.zip"]
+action = "release_create"
+fields = { tag = "v1", draft = true, latest = true, files = ["./a.zip"] }
+effects = ["write_remote", "upload_file"]
+
+[[case]]
+argv = ["gh", "release", "create", "v1", "-pd"]
+action = "release_create"
+fields = { tag = "v1", prerelease = true, draft = true }
+effects = ["write_remote"]
+
+[[case]]
+argv = ["gh", "release", "create", "v1", "--prerelease", "--discussion-category", "General"]
+action = "release_create"
+fields = { tag = "v1", prerelease = true, discussion_category = "General" }
+effects = ["write_remote", "publish"]
+
+[[case]]
+argv = ["gh", "release", "new", "v1", "./a.zip"]
+action = "release_create"
+fields = { tag = "v1", files = ["./a.zip"] }
+effects = ["write_remote", "publish", "upload_file"]
+
+# pflag accepts `--draft=false` (BoolVarP), which publishes; the grammar must not read it as a draft.
+[[case]]
+argv = ["gh", "release", "create", "v1", "--draft=false"]
+action = "unmodeled"
+
+[[case]]
+argv = ["gh", "release", "create", "v1", "-d=false"]
+action = "unmodeled"
+
+[[case]]
+argv = ["gh", "auth", "token"]
+action = "auth_token"
+effects = ["reveal_token", "write_credentials", "read_remote"]
+
+[[case]]
+argv = ["gh", "auth", "token", "--no-refresh", "-u", "me"]
+action = "auth_token"
+fields = { no_refresh = true, user = "me" }
+effects = ["reveal_token"]
+
+[[case]]
+argv = ["gh", "auth", "token", "--no-refresh=true"]
+action = "unmodeled"
