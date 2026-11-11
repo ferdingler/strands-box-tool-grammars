@@ -860,3 +860,289 @@ action = "unmodeled"
 [[case]]
 argv = ["vercel", "login"]
 action = "unmodeled"
+
+# --- independent verifier cases ---
+# Written by the verifier from the Vercel CLI 65.14.0 source (`@vercel/cli-support@65.14.0`
+# dist, parser arg@5.0.0, `globalCommandOptions`) and `vercel <command> --help`, not from the
+# parser's output. A case marked FINDING states the CLI behaviour and fails against this grammar.
+
+# Global options parse over the whole line (arg_common_default merges them into every command).
+[[case]]
+argv = ["vercel", "--scope", "acme", "deploy", "--environment", "preview"]
+action = "deploy"
+fields = { scope = "acme", environment = "preview" }
+effects = ["deploy"]
+
+[[case]]
+argv = ["vercel", "deploy", "--environment", "preview", "--scope", "acme"]
+action = "deploy"
+fields = { scope = "acme", environment = "preview" }
+effects = ["deploy"]
+
+[[case]]
+argv = ["vercel", "-S", "acme", "-t", "tok", "list"]
+action = "list"
+fields = { scope = "acme", token = "tok" }
+effects = ["read_remote", "token_argument"]
+
+[[case]]
+argv = ["vercel", "list", "--token=abc", "--scope=acme"]
+action = "list"
+fields = { scope = "acme", token = "abc" }
+effects = ["read_remote", "token_argument"]
+
+# arg@5 splits `-dy` into `-d` (global --debug) and `-y` (list --yes).
+[[case]]
+argv = ["vercel", "list", "-dy"]
+action = "list"
+fields = { debug = true, yes = true }
+effects = ["read_remote", "skip_prompt"]
+
+[[case]]
+argv = ["vercel", "-Q", "/tmp/cfg", "whoami", "--cached"]
+action = "whoami"
+fields = { global_config = "/tmp/cfg", cached = true }
+effects = ["override_config"]
+
+# Hidden or deprecated globals stay unmodeled: --team/-T, --api.
+[[case]]
+argv = ["vercel", "--team", "t", "list"]
+action = "unmodeled"
+
+[[case]]
+argv = ["vercel", "list", "--api", "https://api.example.test"]
+action = "unmodeled"
+
+# parseTarget: --environment wins over --prod ("Ignoring --prod because --environment is also set").
+[[case]]
+argv = ["vercel", "deploy", "--prod", "--environment=preview"]
+action = "deploy"
+fields = { prod = true, environment = "preview" }
+effects = ["deploy"]
+
+# The target string is passed as typed; only the exact `preview` is known to be non-production.
+[[case]]
+argv = ["vercel", "deploy", "--environment", "Preview"]
+action = "deploy"
+fields = { environment = "Preview" }
+effects = ["deploy", "deploy_production", "change_traffic"]
+
+[[case]]
+argv = ["vercel", "deploy", "--dry", "--prod"]
+action = "deploy"
+fields = { dry = true, prod = true }
+effects = []
+
+[[case]]
+argv = ["vercel", "deploy", "--skip-domain", "--prod"]
+action = "deploy"
+fields = { skip_domain = true, prod = true }
+effects = ["deploy", "deploy_production"]
+
+# arg@5 ignores a value on a Boolean (`--prod=x` is `--prod`); the grammar refuses the spelling.
+[[case]]
+argv = ["vercel", "deploy", "--prod=true"]
+action = "unmodeled"
+
+# parseWithSuggestions accepts `--no-<flag>` for every Boolean; not declared, so unmodeled.
+[[case]]
+argv = ["vercel", "deploy", "--no-dry"]
+action = "unmodeled"
+
+[[case]]
+argv = ["vercel", "deploy", "--target", "production"]
+action = "unmodeled"
+
+# On deploy, `-e` is the deprecated shorthand of --env, not --environment.
+[[case]]
+argv = ["vercel", "deploy", "-e", "FOO=bar"]
+action = "unmodeled"
+
+# FINDING: `--env KEY` (no `=`) makes the CLI copy process.env[KEY] into the deployment
+# (deploy/index.js addProcessEnv: "Reading KEY from your env (as no value was specified)").
+# A rule sees only `deploy`; nothing marks that a local secret leaves the machine.
+[[case]]
+argv = ["vercel", "deploy", "--environment", "preview", "--env", "VERCEL_TOKEN"]
+action = "deploy"
+fields = { environment = "preview", env = ["VERCEL_TOKEN"] }
+effects = ["deploy", "read_secret"]
+
+# `deploy --dry -- init`: arg@5 puts `init` in the positionals, so the CLI routes to `deploy init`,
+# whose strict parser refuses --dry and exits 2. Nothing deploys.
+[[case]]
+argv = ["vercel", "deploy", "--dry", "--", "init"]
+action = "deploy"
+fields = { dry = true, project_path = "init" }
+effects = []
+
+[[case]]
+argv = ["vercel", "deploy", "init", "--environment", "preview"]
+action = "deploy_init"
+fields = { environment = "preview" }
+effects = ["deploy"]
+
+[[case]]
+argv = ["vercel", "redeploy", "dpl_1", "-e", "preview"]
+action = "redeploy"
+fields = { deployment = "dpl_1", environment = "preview" }
+effects = ["deploy"]
+
+[[case]]
+argv = ["vercel", "redeploy", "dpl_1", "--environment", "production"]
+action = "redeploy"
+fields = { deployment = "dpl_1", environment = "production" }
+effects = ["deploy", "deploy_production", "change_traffic"]
+
+# FINDING: `promote <preview deployment> --yes` POSTs /v13/deployments with target "production"
+# (commands-core.js requestPromote, promoteByCreation): a new production build with production env.
+[[case]]
+argv = ["vercel", "promote", "dpl_preview", "--yes"]
+action = "promote"
+fields = { deployment = "dpl_preview", yes = true }
+effects = ["change_traffic", "skip_prompt", "deploy", "deploy_production"]
+
+[[case]]
+argv = ["vercel", "promote", "--debug", "status"]
+action = "promote_status"
+fields = { debug = true }
+effects = ["read_remote"]
+
+# The CLI reads `status` as the subcommand here (positional after flags); the grammar reads it as
+# the deployment. Overstated, documented in the README.
+[[case]]
+argv = ["vercel", "rollback", "--json", "status"]
+action = "rollback"
+fields = { json = true, deployment = "status" }
+effects = ["change_traffic"]
+
+[[case]]
+argv = ["vercel", "remove", "my-app", "--safe", "-y"]
+action = "remove"
+fields = { deployment = ["my-app"], safe = true, yes = true }
+effects = ["delete_remote", "skip_prompt"]
+
+[[case]]
+argv = ["vercel", "rm"]
+action = "unmodeled"
+
+# ---- environment variables
+
+# env rm with -e on a multi-target variable PATCHes only that target (removesTargetOnly).
+[[case]]
+argv = ["vercel", "env", "rm", "API_KEY", "-e", "preview", "--yes"]
+action = "env_remove"
+fields = { name = "API_KEY", environment = "preview", yes = true }
+effects = ["delete_remote", "skip_prompt"]
+
+[[case]]
+argv = ["vercel", "env", "rm", "API_KEY", "-e", "preview,production"]
+action = "env_remove"
+fields = { name = "API_KEY", environment = "preview,production" }
+effects = ["delete_remote", "production_env"]
+
+[[case]]
+argv = ["vercel", "env", "add", "K", "-e", "preview", "-e", "production", "--value", "v"]
+action = "env_add"
+fields = { name = "K", environment = ["preview", "production"], value = "v" }
+effects = ["write_secret", "production_env"]
+
+[[case]]
+argv = ["vercel", "env", "add", "K", "--environment=preview,production"]
+action = "env_add"
+fields = { name = "K", environment = ["preview,production"] }
+effects = ["write_secret", "production_env"]
+
+[[case]]
+argv = ["vercel", "env", "add", "K", "production"]
+action = "unmodeled"
+
+[[case]]
+argv = ["vercel", "env", "--debug", "pull", "--environment=production", ".env.prod"]
+action = "env_pull"
+fields = { debug = true, environment = "production", filename = ".env.prod" }
+effects = ["read_secret", "write_local_files", "production_env"]
+
+[[case]]
+argv = ["vercel", "env", "run", "-e", "production", "--", "node", "-e", "x"]
+action = "env_run"
+fields = { environment = "production", command = ["node", "-e", "x"] }
+effects = ["run_local_code", "read_secret", "production_env"]
+
+[[case]]
+argv = ["vercel", "env", "run", "node", "app.js"]
+action = "unmodeled"
+
+# ---- teams, aliases, domains
+
+# teams.js: `switch` is an alias of `teams`, and args[0]==="switch" is rewritten to `teams switch`.
+[[case]]
+argv = ["vercel", "switch", "acme"]
+action = "teams_switch"
+fields = { name = "acme" }
+effects = ["write_local_config"]
+
+[[case]]
+argv = ["vercel", "team", "switch", "acme"]
+action = "teams_switch"
+fields = { name = "acme" }
+effects = ["write_local_config"]
+
+[[case]]
+argv = ["vercel", "switch", "add"]
+action = "teams_switch"
+fields = { name = "add" }
+effects = ["write_local_config"]
+
+[[case]]
+argv = ["vercel", "ln", "dpl.vercel.app", "api.example.com"]
+action = "alias_set"
+fields = { deployment = "dpl.vercel.app", alias = "api.example.com" }
+effects = ["write_remote", "change_traffic"]
+
+[[case]]
+argv = ["vercel", "aliases", "rm", "api.example.com", "-y"]
+action = "alias_remove"
+fields = { alias = "api.example.com", yes = true }
+effects = ["delete_remote", "change_traffic", "skip_prompt"]
+
+[[case]]
+argv = ["vercel", "alias", "ls", "extra"]
+action = "unmodeled"
+
+# domains add without a project adds the apex domain to the team only (addDomain2).
+[[case]]
+argv = ["vercel", "domains", "add", "example.com"]
+action = "domains_add"
+fields = { domain = "example.com" }
+effects = ["write_remote"]
+
+[[case]]
+argv = ["vercel", "domain", "add", "example.com", "my-project"]
+action = "domains_add"
+fields = { domain = "example.com", project = "my-project" }
+effects = ["write_remote", "change_traffic"]
+
+[[case]]
+argv = ["vercel", "domains", "buy", "example.com"]
+action = "unmodeled"
+
+[[case]]
+argv = ["vercel", "projects", "del", "my-app", "--confirm-name", "my-app"]
+action = "project_delete"
+fields = { name = "my-app", confirm_name = "my-app" }
+effects = ["delete_remote", "skip_prompt"]
+
+[[case]]
+argv = ["vercel", "cert", "remove", "cert_1"]
+action = "certs_delete"
+fields = { id = "cert_1" }
+effects = ["delete_remote"]
+
+# Deprecated: logs -f/--follow, and the auto-added -N for --next.
+[[case]]
+argv = ["vercel", "logs", "--follow"]
+action = "unmodeled"
+
+[[case]]
+argv = ["vercel", "list", "-N", "cursor"]
+action = "unmodeled"
