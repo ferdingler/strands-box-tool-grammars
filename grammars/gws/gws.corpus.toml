@@ -1099,3 +1099,203 @@ action = "unmodeled"
 [[case]]
 argv = ["gws", "chat", "spaces", "list"]
 action = "unmodeled"
+
+# --- independent verifier cases ---
+# Written by the verifier from gws 0.22.5 source (tag v0.22.5: main.rs run/filter_args_for_subcommand,
+# commands.rs build_resource_command, executor.rs execute_method) and the Discovery documents
+# (drive v3 20261106, gmail v1 20261106, calendar v3 20261109). clap 4.6.0.
+
+# clap accepts `-ov` for a short option with a value.
+[[case]]
+argv = ["gws", "drive", "files", "get", "--params", '{"fileId":"f1","alt":"media"}', "-oout.bin"]
+action = "drive_files_get"
+fields = { params = '{"fileId":"f1","alt":"media"}', output = "out.bin" }
+effects = ["read_data", "write_local_file"]
+
+# clap also accepts `-o=v`; the grammar refuses an attached `=` value, so the line is unmodeled (safe).
+[[case]]
+argv = ["gws", "drive", "files", "get", "-o=out.bin"]
+action = "unmodeled"
+
+# `--params=<json>` is one clap value.
+[[case]]
+argv = ["gws", "drive", "files", "delete", '--params={"fileId":"f1"}']
+action = "drive_files_delete"
+fields = { params = '{"fileId":"f1"}' }
+effects = ["delete_data"]
+
+# --dry-run is a clap global; gws accepts it between the command words, the grammar does not.
+[[case]]
+argv = ["gws", "drive", "--dry-run", "files", "delete", "--params", '{"fileId":"f1"}']
+action = "unmodeled"
+
+[[case]]
+argv = ["gws", "--dry-run", "drive", "files", "delete", "--params", '{"fileId":"f1"}']
+action = "unmodeled"
+
+# --dry-run after the method returns before any request (executor.rs execute_method).
+[[case]]
+argv = ["gws", "drive", "files", "create", "--upload", "secret.txt", "--json", '{"name":"x"}', "--dry-run"]
+action = "drive_files_create"
+fields = { upload = "secret.txt", json = '{"name":"x"}', dry_run = true }
+effects = []
+
+# A value option takes the next word even when it is `--dry-run`; clap instead errors (value
+# required), so nothing runs. The grammar keeps the effect, which is the safe direction.
+[[case]]
+argv = ["gws", "drive", "files", "delete", "--format", "--dry-run", "--params", '{"fileId":"f1"}']
+action = "drive_files_delete"
+fields = { format = "--dry-run", params = '{"fileId":"f1"}' }
+effects = ["delete_data"]
+
+# --dry-run=true: clap SetTrue takes no value; the grammar refuses it too.
+[[case]]
+argv = ["gws", "drive", "files", "delete", "--dry-run=true"]
+action = "unmodeled"
+
+# A second --params is a clap error and unmodeled here.
+[[case]]
+argv = ["gws", "drive", "files", "delete", "--params", '{"fileId":"a"}', "--params", '{"fileId":"b"}']
+action = "unmodeled"
+
+# --api-version and service:version change which method a name means.
+[[case]]
+argv = ["gws", "drive", "files", "delete", "--api-version", "v2", "--params", '{"fileId":"f1"}']
+action = "unmodeled"
+
+[[case]]
+argv = ["gws", "drive:v2", "files", "delete", "--params", '{"fileId":"f1"}']
+action = "unmodeled"
+
+# clap does not infer subcommands or long flags; case matters.
+[[case]]
+argv = ["gws", "drive", "files", "lis"]
+action = "unmodeled"
+
+[[case]]
+argv = ["gws", "drive", "Files", "list"]
+action = "unmodeled"
+
+[[case]]
+argv = ["gws", "drive", "files", "list", "--page-al"]
+action = "unmodeled"
+
+# `--` ends options; no method has a positional, so clap errors.
+[[case]]
+argv = ["gws", "drive", "files", "list", "--", "--dry-run"]
+action = "unmodeled"
+
+[[case]]
+argv = ["gws", "drive", "files", "list", "--sanitize", "projects/p/locations/l/templates/t"]
+action = "unmodeled"
+
+# --json exists only when the Discovery method has a request body; --upload only with media upload.
+[[case]]
+argv = ["gws", "drive", "about", "get", "--json", '{}']
+action = "unmodeled"
+
+[[case]]
+argv = ["gws", "docs", "documents", "create", "--upload", "a.txt"]
+action = "unmodeled"
+
+[[case]]
+argv = ["gws", "drive", "files", "list", "--page-all", "--page-limit=5", "--page-delay", "0"]
+action = "drive_files_list"
+fields = { page_all = true, page_limit = "5", page_delay = "0" }
+effects = ["read_data"]
+
+# Drive "anyone": a JSON \u escape, whitespace, upper case, and the `=` form are all caught.
+[[case]]
+argv = ["gws", "drive", "permissions", "create", "--params", '{"fileId":"f1"}', "--json", '{"role":"reader","type":"anyone"}']
+action = "drive_permissions_create"
+fields = { params = '{"fileId":"f1"}', json = '{"role":"reader","type":"anyone"}' }
+effects = ["share_external", "make_public"]
+
+[[case]]
+argv = ["gws", "drive", "permissions", "create", '--json={ "type" : "ANYONE", "role" : "reader" }']
+action = "drive_permissions_create"
+fields = { json = '{ "type" : "ANYONE", "role" : "reader" }' }
+effects = ["share_external", "make_public"]
+
+# A domain-wide share is not "anyone"; the grammar gives share_external only.
+[[case]]
+argv = ["gws", "drive", "permissions", "create", "--params", '{"fileId":"f1"}', "--json", '{"type":"domain","domain":"example.com","role":"writer","allowFileDiscovery":true}']
+action = "drive_permissions_create"
+fields = { params = '{"fileId":"f1"}', json = '{"type":"domain","domain":"example.com","role":"writer","allowFileDiscovery":true}' }
+effects = ["share_external"]
+
+# Dry run removes make_public too.
+[[case]]
+argv = ["gws", "drive", "permissions", "create", "--json", '{"type":"anyone","role":"reader"}', "--dry-run"]
+action = "drive_permissions_create"
+fields = { json = '{"type":"anyone","role":"reader"}', dry_run = true }
+effects = []
+
+# Calendar sendUpdates: the `=` form and a \u escape in the key.
+[[case]]
+argv = ["gws", "calendar", "events", "insert", '--params={"calendarId":"primary","sendUpdates":"all"}', "--json", '{"summary":"x"}']
+action = "calendar_events_insert"
+fields = { params = '{"calendarId":"primary","sendUpdates":"all"}', json = '{"summary":"x"}' }
+effects = ["write_data", "send_email"]
+
+[[case]]
+argv = ["gws", "calendar", "events", "delete", "--params", '{"calendarId":"primary","eventId":"e","sendUpdates":"all"}']
+action = "calendar_events_delete"
+fields = { params = '{"calendarId":"primary","eventId":"e","sendUpdates":"all"}' }
+effects = ["delete_data", "send_email"]
+
+[[case]]
+argv = ["gws", "gmail", "users", "messages", "send", "--params", '{"userId":"me"}', "--upload-content-type", "message/rfc822", "--upload", "m.eml"]
+action = "gmail_users_messages_send"
+fields = { params = '{"userId":"me"}', upload_content_type = "message/rfc822", upload = "m.eml" }
+effects = ["send_email", "upload_file"]
+
+# Adding the TRASH label through modify trashes a message, but it reads as write_data (noted, not failed).
+[[case]]
+argv = ["gws", "gmail", "users", "messages", "modify", "--params", '{"userId":"me","id":"m1"}', "--json", '{"addLabelIds":["TRASH"]}']
+action = "gmail_users_messages_modify"
+fields = { params = '{"userId":"me","id":"m1"}', json = '{"addLabelIds":["TRASH"]}' }
+effects = ["write_data"]
+
+# Moving a file into another folder (addParents) can widen who sees it; the grammar cannot see the
+# folder's sharing, so write_data only (noted, not failed).
+[[case]]
+argv = ["gws", "drive", "files", "update", "--params", '{"fileId":"f1","addParents":"publicFolder"}']
+action = "drive_files_update"
+fields = { params = '{"fileId":"f1","addParents":"publicFolder"}' }
+effects = ["write_data"]
+
+[[case]]
+argv = ["gws", "schema", "drive.files.delete", "--resolve-refs"]
+action = "schema"
+fields = { method_path = "drive.files.delete", resolve_refs = true }
+effects = []
+
+[[case]]
+argv = ["gws", "auth", "status", "--format", "json"]
+action = "unmodeled"
+
+# --- verifier cases that FAIL on 239b7ed (they pin a finding) ---
+
+# V-1: Revision.published / publishedOutsideDomain publish a Docs Editors file to the web
+# (Discovery drive v3 schemas.Revision). Expected make_public; the grammar gives write_data only.
+[[case]]
+argv = ["gws", "drive", "revisions", "update", "--params", '{"fileId":"f1","revisionId":"head"}', "--json", '{"published":true,"publishAuto":true,"publishedOutsideDomain":true}']
+action = "drive_revisions_update"
+fields = { params = '{"fileId":"f1","revisionId":"head"}', json = '{"published":true,"publishAuto":true,"publishedOutsideDomain":true}' }
+effects = ["write_data", "make_public"]
+
+# V-2: permissions.create sends a notification email by default for user and group grantees, with
+# agent-chosen text in emailMessage (Discovery: sendNotificationEmail "defaults to true").
+[[case]]
+argv = ["gws", "drive", "permissions", "create", "--params", '{"fileId":"f1","emailMessage":"any text"}', "--json", '{"type":"user","role":"reader","emailAddress":"x@example.org"}']
+action = "drive_permissions_create"
+fields = { params = '{"fileId":"f1","emailMessage":"any text"}', json = '{"type":"user","role":"reader","emailAddress":"x@example.org"}' }
+effects = ["share_external", "send_email"]
+
+# V-3: calendar acl.insert sends a notification by default (Discovery: sendNotifications "The default is True").
+[[case]]
+argv = ["gws", "calendar", "acl", "insert", "--params", '{"calendarId":"primary"}', "--json", '{"role":"reader","scope":{"type":"user","value":"x@example.org"}}']
+action = "calendar_acl_insert"
+fields = { params = '{"calendarId":"primary"}', json = '{"role":"reader","scope":{"type":"user","value":"x@example.org"}}' }
+effects = ["share_external", "make_public", "send_email"]
