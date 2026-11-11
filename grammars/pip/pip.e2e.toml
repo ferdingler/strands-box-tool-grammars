@@ -1,0 +1,110 @@
+# End-to-end cases for pip.grammar.toml. The harness runs each argv through the Shell of a real
+# box, where `pip` is a stub that prints its arguments and exits 0.
+#
+# The policy: the agent may read the environment and install into it from the default index, but
+# not break an externally managed Python, not install outside the environment, not trust a host
+# without TLS, and not change pip's configuration.
+
+policy = '''
+@id("pip_actions")
+permit (principal, action in Tool::pip::Action::"*", resource);
+
+@id("pip_no_system_break")
+@description("Modifying an externally managed Python is not allowed.")
+forbid (principal, action in Tool::pip::Action::"*", resource)
+when { context.input.effects.contains(Tool::pip::Effect::"break_system_packages") };
+
+@id("pip_stay_in_env")
+@description("Install only into the active environment.")
+forbid (principal, action == Tool::pip::Action::"install", resource)
+when { context.input.effects.contains(Tool::pip::Effect::"write_outside_env") };
+
+@id("pip_tls")
+@description("Do not trust a host without valid HTTPS.")
+forbid (principal, action in Tool::pip::Action::"*", resource)
+when { context.input.effects.contains(Tool::pip::Effect::"disable_tls_verification") };
+
+@id("pip_config_read_only")
+@description("pip configuration is read-only here.")
+forbid (principal, action in Tool::pip::Action::"*", resource)
+when { context.input.effects.contains(Tool::pip::Effect::"override_config") };
+'''
+
+# A permitted read runs the program
+[[case]]
+argv = ["pip", "list", "--format=json"]
+exit = 0
+stdout = "stub-argv: [list] [--format=json]"
+
+# `--target` installs outside the environment: refused
+[[case]]
+argv = ["pip", "install", "--target", "/tmp/vendor", "attrs"]
+exit = 126
+stderr = "[policy: pip_stay_in_env]: Install only into the active environment."
+
+# `--dry-run` removes the location effect, so the same line runs
+[[case]]
+argv = ["pip", "install", "--dry-run", "--target", "/tmp/vendor", "attrs"]
+exit = 0
+stdout = "stub-argv: [install] [--dry-run] [--target] [/tmp/vendor] [attrs]"
+
+# `--break-system-packages` on uninstall: refused
+[[case]]
+argv = ["pip", "uninstall", "-y", "--break-system-packages", "attrs"]
+exit = 126
+stderr = "[policy: pip_no_system_break]"
+
+# A general option before the command adds its effect
+[[case]]
+argv = ["pip", "--trusted-host", "mirror.example", "install", "attrs"]
+exit = 126
+stderr = "[policy: pip_tls]: Do not trust a host without valid HTTPS."
+
+# `config set` changes configuration: refused
+[[case]]
+argv = ["pip", "config", "set", "global.index-url", "https://mirror.example/simple"]
+exit = 126
+stderr = "[policy: pip_config_read_only]"
+
+# A prefix of a long option is `unmodeled`, and nothing permits it
+[[case]]
+argv = ["pip", "install", "--upgr", "attrs"]
+exit = 126
+stderr = "[default-deny]: No permit policy matched this request."
+
+# The README's example rules load, and an index override is refused
+[[case]]
+argv = ["pip", "install", "-i", "https://mirror.example/simple", "attrs"]
+exit = 126
+stderr = "[policy: pip_default_index]: Use the default package index."
+policy = '''
+// Let the agent use pip.
+@id("pip_actions")
+permit (principal, action in Tool::pip::Action::"*", resource);
+
+// Never modify an externally managed Python.
+@id("pip_no_system_break")
+@description("Modifying an externally managed Python is not allowed.")
+forbid (principal, action in Tool::pip::Action::"*", resource)
+when { context.input.effects.contains(Tool::pip::Effect::"break_system_packages") };
+
+// Install only from the default index, over verified TLS.
+@id("pip_default_index")
+@description("Use the default package index.")
+forbid (principal, action in Tool::pip::Action::"*", resource)
+when { context.input.effects.contains(Tool::pip::Effect::"override_index") ||
+       context.input.effects.contains(Tool::pip::Effect::"disable_tls_verification") ||
+       context.input.effects.contains(Tool::pip::Effect::"override_tls_trust") };
+
+// Install only into the active environment.
+@id("pip_stay_in_env")
+@description("Install only into the active environment.")
+forbid (principal, action == Tool::pip::Action::"install", resource)
+when { context.input.effects.contains(Tool::pip::Effect::"write_outside_env") };
+
+// No uninstall without the prompt.
+@id("pip_uninstall_prompt")
+@description("Uninstall asks first.")
+forbid (principal, action == Tool::pip::Action::"uninstall", resource)
+when { context.input.effects.contains(Tool::pip::Effect::"skip_prompt") };
+'''
