@@ -1491,3 +1491,80 @@ argv = ["cargo", "vendor", "-s", "../other/Cargo.toml", "out"]
 action = "vendor"
 fields = { sync = ["../other/Cargo.toml"], path = "out" }
 effects = ["network", "override_config", "update_lockfile", "write_files"]
+
+# --- independent verifier cases, round 2 (against 0349f63) ---
+# Sources as in round 1, plus command_prelude.rs `packages_from_flags` (no zero-value check),
+# commands/{publish,package,tree,fetch}.rs.
+
+# publish: a bare -p proceeds with the default package; the swallowed --dry-run is cargo's, so the
+# real line is a dry run. The grammar keeps publish_crate (safe side) and adds ambiguous_argv.
+[[case]]
+argv = ["cargo", "publish", "-p", "--dry-run"]
+action = "publish"
+fields = { package = ["--dry-run"] }
+effects = ["ambiguous_argv", "network", "publish_crate", "run_build_scripts", "update_lockfile"]
+
+# publish: a swallowed option that takes a value leaves a word that publish does not take.
+[[case]]
+argv = ["cargo", "publish", "-p", "--registry", "evil"]
+action = "unmodeled"
+
+# publish: --package=--x is a literal value to clap; still flagged.
+[[case]]
+argv = ["cargo", "publish", "--package=--workspace"]
+action = "publish"
+fields = { package = ["--workspace"] }
+effects = ["ambiguous_argv", "network", "publish_crate", "run_build_scripts", "update_lockfile"]
+
+# package: an attached short value that starts with `-`.
+[[case]]
+argv = ["cargo", "package", "-p-l"]
+action = "package"
+fields = { package = ["-l"] }
+effects = ["ambiguous_argv", "network", "run_build_scripts", "update_lockfile"]
+
+# test --target followed by an option: ambiguous (cargo bails in `targets()`).
+[[case]]
+argv = ["cargo", "test", "--target", "--release"]
+action = "test"
+fields = { target = ["--release"] }
+effects = ["ambiguous_argv", "execute_built_code", "network", "run_build_scripts", "update_lockfile"]
+
+# tree: a bare -i at the end has no next word; unmodeled.
+[[case]]
+argv = ["cargo", "tree", "-p", "foo", "-i"]
+action = "unmodeled"
+
+# add --target is a plain opt (required), so no ambiguous_argv.
+[[case]]
+argv = ["cargo", "add", "--target", "x86_64-unknown-linux-gnu", "libc"]
+action = "add"
+fields = { target = "x86_64-unknown-linux-gnu", dep_id = ["libc"] }
+effects = ["edit_manifest", "network", "update_lockfile"]
+
+# install --bins and --examples stay modeled.
+[[case]]
+argv = ["cargo", "install", "foo", "--bins", "--examples"]
+action = "install"
+fields = { crate = ["foo"], bins = true, examples = true }
+effects = ["install_binary", "network", "run_build_scripts"]
+
+# install --bin=rg is also unmodeled now.
+[[case]]
+argv = ["cargo", "install", "--bin=rg", "ripgrep"]
+action = "unmodeled"
+
+# Any +toolchain, on any action.
+[[case]]
+argv = ["cargo", "+stable", "version"]
+action = "unmodeled"
+
+[[case]]
+argv = ["cargo", "+nightly", "fmt", "--check"]
+action = "unmodeled"
+
+# version without a toolchain still reads.
+[[case]]
+argv = ["cargo", "version"]
+action = "version"
+effects = []
