@@ -1170,3 +1170,81 @@ action = "unmodeled"
 [[case]]
 argv = ["vercel", "list", "-N", "cursor"]
 action = "unmodeled"
+
+# --- independent verifier cases, round 2 ---
+# From @vercel/cli-support@65.14.0: deploy/index.js builds deploymentEnv from
+# parseEnv(localConfig.env) and parseEnv(--env), then runs addProcessEnv over both.
+# buildVercelConfigSchema has additionalProperties true and no `env` entry, so vercel.json
+# `"env": ["VERCEL_TOKEN"]` passes validation and copies the local value. The project
+# directory is agent-writable, so any deploy can export local env without a flag.
+
+# FINDING (round 2): a plain preview deploy can export local env through vercel.json.
+[[case]]
+argv = ["vercel", "deploy", "--environment", "preview"]
+action = "deploy"
+fields = { environment = "preview" }
+effects = ["deploy", "export_local_env"]
+
+# Same route through -A: the named file's `env` array is read the same way.
+[[case]]
+argv = ["vercel", "deploy", "-A", "other.json", "--environment", "preview"]
+action = "deploy"
+fields = { local_config = "other.json", environment = "preview" }
+effects = ["deploy", "override_config", "export_local_env"]
+
+[[case]]
+argv = ["vercel", "deploy", "--build-env", "NPM_TOKEN", "--dry"]
+action = "deploy"
+fields = { build_env = ["NPM_TOKEN"], dry = true }
+effects = ["export_local_env"]
+
+[[case]]
+argv = ["vercel", "deploy", "init", "--env=A=1", "--env", "B", "./app"]
+action = "deploy_init"
+fields = { env = ["A=1", "B"], project_path = "./app" }
+effects = ["deploy", "deploy_production", "change_traffic", "export_local_env"]
+
+# redeploy, build, dev take no --env (their structs list none): unmodeled.
+[[case]]
+argv = ["vercel", "redeploy", "dpl_1", "--env", "K"]
+action = "unmodeled"
+
+[[case]]
+argv = ["vercel", "build", "--env", "K"]
+action = "unmodeled"
+
+[[case]]
+argv = ["vercel", "dev", "--env", "K"]
+action = "unmodeled"
+
+# promote of any deployment carries the production build effects; status does not.
+[[case]]
+argv = ["vercel", "promote", "dpl_1"]
+action = "promote"
+fields = { deployment = "dpl_1" }
+effects = ["change_traffic", "deploy", "deploy_production"]
+
+[[case]]
+argv = ["vercel", "promote", "status", "my-app"]
+action = "promote_status"
+fields = { project = "my-app" }
+effects = ["read_remote"]
+
+[[case]]
+argv = ["vercel", "rollback", "dpl_1", "-y"]
+action = "rollback"
+fields = { deployment = "dpl_1", yes = true }
+effects = ["change_traffic", "skip_prompt"]
+
+# deploy -y can create and link a project.
+[[case]]
+argv = ["vercel", "deploy", "-y", "--environment", "preview"]
+action = "deploy"
+fields = { yes = true, environment = "preview" }
+effects = ["deploy", "skip_prompt", "write_remote", "write_local_files"]
+
+[[case]]
+argv = ["vercel", "deploy", "--delete-project-after", "1h"]
+action = "deploy"
+fields = { delete_project_after = "1h" }
+effects = ["deploy", "deploy_production", "change_traffic", "write_remote"]
