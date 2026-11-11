@@ -59,7 +59,7 @@ request body also takes `--json <JSON>`. A method that supports media upload als
 | Family | Methods | Effects |
 |---|---|---|
 | `drive files` | `list`, `get`, `export`, `download` | `read_data` |
-| | `copy`, `create`, `update` | `write_data`, plus `share_external` when the body names `parents` or `inherit` (or update's `--params` names `parents`, as in `addParents`), and `change_sharing_rules` when the body names `writers` or `requires` |
+| | `copy`, `create`, `update` | `write_data`, plus `share_external` when the body names `parents` or `inherit` (or update's `--params` names `parents`, as in `addParents`), and `change_sharing_rules` when the body names `writers`, `requires`, or `download` |
 | | `delete` | `delete_data` |
 | `drive permissions` | `list`, `get` | `read_data` |
 | | `create` | `share_external`, `send_email`, plus `make_public` when the body may name `anyone` |
@@ -104,7 +104,7 @@ Each action is the command words joined with `_`, such as `drive_permissions_cre
 | `send_email` | Sends a message or a draft, or a notification that Google sends for the agent: a Drive share (on by default), a calendar ACL change (on by default), or an event change that `--params` asks for. |
 | `share_external` | Grants or changes access for another user, group, domain, or anyone, publishes a revision, gives a file a folder's audience (`parents`, or turning inherited permissions back on), or moves an event to a calendar with its own audience. A whole-domain share is `share_external` only, not `make_public`. The grammar cannot tell your own domain from another one. |
 | `make_public` | Can grant access to anyone. See the limits below for how it is decided. |
-| `change_sharing_rules` | Changes who may reshare or copy a file (`writersCanShare`, `copyRequiresWriterPermission`) or a shared drive's sharing limits (`restrictions`). It grants no access itself. |
+| `change_sharing_rules` | Changes who may reshare or copy a file (`writersCanShare`, `copyRequiresWriterPermission`, `downloadRestrictions`) or a shared drive's sharing limits (`restrictions`). It grants no access itself. |
 | `upload_file` | Sends a local file's content to Google (`--upload`). |
 | `write_local_file` | Writes the response to a local file (`-o`, `--output`). |
 | `read_credentials` | Reads the stored credentials and asks Google which account they belong to. |

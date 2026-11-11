@@ -1214,6 +1214,14 @@ argv = ["gws", "drive", "drives", "update", "--dry-run", "--params", '{"driveId"
 action = "drive_drives_update"
 fields = { dry_run = true, params = '{"driveId":"d1"}', json = '{"restrictions":{"domainUsersOnly":false}}' }
 
+# R3-1: `downloadRestrictions` limits who may download a file (disc: drive v3 File), so any letter
+# case of `download` adds change_sharing_rules.
+[[case]]
+argv = ["gws", "drive", "files", "update", "--params", '{"fileId":"f1"}', "--json", '{"DownloadRestrictions":{"itemDownloadRestriction":{"restrictedForReaders":false}}}']
+action = "drive_files_update"
+fields = { params = '{"fileId":"f1"}', json = '{"DownloadRestrictions":{"itemDownloadRestriction":{"restrictedForReaders":false}}}' }
+effects = ["change_sharing_rules", "write_data"]
+
 # A service the grammar does not cover is unmodeled.
 [[case]]
 argv = ["gws", "chat", "spaces", "list"]
@@ -1604,10 +1612,10 @@ action = "drive_drives_update"
 fields = { params = '{"driveId":"d1"}', json = '{"name":"n"}' }
 effects = ["write_data"]
 
-# Noted, not failed (MINOR R3-1): File.downloadRestrictions changes who may download a file, which
-# change_sharing_rules describes, but no pattern names it.
+# File.downloadRestrictions changes who may download a file: change_sharing_rules (author fix for
+# R3-1).
 [[case]]
 argv = ["gws", "drive", "files", "update", "--params", '{"fileId":"f1"}', "--json", '{"downloadRestrictions":{"itemDownloadRestriction":{"restrictedForReaders":false}}}']
 action = "drive_files_update"
 fields = { params = '{"fileId":"f1"}', json = '{"downloadRestrictions":{"itemDownloadRestriction":{"restrictedForReaders":false}}}' }
-effects = ["write_data"]
+effects = ["write_data", "change_sharing_rules"]

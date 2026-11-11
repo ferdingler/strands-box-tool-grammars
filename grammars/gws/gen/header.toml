@@ -18,7 +18,7 @@
 # over-flags: every letter case of the key word, and any `\u` escape. They flag `make_public` on
 # `drive permissions create` (`anyone`) and `drive revisions update` (`publish`), `share_external`
 # on `drive files create|copy|update` (`parents`, which covers `addParents`, and `inherit`, which
-# covers `inheritedPermissionsDisabled`), `change_sharing_rules` on the same three (`writers`, `requires`)
+# covers `inheritedPermissionsDisabled`), `change_sharing_rules` on the same three (`writers`, `requires`, `download`)
 # and on `drive drives create|update` (`restrict`), `send_email` on `drive permissions update`
 # (`transfer`, for `transferOwnership`), `trash_data` on Gmail
 # `modify` (`trash`), and `send_email` on calendar event writes (`sendUpdates`, `sendNotifications`,
