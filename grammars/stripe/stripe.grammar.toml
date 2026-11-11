@@ -6,17 +6,20 @@
 #             against `stripe <command> --help` and the source at that tag.
 #
 # This file is the body of `[tool.<label>.grammar]` in box.toml. The resource-command section at the
-# end is generated from the CLI's own operation specs (pkg/cmd/resources/specs_gen.go).
+# end is generated from the CLI's own operation specs (pkg/cmd/resources/specs_gen.go) by gen/,
+# from gen/head.toml; edit those and regenerate (README.md, "Regenerate").
 #
 # What this grammar cannot see:
-# - Environment variables. STRIPE_API_KEY replaces the logged-in key (a live key makes every
-#   command live), STRIPE_PROJECT_NAME selects a profile, STRIPE_DEVICE_NAME, XDG_CONFIG_HOME
+# - Environment variables. STRIPE_API_KEY wins over both the logged-in key and `--api-key`
+#   (config/profile.go::GetAPIKey), so a test key on the command line does not prove test mode,
+#   and a live key in the environment makes every command live. STRIPE_PROJECT_NAME selects a
+#   profile, STRIPE_DEVICE_NAME, XDG_CONFIG_HOME
 #   moves the config file, EDITOR, HTTPS_PROXY, STRIPE_PLUGINS_PATH.
 # - The config file (~/.config/stripe/config.toml) and the keyring. They hold the keys, the
 #   active account, and whether `stripe switch` put the profile in live mode. With an OAuth
 #   login in live mode, a command without `--live` is refused by the CLI; with a stored or
 #   environment API key, the key decides the mode, and `live_mode` here sees only the flag
-#   or a `--api-key` value.
+#   or an `--api-key` value. `live_mode` absent means only "not asked for on this line".
 # - The contents of a fixture file (`stripe fixtures <file>`): it can send any API request.
 # - Plugins (`stripe apps`, `stripe projects`, ...) and `stripe provision`: other programs that
 #   the CLI starts. They are not modeled, so they are `unmodeled`.
@@ -37,7 +40,7 @@ live_mode         = "Targets live-mode data instead of test mode or a sandbox"
 api_key_override  = "Uses an API key from the command line instead of the logged-in session"
 select_project    = "Uses the keys and settings of a named project profile"
 override_config   = "Uses another config file, or changes a stored config value"
-credentials       = "Prints or removes stored credentials (API keys) in the config file"
+credentials       = "Prints or removes a secret: stored API keys, or the webhook signing secret"
 connected_account = "Acts on a connected account or another account context"
 skip_prompt       = "Skips the confirmation prompt"
 raw_request       = "Sends a request to an API path that the command line names"
@@ -78,7 +81,7 @@ options.forward_to              = { flag = ["-f", "--forward-to"], value = "requ
 options.headers                 = { flag = ["-H", "--headers"], value = "required", repeated = true }
 options.latest                  = { flag = ["-l", "--latest"] }
 options.live                    = { flag = ["--live"], adds = ["live_mode"] }
-options.print_secret            = { flag = ["--print-secret"] }
+options.print_secret            = { flag = ["--print-secret"], adds = ["credentials"] }
 options.skip_update             = { flag = ["-s", "--skip-update"] }
 options.skip_verify             = { flag = ["--skip-verify"], adds = ["insecure_tls"] }
 options.use_configured_webhooks = { flag = ["-a", "--use-configured-webhooks", "--load-from-webhooks-api"], adds = ["forward_events"] }
@@ -584,6 +587,7 @@ options.stripe_version = { flag = ["-v", "--stripe-version"], value = "required"
 options.transfer_group = { flag = ["--transfer-group"], value = "required" }
 
 # POST /v1/refunds/{refund}/cancel
+# Stops a pending refund, so the money stays in the account: no `move_money`.
 [shell.refunds_cancel]
 usage = "stripe [global options] refunds cancel [options] <refund>"
 adds  = ["network", "write_data"]
@@ -683,6 +687,7 @@ options.stripe_context = { flag = ["--stripe-context"], value = "required", adds
 options.stripe_version = { flag = ["-v", "--stripe-version"], value = "required" }
 
 # DELETE /v1/subscriptions/{subscription_exposed_id}
+# An HTTP DELETE; `invoice_now` can bill a final invoice.
 [shell.subscriptions_cancel]
 usage = "stripe [global options] subscriptions cancel [options] <subscription_exposed_id>"
 adds  = ["delete_data", "move_money", "network"]
@@ -847,9 +852,10 @@ options.stripe_context = { flag = ["--stripe-context"], value = "required", adds
 options.stripe_version = { flag = ["-v", "--stripe-version"], value = "required" }
 
 # POST /v1/subscriptions/{subscription}/pause
+# `invoicing_behavior=invoice` bills the open debits at once.
 [shell.subscriptions_pause]
 usage = "stripe [global options] subscriptions pause [options] <subscription>"
-adds  = ["network", "write_data"]
+adds  = ["move_money", "network", "write_data"]
 options.bill_for_outstanding_usage_through_type = { flag = ["--bill-for.outstanding-usage-through.type"], value = "required" }
 options.bill_for_unused_time_from_type = { flag = ["--bill-for.unused-time-from.type"], value = "required" }
 options.confirm = { flag = ["-c", "--confirm"] }
@@ -1024,12 +1030,13 @@ options.trial_settings_end_behavior_billing_cycle_anchor = { flag = ["--trial-se
 options.trial_settings_end_behavior_missing_payment_method = { flag = ["--trial-settings.end-behavior.missing-payment-method"], value = "required" }
 
 # POST /v1/invoices
+# `auto_advance` (a flag or `-d`) lets Stripe finalize and collect the invoice.
 [shell.invoices_create]
 usage = "stripe [global options] invoices create [options]"
-adds  = ["network", "write_data"]
+adds  = ["move_money", "network", "write_data"]
 options.account_tax_ids = { flag = ["--account-tax-ids"], value = "required", repeated = true }
 options.application_fee_amount = { flag = ["--application-fee-amount"], value = "required" }
-options.auto_advance = { flag = ["--auto-advance"], value = "optional", adds = ["move_money"] }
+options.auto_advance = { flag = ["--auto-advance"], value = "optional" }
 options.automatic_tax_enabled = { flag = ["--automatic-tax.enabled"], value = "optional" }
 options.automatic_tax_liability_account = { flag = ["--automatic-tax.liability.account"], value = "required" }
 options.automatic_tax_liability_type = { flag = ["--automatic-tax.liability.type"], value = "required" }
@@ -1233,12 +1240,13 @@ options.stripe_context = { flag = ["--stripe-context"], value = "required", adds
 options.stripe_version = { flag = ["-v", "--stripe-version"], value = "required" }
 
 # POST /v1/invoices/{invoice}
+# `auto_advance` (a flag or `-d`) lets Stripe finalize and collect the invoice.
 [shell.invoices_update]
 usage = "stripe [global options] invoices update [options] <invoice>"
-adds  = ["network", "write_data"]
+adds  = ["move_money", "network", "write_data"]
 options.account_tax_ids = { flag = ["--account-tax-ids"], value = "required", repeated = true }
 options.application_fee_amount = { flag = ["--application-fee-amount"], value = "required" }
-options.auto_advance = { flag = ["--auto-advance"], value = "optional", adds = ["move_money"] }
+options.auto_advance = { flag = ["--auto-advance"], value = "optional" }
 options.automatic_tax_enabled = { flag = ["--automatic-tax.enabled"], value = "optional" }
 options.automatic_tax_liability_account = { flag = ["--automatic-tax.liability.account"], value = "required" }
 options.automatic_tax_liability_type = { flag = ["--automatic-tax.liability.type"], value = "required" }
@@ -2020,13 +2028,14 @@ options.stripe_context = { flag = ["--stripe-context"], value = "required", adds
 options.stripe_version = { flag = ["-v", "--stripe-version"], value = "required" }
 
 # POST /v1/events/{event}/retry
+# Sends the event again, to the CLI or to the endpoint `--webhook-endpoint` names.
 [shell.events_resend]
 usage = "stripe [global options] events resend [options] <event>"
 adds  = ["network", "write_data"]
 options.account = { flag = ["--account"], value = "required" }
 options.confirm = { flag = ["-c", "--confirm"] }
 options.dark_style = { flag = ["--dark-style"] }
-options.data = { flag = ["-d", "--data"], value = "required", repeated = true }
+options.data = { flag = ["-d", "--data"], value = "required", repeated = true, adds = ["forward_events"] }
 options.dry_run = { flag = ["--dry-run"], removes = ["delete_data", "move_money", "write_data"] }
 options.expand = { flag = ["-e", "--expand"], value = "required", repeated = true }
 options.idempotency = { flag = ["-i", "--idempotency"], value = "required" }
@@ -2035,4 +2044,4 @@ options.show_headers = { flag = ["-s", "--show-headers"] }
 options.stripe_account = { flag = ["--stripe-account"], value = "required", adds = ["connected_account"] }
 options.stripe_context = { flag = ["--stripe-context"], value = "required", adds = ["connected_account"] }
 options.stripe_version = { flag = ["-v", "--stripe-version"], value = "required" }
-options.webhook_endpoint = { flag = ["--webhook-endpoint"], value = "required" }
+options.webhook_endpoint = { flag = ["--webhook-endpoint"], value = "required", adds = ["forward_events"] }

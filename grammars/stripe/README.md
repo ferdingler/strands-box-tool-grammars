@@ -27,6 +27,10 @@ tool-grammars = true
 [tool.stripe]
 command = ["/usr/local/bin/stripe"]
 
+[tool.stripe.filesystem]
+read  = ["~/.config/stripe"]   # the config file: keys, profiles, machine ID
+write = ["~/.config/stripe"]   # the CLI writes it on `config --set` and when it saves a machine ID
+
 [tool.stripe.grammar]
 format = 1
 version = 1
@@ -35,10 +39,14 @@ program = "stripe"
 # ... the rest of stripe.grammar.toml, each table nested under [tool.stripe.grammar]
 ```
 
-Print the complete tables with
-`./scripts/render.sh stripe --label stripe --command /usr/local/bin/stripe`.
-The tool also needs network egress to `api.stripe.com` (and `*.stripe.com` for `listen` and
-`logs tail`), and read access to its config directory (`~/.config/stripe`).
+Print the complete grammar tables with
+`./scripts/render.sh stripe --label stripe --command /usr/local/bin/stripe`, and add the
+`[tool.stripe.filesystem]` table above them. Without `read` on `~/.config/stripe` every command
+that needs the config fails with `no such file or directory`; without `write`, `config --set`
+fails with `read-only file system`. `~/.config/stripe` is a credential store: the tool can read
+the test-mode keys in it. On macOS the CLI keeps live-mode keys in the login Keychain; this
+snippet was checked on Linux only. The box policy must also permit the tool's outbound requests
+(`api.stripe.com`, and the Stripe websocket hosts for `listen` and `logs tail`).
 
 ## Supported commands
 
@@ -55,8 +63,8 @@ Every action also takes the root flags `--api-key`, `--color`, `--config`, `--de
 | | `post <path>` | `network`, `raw_request`, `write_data`, `move_money` |
 | | `delete <path>` | `network`, `raw_request`, `delete_data`, `move_money` |
 | Reads | `list`, `retrieve`, `search` on `customers`, `charges`, `refunds`, `subscriptions`, `invoices`, `products`, `prices`, `checkout sessions`, `events`; `balance retrieve` | `network` |
-| Writes | `create`, `update` on `customers`, `invoices`, `products`, `prices`, `checkout sessions`; `charges update`, `refunds update`, `refunds cancel`, `subscriptions pause`, `subscriptions migrate`, `checkout sessions expire`, `events resend` | `network`, `write_data` |
-| Money | `charges create`, `charges capture`, `refunds create`, `invoices pay`, `subscriptions create`, `subscriptions update`, `subscriptions resume` | `network`, `write_data`, `move_money` |
+| Writes | `create`, `update` on `customers`, `products`, `prices`, `checkout sessions`; `charges update`, `refunds update`, `refunds cancel`, `subscriptions migrate`, `checkout sessions expire`, `events resend` | `network`, `write_data` |
+| Money | `charges create`, `charges capture`, `refunds create`, `invoices create`, `invoices update`, `invoices pay`, `subscriptions create`, `subscriptions update`, `subscriptions pause`, `subscriptions resume` | `network`, `write_data`, `move_money` |
 | Deletes | `customers delete`, `products delete`, `invoices delete`; `subscriptions cancel` (also `move_money`: it can bill a final invoice) | `network`, `delete_data` |
 | Local | `config`, `version`, `whoami` | see effects |
 
@@ -73,16 +81,16 @@ the shared request flags (`-d`, `-e`, `-i`, `-v`, `-s`, `-c`, `--live`, `--dry-r
 | `network` | Every command that calls Stripe, GitHub (`version`), or forwards events. |
 | `write_data` | Creates or changes Stripe objects. |
 | `delete_data` | Deletes or cancels an object (`delete`, the resource `delete`s, `subscriptions cancel`). |
-| `move_money` | A command that can charge, capture, pay, or refund. `post`, `delete`, `trigger`, and `fixtures` always carry it, because the grammar cannot tell which endpoint does what. `invoices create/update --auto-advance` adds it. |
+| `move_money` | A command that can charge, capture, pay, or refund. `post`, `delete`, `trigger`, and `fixtures` always carry it, because the grammar cannot tell which endpoint does what. `invoices create/update` always carry it, because `auto_advance` (a flag or `-d`) lets Stripe collect the invoice; so does `subscriptions pause` (`invoicing_behavior=invoice` bills at once). `refunds cancel` does not: it keeps the money in the account. |
 | `live_mode` | `--live`, or an `--api-key` value with a `_live` segment (`sk_live_…`, `rk_live_…`). |
 | `api_key_override` | `--api-key`. |
 | `select_project` | `-p`/`--project-name`. |
 | `override_config` | `--config`, and `config --set`, `--unset`, `--remove-profile`. |
-| `credentials` | `config --list` (prints the config file, test keys included) and `config --remove-profile`. |
+| `credentials` | `config --list` (prints the config file, test keys included), `config --remove-profile`, and `listen --print-secret` (prints the webhook signing secret). |
 | `connected_account` | `--stripe-account` and `--stripe-context`. |
 | `skip_prompt` | `-c`/`--confirm` on a command that deletes, or on `config --remove-profile`. |
 | `raw_request` | `get`, `post`, `delete`, and `fixtures`. |
-| `forward_events` | `listen -f`, `-c`, or `-a`. |
+| `forward_events` | `listen -f`, `-c`, or `-a`; `events resend --webhook-endpoint` or `-d` (it can name the endpoint). |
 | `insecure_tls` | `listen --skip-verify`. |
 | `write_files` | `fixtures` (it can update `.env` in the working directory). |
 
@@ -105,7 +113,8 @@ when { context.input.effects.contains(Tool::stripe::Effect::"live_mode") };
 forbid (principal, action in Tool::stripe::Action::"*", resource)
 when { context.input.effects.contains(Tool::stripe::Effect::"move_money") };
 
-// Only the logged-in account: no other key, profile, config, or connected account.
+// No other key, profile, config, or connected account on the command line. This does not see
+// STRIPE_API_KEY, which wins over both the login and `--api-key`.
 @id("stripe_own_account")
 forbid (principal, action in Tool::stripe::Action::"*", resource)
 when { context.input.effects.containsAny([
@@ -149,13 +158,21 @@ get wrong. A rule that forbids `forward_events` outright is safer.
   `--address.city`, is `unmodeled`. Use the dotted spelling, or `-d "address[city]=Paris"`.
 - **A boolean request parameter with a separate value** (`--validate true`) is `unmodeled`. The CLI
   rewrites it to `--validate=true`; write that, or the bare flag.
-- **The mode comes from outside the command line too.** `STRIPE_API_KEY`, a key stored in the
-  config file, and `stripe switch` decide which account and mode a command without `--live` uses.
-  `live_mode` sees only `--live` and an `--api-key` value. An OAuth login in live mode refuses a
-  command without `--live`, so a sandbox-only box should still keep live keys out of reach.
+- **The mode comes from outside the command line too.** `STRIPE_API_KEY` wins over both the
+  stored login and `--api-key`, so `--api-key sk_test_…` on the line does not prove test mode: a
+  live key in the environment still makes the command live. A key stored in the config file and
+  `stripe switch` also decide the account and mode of a command without `--live`. `live_mode`
+  sees only `--live` and an `--api-key` value, so its absence means only that the line did not ask
+  for live mode. An OAuth login in live mode refuses a command without `--live`. A sandbox-only box
+  must keep live keys out of the tool's environment and config, not rely on this effect alone.
 - **`--api-key` values are fields.** A policy decision can read the key, and so can anything that
-  records the decision. Prefer `STRIPE_API_KEY` or a stored login.
-- **`move_money` is conservative.** `post`, `delete`, `trigger`, `fixtures`, and every
-  subscription change carry it even when a given call moves no money.
+  records the decision. Prefer a stored login.
+- **`move_money` is conservative.** `post`, `delete`, `trigger`, `fixtures`, `invoices
+  create/update`, and every subscription change except `migrate` carry it even when a given call
+  moves no money, because `-d` can send any request parameter.
 - Persistent root flags are `anywhere` globals, so they are accepted between command words, as
   Cobra does. A flag that a command does not declare makes the whole line `unmodeled`.
+
+## Regenerate
+
+From `grammars/stripe/`, with stripe-cli checked out at the release tag: `python3 -I gen/parse_specs.py <stripe-cli>/pkg/cmd/resources/specs_gen.go > /tmp/specs.json && python3 -I gen/gen_grammar.py /tmp/specs.json gen/head.toml > stripe.grammar.toml` (edit `gen/head.toml` for the hand-written commands, `gen/gen_grammar.py` for the resource list and its effects).

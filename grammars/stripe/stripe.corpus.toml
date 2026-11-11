@@ -162,7 +162,7 @@ effects = ["forward_events", "insecure_tls", "network"]
 argv = ["stripe", "listen", "--print-secret", "--all-snapshot", "--all-thin", "--connect-headers", "K:V"]
 action = "listen"
 fields = { all_snapshot = true, all_thin = true, connect_headers = ["K:V"], print_secret = true }
-effects = ["network"]
+effects = ["credentials", "network"]
 
 # A deprecated flag, a prefix, and an operand (listen takes none) are unmodeled
 [[case]]
@@ -583,6 +583,7 @@ action = "refunds_create"
 fields = { dry_run = true, live = true, payment_intent = "pi_1" }
 effects = ["live_mode", "network"]
 
+# Canceling a pending refund keeps the money in the account, so no `move_money`
 [[case]]
 argv = ["stripe", "refunds", "cancel", "re_1"]
 action = "refunds_cancel"
@@ -636,7 +637,7 @@ effects = ["network", "write_data"]
 argv = ["stripe", "subscriptions", "pause", "sub_1", "--type", "subscription"]
 action = "subscriptions_pause"
 fields = { subscription = "sub_1", type = "subscription" }
-effects = ["network", "write_data"]
+effects = ["move_money", "network", "write_data"]
 
 [[case]]
 argv = ["stripe", "subscriptions", "resume", "sub_1", "--proration-behavior", "none"]
@@ -662,12 +663,13 @@ action = "subscriptions_update"
 fields = { cancel_at_period_end = "", subscription_exposed_id = "sub_1" }
 effects = ["move_money", "network", "write_data"]
 
-# invoices: `--auto-advance` lets Stripe finalize and collect the invoice by itself
+# invoices: `auto_advance` lets Stripe finalize and collect the invoice by itself, and `-d` can
+# set it, so create and update always carry `move_money`
 [[case]]
 argv = ["stripe", "invoices", "create", "--customer", "cus_1"]
 action = "invoices_create"
 fields = { customer = "cus_1" }
-effects = ["network", "write_data"]
+effects = ["move_money", "network", "write_data"]
 
 [[case]]
 argv = ["stripe", "invoices", "create", "--customer", "cus_1", "--auto-advance"]
@@ -845,12 +847,18 @@ action = "events_retrieve"
 fields = { id = "evt_1" }
 effects = ["network"]
 
-# resend replays an event to the CLI, or to `--webhook-endpoint`
+# resend replays an event to the CLI, or to the endpoint `--webhook-endpoint` (or `-d`) names
 [[case]]
-argv = ["stripe", "events", "resend", "evt_1", "--webhook-endpoint", "we_1"]
+argv = ["stripe", "events", "resend", "evt_1"]
 action = "events_resend"
-fields = { event = "evt_1", webhook_endpoint = "we_1" }
+fields = { event = "evt_1" }
 effects = ["network", "write_data"]
+
+[[case]]
+argv = ["stripe", "events", "resend", "evt_1", "-d", "webhook_endpoint=we_1"]
+action = "events_resend"
+fields = { data = ["webhook_endpoint=we_1"], event = "evt_1" }
+effects = ["forward_events", "network", "write_data"]
 
 [[case]]
 argv = ["stripe", "events", "resend"]
