@@ -1004,3 +1004,259 @@ action = "unmodeled"
 [[case]]
 argv = ["supabase", "config", "push"]
 action = "unmodeled"
+
+# --- independent verifier cases ---
+# Written by the verifier from supabase 3.1.0 sources (tag v3.1.0: apps/cli/src/shared/cli/run.ts
+# prepareCliArgs, shared/cli/remote-argv.ts joinRemoteOperands, command-internal/target/*.ts,
+# command-internal/global-flags.ts, commands/**/*.command.ts and SIDE_EFFECTS.md) and the
+# effect 4.1.2 cli lexer.ts and parser.ts. Each case states what the CLI does. A case that fails
+# is a verifier finding (see evidence/supabase/VERIFY.md).
+
+# CLI: a bare boolean consumes a following boolean literal (parser.ts consumeFlagValueWithTokens,
+# asBooleanLiteral). `--dry-run false` pushes for real. Must not read as a dry run.
+[[case]]
+argv = ["supabase", "db", "push", "--remote", "--dry-run", "false"]
+action = "unmodeled"
+
+[[case]]
+argv = ["supabase", "db", "push", "--dry-run=false"]
+action = "unmodeled"
+
+# CLI: the automatic negation of a boolean flag (parser.ts negatedName).
+[[case]]
+argv = ["supabase", "db", "push", "--no-dry-run", "--remote"]
+action = "unmodeled"
+
+# CLI: real dry run against the linked project; nothing is applied.
+[[case]]
+argv = ["supabase", "db", "push", "--remote", "--dry-run"]
+action = "db_push"
+fields = { remote = "", dry_run = true }
+effects = ["remote"]
+
+# CLI: db push takes no operand, so joinRemoteOperands makes this `--remote=prod-branch`.
+[[case]]
+argv = ["supabase", "db", "push", "--remote", "prod-branch"]
+action = "unmodeled"
+
+[[case]]
+argv = ["supabase", "db", "push", "--remote=postgresql://u@db.example.com/postgres"]
+action = "db_push"
+fields = { remote = "postgresql://u@db.example.com/postgres" }
+effects = ["remote", "write_remote_db"]
+
+# CLI: hidden deprecated selectors are still parsed (target-flags.ts linkedFlag, dbUrlFlag,
+# localFlag, projectRefFlag). The grammar must not read them as a local push.
+[[case]]
+argv = ["supabase", "db", "push", "--linked"]
+action = "unmodeled"
+
+[[case]]
+argv = ["supabase", "db", "push", "--db-url", "postgresql://db.example.com/postgres"]
+action = "unmodeled"
+
+[[case]]
+argv = ["supabase", "db", "reset", "--local"]
+action = "unmodeled"
+
+[[case]]
+argv = ["supabase", "migration", "up", "--linked"]
+action = "unmodeled"
+
+[[case]]
+argv = ["supabase", "functions", "deploy", "--project-ref", "abcdefghijklmnopqrst"]
+action = "unmodeled"
+
+[[case]]
+argv = ["supabase", "gen", "types", "--project-id", "abcdefghijklmnopqrst"]
+action = "unmodeled"
+
+# CLI: `--` ends the flags; db push takes no operand, so the CLI fails.
+[[case]]
+argv = ["supabase", "db", "push", "--", "--remote"]
+action = "unmodeled"
+
+# CLI: a leaf flag before its command words is unknown at the `supabase` level.
+[[case]]
+argv = ["supabase", "--dry-run", "db", "push"]
+action = "unmodeled"
+
+# CLI: no prefix matching of long flags.
+[[case]]
+argv = ["supabase", "db", "push", "--dry"]
+action = "unmodeled"
+
+# CLI: a global flag between the command words (consumeGlobalFlags walks every level).
+[[case]]
+argv = ["supabase", "db", "--yes", "push"]
+action = "db_push"
+fields = { yes = true }
+effects = ["write_local_db", "skip_confirmation"]
+
+# CLI: the `migrations` alias of `migration` (migration.command.ts Command.withAlias).
+[[case]]
+argv = ["supabase", "migrations", "down", "--last", "2", "--remote=abcdefghijklmnopqrst"]
+action = "migration_down"
+fields = { last = "2", remote = "abcdefghijklmnopqrst" }
+effects = ["remote", "write_remote_db", "delete_remote_data"]
+
+# CLI: the leaf's own `--version <v>` beats the built-in `--version` (consumeGlobalFlags).
+[[case]]
+argv = ["supabase", "db", "reset", "--version", "20240101000000", "--remote"]
+action = "db_reset"
+fields = { version = "20240101000000", remote = "" }
+effects = ["remote", "write_remote_db", "delete_remote_data"]
+
+# CLI: `--remote` twice with different values fails (hasConflictingRemotes).
+[[case]]
+argv = ["supabase", "db", "reset", "--remote", "--remote=abcdefghijklmnopqrst"]
+action = "unmodeled"
+
+# CLI: db query takes [sql]; a database URL after a bare `--remote` is joined to
+# `--remote=<url>` (joinRemoteOperands, DB_URL_PATTERN). The SQL comes from -f.
+# The hosted write targets that URL, not the linked project and not an operand.
+[[case]]
+argv = ["supabase", "db", "query", "--remote", "postgresql://u@prod.example.com/postgres", "-f", "drop.sql"]
+action = "db_query"
+fields = { remote = "postgresql://u@prod.example.com/postgres", file = "drop.sql" }
+effects = ["remote", "run_sql", "write_remote_db"]
+
+# CLI: test db takes [path...]; the URL is joined to `--remote=<url>`; every test runs there.
+[[case]]
+argv = ["supabase", "test", "db", "--remote", "postgresql://u@prod.example.com/postgres"]
+action = "test_db"
+fields = { remote = "postgresql://u@prod.example.com/postgres" }
+effects = ["remote", "run_sql", "write_remote_db"]
+
+# CLI: migration repair takes [version...]; the URL is joined to `--remote=<url>`.
+[[case]]
+argv = ["supabase", "migration", "repair", "--status", "reverted", "--remote", "postgresql://u@prod.example.com/postgres", "20240101000000"]
+action = "migration_repair"
+fields = { status = "reverted", remote = "postgresql://u@prod.example.com/postgres", version = ["20240101000000"] }
+effects = ["remote", "write_remote_db"]
+
+# CLI: `--debug false` sets debug to false and consumes `false`; with no function name,
+# functions deploy deploys EVERY function in supabase/functions/ (deploy.command.ts
+# "Deploys all if omitted"). The grammar must not read this as a deploy of a function named "false".
+[[case]]
+argv = ["supabase", "functions", "deploy", "--debug", "false"]
+action = "functions_deploy"
+effects = ["remote", "deploy_remote"]
+
+# CLI: same, through a command boolean; deploys every function with JWT checks off.
+[[case]]
+argv = ["supabase", "functions", "deploy", "--no-verify-jwt", "true", "--yes"]
+action = "functions_deploy"
+fields = { no_verify_jwt = true, yes = true }
+effects = ["remote", "deploy_remote", "skip_confirmation"]
+
+# CLI: `--remote yes` is the linked project (LINKED_LITERAL, joined). With -r and no path,
+# storage rm clears and deletes EVERY bucket of the hosted project (rm SIDE_EFFECTS.md).
+[[case]]
+argv = ["supabase", "storage", "rm", "-r", "--remote", "yes", "--yes"]
+action = "storage_rm"
+fields = { recursive = true, remote = "", yes = true }
+effects = ["delete_storage", "remote", "skip_confirmation"]
+
+# CLI: a short flag with an attached value is split into letters (lexer.ts), so `-j4` is
+# `-j -4` and the CLI fails with a missing value for --jobs.
+[[case]]
+argv = ["supabase", "storage", "cp", "-j4", "a.txt", "ss:///bucket/a.txt"]
+action = "unmodeled"
+
+# CLI: `-rj 4` is `-r -j 4`.
+[[case]]
+argv = ["supabase", "storage", "cp", "-rj", "4", "docs", "ss:///bucket/docs", "--remote"]
+action = "storage_cp"
+fields = { recursive = true, jobs = "4", src = "docs", dst = "ss:///bucket/docs", remote = "" }
+effects = ["write_storage", "remote"]
+
+# CLI: `-f=out.sql` is accepted (lexer.ts short `=`). Unmodeled is the safe reading.
+[[case]]
+argv = ["supabase", "db", "dump", "-f=out.sql"]
+action = "unmodeled"
+
+# CLI: db diff's own -o is a file (local flag precedence); `-o` before `db` is the global.
+[[case]]
+argv = ["supabase", "-o", "json", "db", "diff"]
+action = "unmodeled"
+
+[[case]]
+argv = ["supabase", "db", "diff", "--remote", "-o", "schema.sql"]
+action = "db_diff"
+fields = { remote = "", output = "schema.sql" }
+effects = ["remote", "write_files"]
+
+# CLI: `--lang=dart` runs `dart run supabase_typegen` (types SIDE_EFFECTS.md).
+[[case]]
+argv = ["supabase", "gen", "types", "--lang=dart", "--remote=abcdefghijklmnopqrst"]
+action = "gen_types"
+fields = { lang = "dart", remote = "abcdefghijklmnopqrst" }
+effects = ["remote", "run_program"]
+
+[[case]]
+argv = ["supabase", "functions", "deploy", "hello", "--prune", "--yes"]
+action = "functions_deploy"
+fields = { function_name = ["hello"], prune = true, yes = true }
+effects = ["remote", "deploy_remote", "delete_remote_data", "skip_confirmation"]
+
+# CLI: secrets unset --dry-run calls no DELETE; the grammar keeps write_secret (documented).
+[[case]]
+argv = ["supabase", "secrets", "unset", "--dry-run", "API_KEY"]
+action = "secrets_unset"
+fields = { dry_run = true, names = ["API_KEY"] }
+effects = ["remote", "write_secret"]
+
+[[case]]
+argv = ["supabase", "projects", "delete", "abcdefghijklmnopqrst", "--yes"]
+action = "projects_delete"
+fields = { ref = "abcdefghijklmnopqrst", yes = true }
+effects = ["remote", "delete_remote_data", "skip_confirmation"]
+
+[[case]]
+argv = ["supabase", "projects", "api-keys", "--reveal", "--remote=abcdefghijklmnopqrst"]
+action = "projects_api_keys"
+fields = { reveal = true, remote = "abcdefghijklmnopqrst" }
+effects = ["remote", "reveal_secrets"]
+
+[[case]]
+argv = ["supabase", "stop", "--no-backup", "--all"]
+action = "stop"
+fields = { no_backup = true, all = true }
+effects = ["local_stack", "delete_local_data"]
+
+# CLI: hidden `stop --backup`.
+[[case]]
+argv = ["supabase", "stop", "--backup"]
+action = "unmodeled"
+
+# CLI: a global flag after the words of an action with no own options.
+[[case]]
+argv = ["supabase", "migration", "new", "create_users", "--debug"]
+action = "migration_new"
+fields = { migration_name = "create_users", debug = true }
+effects = ["write_files"]
+
+# CLI: `--remote y` is joined to the linked project; `hello` is the function. Unmodeled is safe.
+[[case]]
+argv = ["supabase", "functions", "delete", "--remote", "y", "hello"]
+action = "unmodeled"
+
+# CLI: an unlisted inspect command still runs; the grammar does not model it.
+[[case]]
+argv = ["supabase", "inspect", "db", "total-index-size", "--remote"]
+action = "unmodeled"
+
+# CLI: the hidden `db test` alias of `test db`.
+[[case]]
+argv = ["supabase", "db", "test", "--remote"]
+action = "unmodeled"
+
+# CLI: with --yes and no --password, a remote connection that fails three times through the
+# pooler calls DELETE /v1/projects/{ref}/network-bans (db-config.layer.ts, canRemoveNetworkBans).
+# The grammar shows only remote + skip_confirmation; this case pins the grammar's reading.
+[[case]]
+argv = ["supabase", "inspect", "db", "locks", "--remote", "--yes"]
+action = "inspect_db_locks"
+fields = { remote = "", yes = true }
+effects = ["remote", "skip_confirmation"]
