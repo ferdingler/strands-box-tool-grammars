@@ -396,7 +396,8 @@ options.upstream_remote_name = { flag = ["-u", "--upstream-remote-name"], value 
 operands.gitflags            = { adds = ["git_passthrough"] }
 
 # Each of `--public`, `--private`, and `--internal` is needed when gh cannot prompt. `--public` is
-# the one that makes the new repository public.
+# the one that makes the new repository public. `--source` adds a git remote (`origin` unless
+# `--remote` names one) to that local repository (src: repo/create/create.go, sourceInit).
 [shell.repo_create]
 usage   = "gh repo create [options] [<name>]"
 aliases = ["repo new"]
@@ -415,7 +416,7 @@ options.private              = { flag = ["--private"] }
 options.public               = { flag = ["--public"], adds = ["make_public"] }
 options.push                 = { flag = ["--push"], adds = ["git_push"] }
 options.remote               = { flag = ["-r", "--remote"], value = "required", adds = ["write_local"] }
-options.source               = { flag = ["-s", "--source"], value = "required" }
+options.source               = { flag = ["-s", "--source"], value = "required", adds = ["write_local"] }
 options.team                 = { flag = ["-t", "--team"], value = "required" }
 options.template             = { flag = ["-p", "--template"], value = "required" }
 
@@ -641,7 +642,8 @@ options.yes         = { flag = ["-y", "--yes"] }
 options.repo        = { flag = ["-R", "--repo"], value = "required", adds = ["target_override"] }
 
 # ---------------------------------------------------------------------------------------------
-# search (read only; here `-R/--repo` is a search filter, not a target, and it repeats)
+# search (read only). Here `-R/--repo` is a repeated search filter, not a target. Its key is
+# `repo_filter`, so that the field `repo` has one type (String) in every action that has it.
 
 [shell.search_code]
 usage = "gh search code [options] [<query>...]"
@@ -654,7 +656,7 @@ options.language  = { flag = ["--language"], value = "required" }
 options.limit     = { flag = ["-L", "--limit"], value = "required" }
 options.match     = { flag = ["--match"], value = "required", repeated = true }
 options.owner     = { flag = ["--owner"], value = "required", repeated = true }
-options.repo      = { flag = ["-R", "--repo"], value = "required", repeated = true }
+options.repo_filter = { flag = ["-R", "--repo"], value = "required", repeated = true }
 options.size      = { flag = ["--size"], value = "required" }
 options.template  = { flag = ["-t", "--template"], value = "required" }
 options.web       = { flag = ["-w", "--web"], adds = ["open_browser"] }
@@ -678,7 +680,7 @@ options.merge           = { flag = ["--merge"] }
 options.order           = { flag = ["--order"], value = "required" }
 options.owner           = { flag = ["--owner"], value = "required", repeated = true }
 options.parent          = { flag = ["--parent"], value = "required" }
-options.repo            = { flag = ["-R", "--repo"], value = "required", repeated = true }
+options.repo_filter = { flag = ["-R", "--repo"], value = "required", repeated = true }
 options.sort            = { flag = ["--sort"], value = "required" }
 options.template        = { flag = ["-t", "--template"], value = "required" }
 options.tree            = { flag = ["--tree"], value = "required" }
@@ -716,7 +718,7 @@ options.order         = { flag = ["--order"], value = "required" }
 options.owner         = { flag = ["--owner"], value = "required", repeated = true }
 options.project       = { flag = ["--project"], value = "required" }
 options.reactions     = { flag = ["--reactions"], value = "required" }
-options.repo          = { flag = ["-R", "--repo"], value = "required", repeated = true }
+options.repo_filter = { flag = ["-R", "--repo"], value = "required", repeated = true }
 options.search_type   = { flag = ["--search-type"], value = "required" }
 options.sort          = { flag = ["--sort"], value = "required" }
 options.state         = { flag = ["--state"], value = "required" }
@@ -762,7 +764,7 @@ options.order            = { flag = ["--order"], value = "required" }
 options.owner            = { flag = ["--owner"], value = "required", repeated = true }
 options.project          = { flag = ["--project"], value = "required" }
 options.reactions        = { flag = ["--reactions"], value = "required" }
-options.repo             = { flag = ["-R", "--repo"], value = "required", repeated = true }
+options.repo_filter = { flag = ["-R", "--repo"], value = "required", repeated = true }
 options.review           = { flag = ["--review"], value = "required" }
 options.review_requested = { flag = ["--review-requested"], value = "required" }
 options.reviewed_by      = { flag = ["--reviewed-by"], value = "required" }

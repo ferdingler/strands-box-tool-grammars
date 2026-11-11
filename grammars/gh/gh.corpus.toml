@@ -583,6 +583,13 @@ action = "repo_create"
 fields = { name = "my-project", internal = true, source = ".", remote = "upstream", push = true, homepage = "https://example.com" }
 effects = ["git_push", "write_local", "write_remote"]
 
+# `--source` alone adds the remote `origin` to the local repository (src: repo/create/create.go)
+[[case]]
+argv = ["gh", "repo", "create", "my-project", "--private", "-s", "."]
+action = "repo_create"
+fields = { name = "my-project", private = true, source = "." }
+effects = ["write_local", "write_remote"]
+
 # `--confirm` is a deprecated hidden flag and is not modeled
 [[case]]
 argv = ["gh", "repo", "create", "x", "--private", "--confirm"]
@@ -867,7 +874,7 @@ effects = ["read_remote"]
 [[case]]
 argv = ["gh", "search", "code", "panic", "-R", "cli/cli", "-R", "cli/go-gh"]
 action = "search_code"
-fields = { query = ["panic"], repo = ["cli/cli", "cli/go-gh"] }
+fields = { query = ["panic"], repo_filter = ["cli/cli", "cli/go-gh"] }
 effects = ["read_remote"]
 
 [[case]]
