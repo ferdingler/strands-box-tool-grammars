@@ -78,6 +78,19 @@ is the linked project; `--remote=<ref|branch|url>` names another one. Either for
 A remote-only command (`functions`, `secrets`, `projects`, `orgs`, `branches`, `link`) always has
 `remote`. There, `--remote=<ref>` only picks another project.
 
+**`remote == ""` is not proof of the linked project.** Before it parses, the CLI rewrites a bare
+`--remote <word>` to `--remote=<word>` when the word is a database URL or a true-literal. On a
+command with an operand, the grammar reads that word as the operand instead. It flags the line
+with `ambiguous_argv` (see below), so forbid that effect before you trust the `remote` field.
+
+**Forbid `ambiguous_argv`.** It is how the grammar marks a line it may misread. A boolean flag in
+this CLI takes a following `true`, `false`, `yes`, `no`, `on`, `off`, `1`, `0`, `y`, or `n` as
+its value, so `functions deploy --debug false` deploys *every* function, while the grammar sees a
+function named `false`. Any operand that is one of those words (or, on a database command, looks
+like `postgres://...`) adds `ambiguous_argv`. Where an empty operand means "all" (`functions
+deploy`, `functions download`, `secrets unset`, `storage rm`, `migration repair`, `test db`), it
+also adds `all_targets`, and a database URL adds the hosted effects.
+
 ## Effects
 
 | Effect | Meaning |
@@ -97,9 +110,12 @@ A remote-only command (`functions`, `secrets`, `projects`, `orgs`, `branches`, `
 | `local_stack` | Starts or stops local Docker containers |
 | `run_sql` | Runs SQL from the line or from files it names (`db query`, `test db`) |
 | `run_program` | Runs another program (`gen types --lang dart` or `swift`) |
-| `reveal_secrets` | Prints secret keys or database passwords (`projects api-keys --reveal`, `branches get`) |
+| `reveal_secrets` | Prints secret keys or database passwords (`projects api-keys --reveal`, `branches get`, and `status`, which prints the local `service_role` key and database URL) |
 | `dump_data` | Dumps table data (`db dump --data-only`) |
-| `skip_confirmation` | `--yes`: answers every prompt, including the prompts before hosted changes |
+| `skip_confirmation` | `--yes`: answers every prompt, including the prompts before hosted changes. On a line with `clear_network_bans` it also lets the CLI clear the project's network bans |
+| `clear_network_bans` | A `--remote` database connection. With `--yes` (or `SUPABASE_YES` in the environment), when the connection fails, the CLI may delete every network ban of the project. Each such connection without `--password` also creates a temporary login role through the Management API |
+| `ambiguous_argv` | An operand the CLI may read as a flag value or as the `--remote` target; the grammar's reading may be wrong |
+| `all_targets` | The CLI may act on every object of its kind (all functions, secrets, buckets, migrations, or tests) |
 
 Besides `--remote` (which swaps a local effect for its hosted pair), only `db push --dry-run` removes an effect: it removes the database write. See Known limits for why the other dry-run style flags do not.
 
@@ -133,6 +149,23 @@ when {
 forbid (principal, action in Tool::supabase::Action::"*", resource)
 when { context.input.effects.contains(Tool::supabase::Effect::"skip_confirmation") };
 
+// Refuse lines the grammar may misread.
+@id("no_ambiguous_argv")
+@description("The CLI may read an operand of this line as a flag value or a target.")
+forbid (principal, action in Tool::supabase::Action::"*", resource)
+when { context.input.effects.contains(Tool::supabase::Effect::"ambiguous_argv") };
+
+// Never let a remote database command clear the project's network bans.
+// SUPABASE_YES in the environment also allows it, so keep it out of the box's environment.
+@id("no_network_ban_changes")
+forbid (principal, action in Tool::supabase::Action::"*", resource)
+when {
+  context.input.effects.containsAll([
+    Tool::supabase::Effect::"clear_network_bans",
+    Tool::supabase::Effect::"skip_confirmation"
+  ])
+};
+
 // Generate types only from the local database.
 @id("types_local_only")
 forbid (principal, action == Tool::supabase::Action::"gen_types", resource)
@@ -163,15 +196,28 @@ These lines are `unmodeled`, so a policy must permit `unmodeled` by name to run 
 - **A boolean literal after a boolean flag.** The CLI reads `--dry-run false` (and `true`, `yes`,
   `no`, `on`, `off`, `1`, `0`, `y`, `n`) as the flag's value. The grammar reads the word as an
   operand. On a command with no operand slot the line is `unmodeled`. On one with an operand
-  slot, the word lands in that field. This is why `secrets unset --dry-run`, `db query
-  --read-only`, and `db pull --declarative` remove no effect: the effects stay, so a forbid still
-  applies, but a rule that reads an operand field can see a stray `false`.
-- **`--remote <word>` on a command with operands.** The CLI may join the word to `--remote` (a
-  database URL, a boolean literal, or one word too many). The grammar still adds `remote`, but the
-  word can land in an operand field instead of `remote`.
+  slot, the word lands in that field and adds `ambiguous_argv` (plus `all_targets` where an empty
+  operand means "all"). This is also why `secrets unset --dry-run`, `db query --read-only`, and
+  `db pull --declarative` remove no effect. The grammar cannot tell which flag took the literal,
+  so a real operand named `true` or `n` is also flagged.
+- **`--remote <word>` on a command with operands.** The CLI joins a database URL or a
+  true-literal (in any case) to `--remote`. The grammar puts the word in the operand field, sets
+  `remote = ""`, and adds `ambiguous_argv`; a URL also adds the hosted effects. The URL check is
+  the pattern `p*://*` or `P*://*`, so an operand such as `select 'p://x'` is also flagged. A
+  branch-shaped word is joined only when there is one operand too many, which the grammar sees as
+  `unmodeled`.
+- **Network bans and login roles.** A `--remote` database connection without `--password` creates
+  a temporary login role, and with `--yes` or `SUPABASE_YES` it may clear every network ban of the
+  project. `clear_network_bans` marks every such line; the grammar cannot see `SUPABASE_YES`.
+- **Repeated `-s` and `-x`.** The CLI keeps only the first value of a repeated single-value flag
+  and splits one value on commas (`-s public,auth`). The grammar records every repeat and does not
+  split, so `schema` or `exclude` can hold more values, or fewer split values, than the CLI uses.
+- **Stack backend.** With `[experimental] stack = true` in `config.toml` or
+  `SUPABASE_EXPERIMENTAL_STACK=1`, `start`, `stop`, `status`, and `functions serve` become the
+  CLI's stack commands, with other flags. The grammar models the default Docker backend.
 - **Short options.** The CLI splits `-sx` into `-s -x` and takes a short option's value only as
-  `-s value` or `-s=value`. The grammar reads `-svalue` as `-s` with the value `value` (the CLI
-  then fails), and `-s=value` is `unmodeled`.
+  `-s value` or `-s=value`. The grammar reads `-svalue` (`-fout.sql`, `-j4`) as `-s` with the
+  value `value`; the CLI fails on those lines, so nothing runs. `-s=value` is `unmodeled`.
 - **What the grammar cannot see.** Environment variables (`SUPABASE_ACCESS_TOKEN`,
   `SUPABASE_PROJECT_ID`, `SUPABASE_YES`, `SUPABASE_WORKDIR`, `SUPABASE_DB_PASSWORD`), the link state
   in `supabase/.temp/`, `supabase/config.toml`, and what the SQL in a migration, query file, or

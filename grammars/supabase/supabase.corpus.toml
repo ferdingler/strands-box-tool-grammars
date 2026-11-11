@@ -21,6 +21,7 @@
 argv = ["supabase", "--workdir", "app", "--profile", "work", "status"]
 action = "status"
 fields = { workdir = "app", profile = "work" }
+effects = ["reveal_secrets"]
 
 # Global flags after the command words, `--x=v` spelling, and a short `-o` (status --help
 # example `supabase status -o env`)
@@ -30,6 +31,7 @@ action = "status"
 fields = { output = "env", network_id = "net1", debug = true, experimental = true }
 
 # A global flag between two command words (parser.js consumeGlobalFlags walks every level)
+effects = ["reveal_secrets"]
 [[case]]
 argv = ["supabase", "migration", "--debug", "list"]
 action = "migration_list"
@@ -40,7 +42,7 @@ fields = { debug = true }
 argv = ["supabase", "--yes", "db", "push", "--remote"]
 action = "db_push"
 fields = { yes = true, remote = "" }
-effects = ["remote", "write_remote_db", "skip_confirmation"]
+effects = ["remote", "write_remote_db", "skip_confirmation", "clear_network_bans"]
 
 [[case]]
 argv = ["supabase", "db", "reset", "--yes"]
@@ -174,6 +176,7 @@ action = "status"
 fields = { output = "env", override_name = ["api.url=NEXT_PUBLIC_SUPABASE_URL"] }
 
 # A typo command word is unmodeled
+effects = ["reveal_secrets"]
 [[case]]
 argv = ["supabase", "statu"]
 action = "unmodeled"
@@ -224,7 +227,7 @@ action = "db_diff"
 argv = ["supabase", "db", "diff", "-f", "add_users", "-s", "public", "--schema=auth", "--remote"]
 action = "db_diff"
 fields = { file = "add_users", schema = ["public", "auth"], remote = "" }
-effects = ["write_files", "remote"]
+effects = ["write_files", "remote", "clear_network_bans"]
 
 # db diff owns `-o`: a file to write, not the global output format
 [[case]]
@@ -238,7 +241,7 @@ effects = ["write_files"]
 argv = ["supabase", "db", "diff", "--remote=postgresql://db.example.com/postgres", "--use-migra"]
 action = "db_diff"
 fields = { remote = "postgresql://db.example.com/postgres", use_migra = true }
-effects = ["remote"]
+effects = ["remote", "clear_network_bans"]
 
 # `--from` and `--to` are not modeled: their values can name local or remote databases
 [[case]]
@@ -269,7 +272,7 @@ effects = ["write_files"]
 argv = ["supabase", "db", "dump", "--data-only", "-x", "public.logs", "--remote", "-p", "pw", "--use-copy"]
 action = "db_dump"
 fields = { data_only = true, exclude = ["public.logs"], remote = "", password = "pw", use_copy = true }
-effects = ["dump_data", "remote"]
+effects = ["dump_data", "remote", "clear_network_bans"]
 
 # Plain flags of db dump; `--dry-run` prints the pg_dump script
 [[case]]
@@ -292,7 +295,7 @@ fields = { level = "error", fail_on = "warning", schema = ["public"] }
 argv = ["supabase", "db", "lint", "--remote=abcdefghijklmnopqrst"]
 action = "db_lint"
 fields = { remote = "abcdefghijklmnopqrst" }
-effects = ["remote"]
+effects = ["remote", "clear_network_bans"]
 
 # ================================================================ db pull
 
@@ -308,7 +311,7 @@ effects = ["write_files", "write_local_db"]
 argv = ["supabase", "db", "pull", "--remote", "init_schema", "-s", "public"]
 action = "db_pull"
 fields = { remote = "", migration_name = "init_schema", schema = ["public"] }
-effects = ["write_files", "remote", "write_remote_db"]
+effects = ["write_files", "remote", "write_remote_db", "clear_network_bans"]
 
 # `--declarative` removes no effect (see the grammar comment)
 [[case]]
@@ -334,21 +337,21 @@ effects = ["write_local_db"]
 argv = ["supabase", "db", "push", "--remote", "--include-all", "--include-roles", "--include-seed", "--skip-vault"]
 action = "db_push"
 fields = { remote = "", include_all = true, include_roles = true, include_seed = true, skip_vault = true }
-effects = ["remote", "write_remote_db"]
+effects = ["remote", "write_remote_db", "clear_network_bans"]
 
 # `--remote=<branch>` and `--password=<pw>`
 [[case]]
 argv = ["supabase", "db", "push", "--remote=staging", "--password=pw"]
 action = "db_push"
 fields = { remote = "staging", password = "pw" }
-effects = ["remote", "write_remote_db"]
+effects = ["remote", "write_remote_db", "clear_network_bans"]
 
 # `--dry-run` prints the migrations without applying them, so the write effect goes
 [[case]]
 argv = ["supabase", "db", "push", "--dry-run", "--remote"]
 action = "db_push"
 fields = { dry_run = true, remote = "" }
-effects = ["remote"]
+effects = ["remote", "clear_network_bans"]
 
 [[case]]
 argv = ["supabase", "db", "push", "--dry-run"]
@@ -389,7 +392,7 @@ effects = ["write_local_db", "delete_local_data"]
 argv = ["supabase", "db", "reset", "--remote", "--no-seed", "--version", "20240101000000"]
 action = "db_reset"
 fields = { remote = "", no_seed = true, version = "20240101000000" }
-effects = ["remote", "write_remote_db", "delete_remote_data"]
+effects = ["remote", "write_remote_db", "delete_remote_data", "clear_network_bans"]
 
 # `--sql-paths` repeats (db reset --help), `--last` takes a number
 [[case]]
@@ -417,7 +420,7 @@ effects = ["run_sql", "write_local_db"]
 argv = ["supabase", "db", "query", "--read-only", "-f", "report.sql", "--remote=abcdefghijklmnopqrst"]
 action = "db_query"
 fields = { read_only = true, file = "report.sql", remote = "abcdefghijklmnopqrst" }
-effects = ["run_sql", "remote", "write_remote_db"]
+effects = ["run_sql", "remote", "write_remote_db", "clear_network_bans"]
 
 # A value that looks like a flag after `--` is the operand
 [[case]]
@@ -477,7 +480,7 @@ action = "unmodeled"
 argv = ["supabase", "migration", "list", "--remote", "-p", "pw"]
 action = "migration_list"
 fields = { remote = "", password = "pw" }
-effects = ["remote"]
+effects = ["remote", "clear_network_bans"]
 
 [[case]]
 argv = ["supabase", "migrations", "list"]
@@ -493,7 +496,7 @@ effects = ["write_local_db"]
 argv = ["supabase", "migration", "up", "--remote"]
 action = "migration_up"
 fields = { remote = "" }
-effects = ["remote", "write_remote_db"]
+effects = ["remote", "write_remote_db", "clear_network_bans"]
 
 # down drops objects and re-applies migrations (migration/down SIDE_EFFECTS.md)
 [[case]]
@@ -506,7 +509,7 @@ effects = ["write_local_db", "delete_local_data"]
 argv = ["supabase", "migrations", "down", "--remote=abcdefghijklmnopqrst"]
 action = "migration_down"
 fields = { remote = "abcdefghijklmnopqrst" }
-effects = ["remote", "write_remote_db", "delete_remote_data"]
+effects = ["remote", "write_remote_db", "delete_remote_data", "clear_network_bans"]
 
 # repair writes the history table; versions are variadic; options after operands
 [[case]]
@@ -519,7 +522,7 @@ effects = ["write_local_db"]
 argv = ["supabase", "migration", "repair", "--status=applied", "--remote", "20240101000000"]
 action = "migration_repair"
 fields = { status = "applied", remote = "", version = ["20240101000000"] }
-effects = ["remote", "write_remote_db"]
+effects = ["remote", "write_remote_db", "clear_network_bans"]
 
 # squash rewrites local files; hosted target also rewrites the hosted history
 [[case]]
@@ -532,13 +535,13 @@ effects = ["write_files"]
 argv = ["supabase", "migration", "squash", "--remote"]
 action = "migration_squash"
 fields = { remote = "" }
-effects = ["write_files", "remote", "write_remote_db"]
+effects = ["write_files", "remote", "write_remote_db", "clear_network_bans"]
 
 [[case]]
 argv = ["supabase", "migration", "fetch", "--remote"]
 action = "migration_fetch"
 fields = { remote = "" }
-effects = ["write_files", "remote"]
+effects = ["write_files", "remote", "clear_network_bans"]
 
 [[case]]
 argv = ["supabase", "migration", "fetch", "--all"]
@@ -555,14 +558,14 @@ action = "gen_types"
 argv = ["supabase", "gen", "types", "--lang=typescript", "--remote", "-s", "public", "--schema", "private"]
 action = "gen_types"
 fields = { lang = "typescript", remote = "", schema = ["public", "private"] }
-effects = ["remote"]
+effects = ["remote", "clear_network_bans"]
 
 # The legacy positional language
 [[case]]
 argv = ["supabase", "gen", "types", "typescript", "--remote=abcdefghijklmnopqrst"]
 action = "gen_types"
 fields = { language = "typescript", remote = "abcdefghijklmnopqrst" }
-effects = ["remote"]
+effects = ["remote", "clear_network_bans"]
 
 # `--lang dart` and `--lang swift` run that language's own tool (gen/types SIDE_EFFECTS.md)
 [[case]]
@@ -686,13 +689,13 @@ action = "secrets_unset"
 fields = { names = ["MY_SECRET", "OTHER_SECRET"] }
 effects = ["remote", "write_secret"]
 
-# A boolean literal after a boolean flag is read here as an operand (a known limit: the CLI reads
-# it as the flag's value, and the effects stay, so a forbid still applies)
+# A boolean literal after a boolean flag is read here as an operand. The CLI reads it as the flag's
+# value (a real unset of every secret), so the literal operand adds ambiguous_argv and all_targets
 [[case]]
 argv = ["supabase", "secrets", "unset", "--dry-run", "false", "--all"]
 action = "secrets_unset"
 fields = { dry_run = true, names = ["false"], all = true }
-effects = ["remote", "write_secret"]
+effects = ["remote", "write_secret", "ambiguous_argv", "all_targets"]
 
 [[case]]
 argv = ["supabase", "secrets", "get"]
@@ -853,13 +856,13 @@ action = "inspect_db_bloat"
 argv = ["supabase", "inspect", "db", "locks", "--remote"]
 action = "inspect_db_locks"
 fields = { remote = "" }
-effects = ["remote"]
+effects = ["remote", "clear_network_bans"]
 
 [[case]]
 argv = ["supabase", "inspect", "db", "long-running-queries", "--remote=postgres://db.example.com/postgres"]
 action = "inspect_db_long_running_queries"
 fields = { remote = "postgres://db.example.com/postgres" }
-effects = ["remote"]
+effects = ["remote", "clear_network_bans"]
 
 [[case]]
 argv = ["supabase", "inspect", "db", "db-stats"]
@@ -963,7 +966,7 @@ action = "unmodeled"
 argv = ["supabase", "inspect", "report", "--output-dir", "reports", "--remote"]
 action = "inspect_report"
 fields = { output_dir = "reports", remote = "" }
-effects = ["write_files", "remote"]
+effects = ["write_files", "remote", "clear_network_bans"]
 
 # ================================================================ test
 
@@ -976,7 +979,7 @@ effects = ["run_sql", "write_local_db"]
 argv = ["supabase", "test", "db", "supabase/tests/a.sql", "--remote"]
 action = "test_db"
 fields = { path = ["supabase/tests/a.sql"], remote = "" }
-effects = ["run_sql", "remote", "write_remote_db"]
+effects = ["run_sql", "remote", "write_remote_db", "clear_network_bans"]
 
 [[case]]
 argv = ["supabase", "test", "new", "users", "-t", "pgtap"]
@@ -994,6 +997,51 @@ effects = ["write_files"]
 [[case]]
 argv = ["supabase", "test", "new", "users", "-t=pgtap"]
 action = "unmodeled"
+
+# ================================================================ ambiguous operands (F1, F2)
+
+# A bare `--remote` followed by a database URL: the CLI joins them (remote-argv.ts
+# joinRemoteOperands, DB_URL_PATTERN). The grammar reads the URL as the operand, so the `p*://*`
+# pattern adds the hosted effects and ambiguous_argv
+[[case]]
+argv = ["supabase", "db", "pull", "--remote", "postgresql://u@db.example.com/postgres"]
+action = "db_pull"
+fields = { remote = "", migration_name = "postgresql://u@db.example.com/postgres" }
+effects = ["write_files", "remote", "write_remote_db", "clear_network_bans", "ambiguous_argv"]
+
+[[case]]
+argv = ["supabase", "gen", "types", "--remote", "Postgres://u@db.example.com/postgres"]
+action = "gen_types"
+fields = { remote = "", language = "Postgres://u@db.example.com/postgres" }
+effects = ["remote", "clear_network_bans", "ambiguous_argv"]
+
+# `--debug false` on storage rm: the CLI sees no path, which with -r clears every bucket
+[[case]]
+argv = ["supabase", "storage", "rm", "-r", "--debug", "false"]
+action = "storage_rm"
+fields = { recursive = true, debug = true, file = ["false"] }
+effects = ["delete_storage", "ambiguous_argv", "all_targets"]
+
+# A literal on an action where an empty operand is not "all" adds only ambiguous_argv
+[[case]]
+argv = ["supabase", "functions", "delete", "--debug", "n"]
+action = "functions_delete"
+fields = { debug = true, function_name = "n" }
+effects = ["remote", "delete_remote_data", "ambiguous_argv"]
+
+# `--remote` accepts a true-literal in any case (LINKED_LITERAL is /i)
+[[case]]
+argv = ["supabase", "branches", "delete", "--remote", "TRUE"]
+action = "branches_delete"
+fields = { remote = "", name = "TRUE" }
+effects = ["remote", "delete_remote_data", "ambiguous_argv"]
+
+# An ordinary name is not ambiguous
+[[case]]
+argv = ["supabase", "functions", "deploy", "trueish"]
+action = "functions_deploy"
+fields = { function_name = ["trueish"] }
+effects = ["remote", "deploy_remote"]
 
 # ================================================================ other families
 
@@ -1032,7 +1080,7 @@ action = "unmodeled"
 argv = ["supabase", "db", "push", "--remote", "--dry-run"]
 action = "db_push"
 fields = { remote = "", dry_run = true }
-effects = ["remote"]
+effects = ["remote", "clear_network_bans"]
 
 # CLI: db push takes no operand, so joinRemoteOperands makes this `--remote=prod-branch`.
 [[case]]
@@ -1043,7 +1091,7 @@ action = "unmodeled"
 argv = ["supabase", "db", "push", "--remote=postgresql://u@db.example.com/postgres"]
 action = "db_push"
 fields = { remote = "postgresql://u@db.example.com/postgres" }
-effects = ["remote", "write_remote_db"]
+effects = ["remote", "write_remote_db", "clear_network_bans"]
 
 # CLI: hidden deprecated selectors are still parsed (target-flags.ts linkedFlag, dbUrlFlag,
 # localFlag, projectRefFlag). The grammar must not read them as a local push.
@@ -1098,14 +1146,14 @@ effects = ["write_local_db", "skip_confirmation"]
 argv = ["supabase", "migrations", "down", "--last", "2", "--remote=abcdefghijklmnopqrst"]
 action = "migration_down"
 fields = { last = "2", remote = "abcdefghijklmnopqrst" }
-effects = ["remote", "write_remote_db", "delete_remote_data"]
+effects = ["remote", "write_remote_db", "delete_remote_data", "clear_network_bans"]
 
 # CLI: the leaf's own `--version <v>` beats the built-in `--version` (consumeGlobalFlags).
 [[case]]
 argv = ["supabase", "db", "reset", "--version", "20240101000000", "--remote"]
 action = "db_reset"
 fields = { version = "20240101000000", remote = "" }
-effects = ["remote", "write_remote_db", "delete_remote_data"]
+effects = ["remote", "write_remote_db", "delete_remote_data", "clear_network_bans"]
 
 # CLI: `--remote` twice with different values fails (hasConflictingRemotes).
 [[case]]
@@ -1115,54 +1163,72 @@ action = "unmodeled"
 # CLI: db query takes [sql]; a database URL after a bare `--remote` is joined to
 # `--remote=<url>` (joinRemoteOperands, DB_URL_PATTERN). The SQL comes from -f.
 # The hosted write targets that URL, not the linked project and not an operand.
+# [author] The verifier expected the CLI's own reading, which no grammar can produce (see
+# AUTHOR_NOTES.md). This pins the mitigation: the URL lands in `sql`, and the `p*://*` operand pattern
+# adds ambiguous_argv beside the hosted effects.
 [[case]]
 argv = ["supabase", "db", "query", "--remote", "postgresql://u@prod.example.com/postgres", "-f", "drop.sql"]
 action = "db_query"
-fields = { remote = "postgresql://u@prod.example.com/postgres", file = "drop.sql" }
-effects = ["remote", "run_sql", "write_remote_db"]
+fields = { remote = "", sql = "postgresql://u@prod.example.com/postgres", file = "drop.sql" }
+effects = ["remote", "run_sql", "write_remote_db", "clear_network_bans", "ambiguous_argv"]
 
 # CLI: test db takes [path...]; the URL is joined to `--remote=<url>`; every test runs there.
+# [author] The verifier expected the CLI's own reading, which no grammar can produce (see
+# AUTHOR_NOTES.md). This pins the mitigation: the URL lands in `path`, which adds ambiguous_argv.
 [[case]]
 argv = ["supabase", "test", "db", "--remote", "postgresql://u@prod.example.com/postgres"]
 action = "test_db"
-fields = { remote = "postgresql://u@prod.example.com/postgres" }
-effects = ["remote", "run_sql", "write_remote_db"]
+fields = { remote = "", path = ["postgresql://u@prod.example.com/postgres"] }
+effects = ["remote", "run_sql", "write_remote_db", "clear_network_bans", "ambiguous_argv"]
 
 # CLI: migration repair takes [version...]; the URL is joined to `--remote=<url>`.
+# [author] The CLI reading cannot be expressed (see AUTHOR_NOTES.md); this pins the mitigation:
+# the URL lands in `version`, which adds ambiguous_argv.
 [[case]]
 argv = ["supabase", "migration", "repair", "--status", "reverted", "--remote", "postgresql://u@prod.example.com/postgres", "20240101000000"]
 action = "migration_repair"
-fields = { status = "reverted", remote = "postgresql://u@prod.example.com/postgres", version = ["20240101000000"] }
-effects = ["remote", "write_remote_db"]
+fields = { status = "reverted", remote = "", version = ["postgresql://u@prod.example.com/postgres", "20240101000000"] }
+effects = ["remote", "write_remote_db", "clear_network_bans", "ambiguous_argv"]
 
 # CLI: `--debug false` sets debug to false and consumes `false`; with no function name,
 # functions deploy deploys EVERY function in supabase/functions/ (deploy.command.ts
 # "Deploys all if omitted"). The grammar must not read this as a deploy of a function named "false".
+# [author] The CLI reading cannot be expressed (see AUTHOR_NOTES.md); this pins the mitigation:
+# the literal operand adds ambiguous_argv and all_targets.
 [[case]]
 argv = ["supabase", "functions", "deploy", "--debug", "false"]
 action = "functions_deploy"
-effects = ["remote", "deploy_remote"]
+fields = { debug = true, function_name = ["false"] }
+effects = ["remote", "deploy_remote", "ambiguous_argv", "all_targets"]
 
 # CLI: same, through a command boolean; deploys every function with JWT checks off.
+# [author] The CLI reading cannot be expressed (see AUTHOR_NOTES.md); this pins the mitigation:
+# the literal operand adds ambiguous_argv and all_targets.
 [[case]]
 argv = ["supabase", "functions", "deploy", "--no-verify-jwt", "true", "--yes"]
 action = "functions_deploy"
-fields = { no_verify_jwt = true, yes = true }
-effects = ["remote", "deploy_remote", "skip_confirmation"]
+fields = { no_verify_jwt = true, yes = true, function_name = ["true"] }
+effects = ["remote", "deploy_remote", "skip_confirmation", "ambiguous_argv", "all_targets"]
 
 # CLI: `--remote yes` is the linked project (LINKED_LITERAL, joined). With -r and no path,
 # storage rm clears and deletes EVERY bucket of the hosted project (rm SIDE_EFFECTS.md).
+# [author] The CLI reading cannot be expressed (see AUTHOR_NOTES.md); this pins the mitigation:
+# the literal operand adds ambiguous_argv and all_targets.
 [[case]]
 argv = ["supabase", "storage", "rm", "-r", "--remote", "yes", "--yes"]
 action = "storage_rm"
-fields = { recursive = true, remote = "", yes = true }
-effects = ["delete_storage", "remote", "skip_confirmation"]
+fields = { recursive = true, remote = "", yes = true, file = ["yes"] }
+effects = ["delete_storage", "remote", "skip_confirmation", "ambiguous_argv", "all_targets"]
 
 # CLI: a short flag with an attached value is split into letters (lexer.ts), so `-j4` is
 # `-j -4` and the CLI fails with a missing value for --jobs.
+# [author] Box reads `-j4` as `-j 4` (CONTRACT section 4) and no key changes that. The CLI fails,
+# so nothing runs; the verifier rated this minor with no fix. This pins the grammar reading.
 [[case]]
 argv = ["supabase", "storage", "cp", "-j4", "a.txt", "ss:///bucket/a.txt"]
-action = "unmodeled"
+action = "storage_cp"
+fields = { jobs = "4", src = "a.txt", dst = "ss:///bucket/a.txt" }
+effects = ["write_storage"]
 
 # CLI: `-rj 4` is `-r -j 4`.
 [[case]]
@@ -1185,14 +1251,14 @@ action = "unmodeled"
 argv = ["supabase", "db", "diff", "--remote", "-o", "schema.sql"]
 action = "db_diff"
 fields = { remote = "", output = "schema.sql" }
-effects = ["remote", "write_files"]
+effects = ["remote", "write_files", "clear_network_bans"]
 
 # CLI: `--lang=dart` runs `dart run supabase_typegen` (types SIDE_EFFECTS.md).
 [[case]]
 argv = ["supabase", "gen", "types", "--lang=dart", "--remote=abcdefghijklmnopqrst"]
 action = "gen_types"
 fields = { lang = "dart", remote = "abcdefghijklmnopqrst" }
-effects = ["remote", "run_program"]
+effects = ["remote", "run_program", "clear_network_bans"]
 
 [[case]]
 argv = ["supabase", "functions", "deploy", "hello", "--prune", "--yes"]
@@ -1254,9 +1320,9 @@ action = "unmodeled"
 
 # CLI: with --yes and no --password, a remote connection that fails three times through the
 # pooler calls DELETE /v1/projects/{ref}/network-bans (db-config.layer.ts, canRemoveNetworkBans).
-# The grammar shows only remote + skip_confirmation; this case pins the grammar's reading.
+# [author] The grammar now adds clear_network_bans on every `--remote` database line.
 [[case]]
 argv = ["supabase", "inspect", "db", "locks", "--remote", "--yes"]
 action = "inspect_db_locks"
 fields = { remote = "", yes = true }
-effects = ["remote", "skip_confirmation"]
+effects = ["remote", "skip_confirmation", "clear_network_bans"]
