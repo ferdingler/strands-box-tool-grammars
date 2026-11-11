@@ -79,18 +79,33 @@ fields = { temporary = true }
 effects = ["deploy", "deploy_production", "change_traffic", "run_local_code", "write_local_files"]
 
 # `--env` and `--build-env` are repeatable `[String]` options; values that look like flags are data.
+# Every `--env`/`--build-env` adds `export_local_env`, because a value with no `=` copies the
+# CLI's own environment variable (deploy/index.js `addProcessEnv`).
 [[case]]
 argv = ["vercel", "deploy", "--env", "A=1", "--env=B=2", "--build-env", "C=--x", "--meta", "k=v"]
 action = "deploy"
 fields = { env = ["A=1", "B=2"], build_env = ["C=--x"], meta = ["k=v"] }
-effects = ["deploy", "deploy_production", "change_traffic"]
+effects = ["deploy", "deploy_production", "change_traffic", "export_local_env"]
+
+[[case]]
+argv = ["vercel", "deploy", "--environment", "preview", "--build-env", "NPM_TOKEN"]
+action = "deploy"
+fields = { environment = "preview", build_env = ["NPM_TOKEN"] }
+effects = ["deploy", "export_local_env"]
 
 # `-p` names the project; `--create-if-missing` creates it; `-y` skips prompts.
 [[case]]
 argv = ["vercel", "deploy", "-y", "-p", "web", "--create-if-missing", "--environment", "preview"]
 action = "deploy"
 fields = { yes = true, project = "web", create_if_missing = true, environment = "preview" }
-effects = ["deploy", "write_remote", "skip_prompt"]
+effects = ["deploy", "write_remote", "write_local_files", "skip_prompt"]
+
+# `deploy --yes` in an unlinked directory creates and links a project (`ensureLink` autoConfirm).
+[[case]]
+argv = ["vercel", "deploy", "--yes", "--environment", "preview"]
+action = "deploy"
+fields = { yes = true, environment = "preview" }
+effects = ["deploy", "write_remote", "write_local_files", "skip_prompt"]
 
 # `--verify` creates the Protection Bypass for Automation secret if it is missing.
 [[case]]
@@ -104,7 +119,7 @@ effects = ["deploy", "write_remote"]
 argv = ["vercel", "deploy", "--regions", "iad1", "--archive=tgz", "--delete-project-after", "1d", "--no-wait", "--logs", "--turbo", "--guidance"]
 action = "deploy"
 fields = { regions = "iad1", archive = "tgz", delete_project_after = "1d", no_wait = true, logs = true, turbo = true, guidance = true }
-effects = ["deploy", "deploy_production", "change_traffic"]
+effects = ["deploy", "deploy_production", "change_traffic", "write_remote"]
 
 # A path operand after `--` is data, even when it looks like a flag.
 [[case]]
@@ -172,10 +187,17 @@ effects = ["deploy", "deploy_production", "change_traffic", "skip_prompt"]
 argv = ["vercel", "deploy", "init", "--environment", "preview", "--env", "A=1"]
 action = "deploy_init"
 fields = { environment = "preview", env = ["A=1"] }
-effects = ["deploy"]
+effects = ["deploy", "export_local_env"]
 
+# The words after `init` are the paths to deploy (`handleInitDeployment`).
 [[case]]
 argv = ["vercel", "deploy", "init", "./site"]
+action = "deploy_init"
+fields = { project_path = "./site" }
+effects = ["deploy", "deploy_production", "change_traffic"]
+
+[[case]]
+argv = ["vercel", "deploy", "init", "a", "b"]
 action = "unmodeled"
 
 [[case]]
@@ -300,12 +322,13 @@ effects = ["deploy"]
 argv = ["vercel", "redeploy"]
 action = "unmodeled"
 
-# `promote <deployment>` makes it the current production deployment.
+# `promote <deployment>` makes it the current production deployment. A deployment that is not a
+# production deployment is rebuilt as a new production deployment (`requestPromote`).
 [[case]]
 argv = ["vercel", "promote", "dpl_1", "--yes", "--timeout=30s"]
 action = "promote"
 fields = { deployment = "dpl_1", yes = true, timeout = "30s" }
-effects = ["change_traffic", "skip_prompt"]
+effects = ["change_traffic", "deploy", "deploy_production", "skip_prompt"]
 
 # `promote status` only reads (the CLI checks `args[1] === "status"`).
 [[case]]
@@ -961,11 +984,12 @@ action = "unmodeled"
 # FINDING: `--env KEY` (no `=`) makes the CLI copy process.env[KEY] into the deployment
 # (deploy/index.js addProcessEnv: "Reading KEY from your env (as no value was specified)").
 # A rule sees only `deploy`; nothing marks that a local secret leaves the machine.
+# Fixed by the effect `export_local_env` (the verifier's expectation named `read_secret`).
 [[case]]
 argv = ["vercel", "deploy", "--environment", "preview", "--env", "VERCEL_TOKEN"]
 action = "deploy"
 fields = { environment = "preview", env = ["VERCEL_TOKEN"] }
-effects = ["deploy", "read_secret"]
+effects = ["deploy", "export_local_env"]
 
 # `deploy --dry -- init`: arg@5 puts `init` in the positionals, so the CLI routes to `deploy init`,
 # whose strict parser refuses --dry and exits 2. Nothing deploys.

@@ -24,12 +24,19 @@ This makes `/path/to/prefix/bin/vercel`, a link to
 
 ## Load the grammar
 
-`vc.js` starts with `#!/usr/bin/env node`, and it runs a native `vercel` binary from the optional
-package `@vercel/vc-native-<platform>` (or the JavaScript CLI in `@vercel/cli-support`) as its child.
-Point `command` at the link, so that its last component is `vercel`:
+**On Linux, the real CLI does not run under Box at this revision (8a5f9ba2).** The grammar loads,
+and Box decides each `vercel` line, but Node.js aborts inside the tool's sandbox: V8 needs memory
+that is both writable and executable, Box's W^X containment refuses it, and the process exits
+with status 133. `NODE_OPTIONS=--jitless` gets past the abort, but then every API request fails
+("WebAssembly is not defined"). macOS is untested. The snippet below is the shape that loads.
+
+`bin/vercel` is a link to `lib/node_modules/vercel/dist/vc.js`, a `#!/usr/bin/env node` script.
+Point `command` at the real `vc.js`, not at the link: through the link, Node runs the script at
+the link's path, and the launcher exits with "Couldn't start Vercel CLI (not_in_node_modules)".
+The program name stays `vercel`, so `vercel` on the `PATH` of `run` must resolve to that same file.
 
 ```sh
-./scripts/render.sh vercel --command /path/to/prefix/bin/vercel
+./scripts/render.sh vercel --command /path/to/prefix/lib/node_modules/vercel/dist/vc.js
 ```
 
 ```toml
@@ -37,11 +44,12 @@ Point `command` at the link, so that its last component is `vercel`:
 tool-grammars = true
 
 [tool.vercel]
-command = ["/path/to/prefix/bin/vercel"]
+command = ["/path/to/prefix/lib/node_modules/vercel/dist/vc.js"]
 
 [tool.vercel.filesystem]
-read      = ["/path/to/prefix/lib/node_modules"]      # vc.js, cli-support, and the native binary
-read_file = ["/usr/bin/env", "/path/to/node/bin/node"] # the shebang chain, on Linux
+read      = ["/path/to/prefix/lib/node_modules",        # vc.js, cli-support, the native binary
+             "/path/to/home/.local/share/com.vercel.cli"]
+read_file = ["/usr/bin/env", "/path/to/node/bin/node"]  # the shebang chain, on Linux
 write     = ["/path/to/home/.local/share/com.vercel.cli"]  # auth.json, config.json, telemetry
 
 [tool.vercel.grammar]
@@ -52,14 +60,20 @@ program = "vercel"
 # ... [tool.vercel.grammar.effects] and [tool.vercel.grammar.shell.*] from vercel.grammar.toml
 ```
 
-On Linux, Box refuses the tool unless its filesystem lists cover each interpreter in the shebang
-chain: `env` and the `node` that `env` finds. The global configuration directory is
-`~/.local/share/com.vercel.cli` on Linux and `~/Library/Application Support/com.vercel.cli` on
-macOS. The CLI reads the login token there and writes its config and telemetry files. When the
-native binary is missing, the launcher downloads it once into the CLI cache, so either install the
-optional package or let the tool write its cache. The commands that build or deploy also need to
-read the project directory, and `build`, `dev`, `pull`, `link`, and `env pull` write into it. Restart
-the box after you upgrade the CLI.
+On Linux, Box refuses a `write` entry that has no `read` entry beside it, because Linux cannot
+enforce write-only access, and it refuses the tool unless its filesystem lists cover each
+interpreter in the shebang chain: `env` and the `node` that `env` finds. The launcher runs a native
+binary from the optional package `@vercel/vc-native-<platform>`; when that is missing, it downloads
+the binary once into the CLI cache, so install the optional package or let the tool write its
+cache.
+
+The global configuration directory is `~/.local/share/com.vercel.cli` on Linux and
+`~/Library/Application Support/com.vercel.cli` on macOS. When it does not exist, the CLI uses an
+existing `~/.now`, or the XDG `now` directory, instead. The CLI reads the login token there and
+writes its config and telemetry files. Box treats that directory as a credential store, so a grant
+of a home directory that holds it can be refused. The commands that build or deploy also read the
+project directory, and `build`, `dev`, `pull`, `link`, and `env pull` write into it. Restart the box
+after you upgrade the CLI.
 
 ## Supported commands
 
@@ -71,7 +85,7 @@ Every action takes the global options before, between, or after the command word
 |---|---|---|
 | Deploy | `deploy`, `deploy_init`, `deploy_continue`, `redeploy` | `deploy`, `deploy_production`, `change_traffic` (see below) |
 | Deploy artifacts | `deploy_describe` | `read_remote`, `write_local_files` |
-| Production traffic | `promote`, `rollback` | `change_traffic` |
+| Production traffic | `promote`; `rollback` | `change_traffic`, `deploy`, `deploy_production`; `change_traffic` |
 | Status | `promote_status`, `rollback_status` | `read_remote` |
 | Delete deployments | `remove` (`rm`) | `delete_remote` |
 | Read deployments | `list` (`ls`), `inspect`, `logs` (`log`), `logs_runtime`, `logs_requests` | `read_remote` |
@@ -103,21 +117,27 @@ removes all three.
 | Effect | Meaning | Added by |
 |---|---|---|
 | `read_remote` | Reads from the Vercel API and changes nothing | each list, inspect, logs, and status action, `deploy describe`, and `whoami` (not `--cached`) |
-| `deploy` | Creates a deployment | `deploy`, `deploy init`, `deploy continue`, `redeploy`; removed by `--dry` |
-| `deploy_production` | Can create a production deployment | as above; removed by `--environment preview` |
+| `deploy` | Creates a deployment | `deploy`, `deploy init`, `deploy continue`, `redeploy`, `promote`; removed by `--dry` |
+| `deploy_production` | Can create a production deployment | as above (`promote` rebuilds a non-production deployment for production); removed by `--environment preview` |
 | `change_traffic` | Changes which deployment a production domain or alias serves | the deploy actions, `promote`, `rollback`, `alias set`, `alias rm`, `domains rm`, `domains add` with a project, `--force`, or `--redirect` |
-| `write_remote` | Creates or changes a Vercel resource | `link`, `git`, `alias set`, `domains add`, `project create`, `certs add`/`issue`, `deploy --create-if-missing`/`--verify`, `pull -y` |
+| `write_remote` | Creates or changes a Vercel resource | `link`, `git`, `alias set`, `domains add`, `project create`, `certs add`/`issue`, `deploy -y` (links or creates a project), `deploy --create-if-missing`/`--verify`/`--delete-project-after`, `pull -y` |
 | `delete_remote` | Deletes a Vercel resource | `remove`, `env rm`, `alias rm`, `domains rm`, `project delete`, `certs delete` |
 | `write_secret` | Sets an Environment Variable value | `env add`, `env update` |
 | `read_secret` | Reads decrypted Environment Variable values | `env pull`, `env run`, `env ls --json`, `pull`, `build`, `dev` |
 | `production_env` | Acts on production Environment Variables | `-e` naming `production` on `env add`/`pull`/`run`, `pull`, `build`, and `build --prod`; always on `env update`, and on `env rm` without `-e preview` or `-e development` |
-| `write_local_files` | Writes files in the project directory | `pull`, `env pull`, `build`, `link`, `deploy --temporary`, `deploy describe` |
+| `write_local_files` | Writes files in the project directory | `pull`, `env pull`, `build`, `link`, `deploy -y`, `deploy --temporary`, `deploy describe` |
 | `run_local_code` | Runs project code or a named command on this machine | `build`, `dev`, `env run`, `deploy --temporary` |
 | `listen` | Starts a local server on a network port | `dev` |
 | `write_local_config` | Changes the saved current team | `teams switch`, `switch` |
 | `skip_prompt` | Skips a confirmation prompt | `-y`/`--yes`, `project delete --confirm-name` |
 | `token_argument` | Passes a login token on the command line | `-t`/`--token` |
+| `export_local_env` | Can copy a variable from the CLI's own environment into a deployment | every `--env` and `--build-env` on `deploy` and `deploy init` |
 | `override_config` | Reads CLI configuration from a named path | `-A`/`--local-config`, `-Q`/`--global-config` |
+
+`--env KEY` and `--build-env KEY` with no `=` copy the value of `KEY` from the CLI's own
+environment (for example `VERCEL_TOKEN`) into the deployment, whose code the agent may control.
+A `like` pattern cannot match "a value with no `=`", so every `--env` and `--build-env` adds
+`export_local_env`, including `--env KEY=value`.
 
 ## Example rules
 
@@ -132,6 +152,12 @@ permit (principal, action in Tool::vercel::Action::"*", resource);
 forbid (principal, action in Tool::vercel::Action::"*", resource)
 when { context.input.effects.contains(Tool::vercel::Effect::"deploy_production") ||
        context.input.effects.contains(Tool::vercel::Effect::"change_traffic") };
+
+// Never copy the CLI's own environment into a deployment.
+@id("vercel_no_local_env")
+@description("Pass deployment variables with env add, not --env or --build-env.")
+forbid (principal, action in Tool::vercel::Action::"*", resource)
+when { context.input.effects.contains(Tool::vercel::Effect::"export_local_env") };
 
 // Never delete Vercel resources.
 @id("vercel_no_delete")
@@ -180,7 +206,8 @@ Each of these is `unmodeled`, so only a rule that permits `unmodeled` lets it ru
 
 - The grammar decides the command line, not what the CLI reads: `VERCEL_TOKEN`, `VERCEL_ORG_ID`,
   `VERCEL_PROJECT_ID`, `.vercel/project.json`, `vercel.json`, and the global config choose the
-  account, team, and project.
+  account, team, and project. `env` and `build.env` in `vercel.json` can also name deployment
+  variables.
 - Box does not decide programs that the CLI starts itself: the native binary, project build scripts
   and frameworks (`build`, `dev`, `deploy --temporary`), the command after `env run --`, `git`,
   extensions, and the update check. The effect `run_local_code` marks the commands that run project
