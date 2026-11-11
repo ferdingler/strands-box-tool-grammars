@@ -1,0 +1,87 @@
+# Tool grammar for the AWS CLI version 2 (https://github.com/aws/aws-cli, branch v2).
+# Executable: `aws`. Checked against aws-cli 2.40.0 (tag 2.40.0, commit ebbb625e), from its
+# `help` pages and its source: awscli/clidriver.py, awscli/argparser.py, awscli/paramfile.py,
+# awscli/data/cli.json, and awscli/customizations/{s3,logs,cloudformation,configure}.
+#
+# Scope. The AWS CLI has hundreds of services and thousands of operations. This grammar models the
+# global options and a small set of common operations in sts, s3, s3api, ec2, lambda,
+# cloudformation, iam, logs, dynamodb, ssm, secretsmanager, and configure. Every other command,
+# and every option that is not declared here, is `unmodeled`.
+#
+# How the CLI reads a line. The main parser reads the global options anywhere on the line, so each
+# global option here is `anywhere`. A service operation takes `--name value` or `--name=value`, a
+# list option takes one or more words (`value = "many"`), and a boolean option has a `--no-` form.
+# The CLI has no short flags. argparse accepts a unique prefix of a long option (`--reg` for
+# `--region`); this grammar does not, so such a line is `unmodeled`.
+#
+# Values from local files. When the value of an option or a single operand starts with `file://`
+# or `fileb://`, the CLI reads that local file and sends its content as the value. The rule sees
+# only the `file://...` text. Each such value adds `value_from_file`. An option where the real
+# value decides an effect (an ACL, a grant, `--capabilities`, `configure get`) also adds that
+# effect when the value comes from a file. Options with a fixed list of choices (`s3 cp --acl`,
+# `--storage-class`) refuse a `file://` value before the CLI loads it.
+#
+# Not declared, so `unmodeled`: `--cli-input-json` and `--cli-input-yaml` (a JSON or YAML document,
+# often a file, that can set any parameter of the operation, so the fields would not describe the
+# request), `--generate-cli-skeleton`, `--cli-auto-prompt` (an interactive prompt that builds any
+# command), `--help`, `--version`, and the `help` word after an API operation.
+#
+# What this grammar cannot see:
+# - Environment variables: AWS_PROFILE, AWS_REGION, AWS_DEFAULT_REGION, AWS_ENDPOINT_URL and
+#   AWS_ENDPOINT_URL_<SERVICE>, AWS_CA_BUNDLE, AWS_ACCESS_KEY_ID and the other credential
+#   variables, AWS_CONFIG_FILE, AWS_SHARED_CREDENTIALS_FILE, AWS_CLI_AUTO_PROMPT, AWS_PAGER. They
+#   change the account, the region, the endpoint, and the TLS trust without a word on the line.
+# - The config and credentials files (~/.aws/config, ~/.aws/credentials): region, endpoint_url,
+#   ca_bundle, role_arn and source_profile, cli_auto_prompt, and credential_process, which runs a
+#   program to get credentials.
+# - CLI aliases in ~/.aws/cli/alias. An alias can take the name of a built-in command or
+#   subcommand and give it another meaning, and an alias that starts with `!` runs a shell command.
+# - Plugins that the `[plugins]` section of the config file loads.
+# - Child processes: the output pager, credential_process, `!` aliases, and plugins.
+# - The content of a `file://` or `fileb://` value, and of an uploaded file.
+# - Whether a required option such as `--bucket` is present. The CLI refuses a line without it.
+
+format  = 1
+version = 1
+name    = "aws"
+program = "aws"
+
+[effects]
+read_data         = "Reads data or metadata from an AWS account: list, describe, get, download"
+write_data        = "Creates or changes resources or data in an AWS account"
+delete_data       = "Deletes resources or data in an AWS account, or the local files that s3 mv and s3 sync --delete remove"
+read_secret       = "Returns secret plain text: a secret value, a decrypted parameter, unmasked log data, or a credential from the config file"
+credentials       = "Obtains, creates, or prints AWS credentials"
+iam_write         = "Changes IAM identities, policies, or permissions, or lets a stack do so"
+make_public       = "Grants access to everyone, or to every AWS account (a public ACL or grant)"
+grant_access      = "Gives another party access to data: a presigned URL or an ACL grant"
+run_program       = "Runs code in AWS (a Lambda function)"
+upload_local_file = "Sends the content of local files to AWS"
+write_local_file  = "Writes a local file (a download, or a response saved to a file)"
+value_from_file   = "A value starts with file:// or fileb://, so the CLI sends the content of a local file that the rule cannot see"
+override_endpoint = "Sends the requests to an endpoint URL that the line names (--endpoint-url)"
+assume_role       = "Makes AWS act with the permissions of a role that the line names (cloudformation --role-arn)"
+change_account    = "Selects a named profile (--profile), which can hold other credentials, another account, or another role"
+insecure_tls      = "Weakens TLS: skips certificate checks, trusts a CA bundle the line names, or uses an http:// endpoint"
+read_config       = "Reads the local AWS CLI configuration"
+
+# Global options (awscli/data/cli.json). The main parser reads them anywhere on the line.
+# botocore lowercases the URL scheme, so every casing of http:// is plain HTTP.
+[global]
+options.debug               = { flag = "--debug", anywhere = true }
+options.endpoint_url        = { flag = "--endpoint-url", value = "required", anywhere = true, adds = ["override_endpoint"], when = [{ like = ["http://*", "httP://*", "htTp://*", "htTP://*", "hTtp://*", "hTtP://*", "hTTp://*", "hTTP://*", "Http://*", "HttP://*", "HtTp://*", "HtTP://*", "HTtp://*", "HTtP://*", "HTTp://*", "HTTP://*"], adds = ["insecure_tls"] }] }
+options.no_verify_ssl       = { flag = "--no-verify-ssl", anywhere = true, adds = ["insecure_tls"] }
+options.no_paginate         = { flag = "--no-paginate", anywhere = true }
+options.output              = { flag = "--output", value = "required", anywhere = true }
+options.query               = { flag = "--query", value = "required", anywhere = true }
+options.profile             = { flag = "--profile", value = "required", anywhere = true, adds = ["change_account"] }
+options.region              = { flag = "--region", value = "required", anywhere = true }
+options.color               = { flag = "--color", value = "required", anywhere = true }
+options.no_sign_request     = { flag = "--no-sign-request", anywhere = true }
+options.ca_bundle           = { flag = "--ca-bundle", value = "required", anywhere = true, adds = ["insecure_tls"] }
+options.cli_read_timeout    = { flag = "--cli-read-timeout", value = "required", anywhere = true }
+options.cli_connect_timeout = { flag = "--cli-connect-timeout", value = "required", anywhere = true }
+options.cli_binary_format   = { flag = "--cli-binary-format", value = "required", anywhere = true }
+options.no_cli_pager        = { flag = "--no-cli-pager", anywhere = true }
+options.no_cli_auto_prompt  = { flag = "--no-cli-auto-prompt", anywhere = true }
+options.cli_error_format    = { flag = "--cli-error-format", value = "required", anywhere = true }

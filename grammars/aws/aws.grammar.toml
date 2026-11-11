@@ -1,0 +1,843 @@
+# Tool grammar for the AWS CLI version 2 (https://github.com/aws/aws-cli, branch v2).
+# Executable: `aws`. Checked against aws-cli 2.40.0 (tag 2.40.0, commit ebbb625e), from its
+# `help` pages and its source: awscli/clidriver.py, awscli/argparser.py, awscli/paramfile.py,
+# awscli/data/cli.json, and awscli/customizations/{s3,logs,cloudformation,configure}.
+#
+# Scope. The AWS CLI has hundreds of services and thousands of operations. This grammar models the
+# global options and a small set of common operations in sts, s3, s3api, ec2, lambda,
+# cloudformation, iam, logs, dynamodb, ssm, secretsmanager, and configure. Every other command,
+# and every option that is not declared here, is `unmodeled`.
+#
+# How the CLI reads a line. The main parser reads the global options anywhere on the line, so each
+# global option here is `anywhere`. A service operation takes `--name value` or `--name=value`, a
+# list option takes one or more words (`value = "many"`), and a boolean option has a `--no-` form.
+# The CLI has no short flags. argparse accepts a unique prefix of a long option (`--reg` for
+# `--region`); this grammar does not, so such a line is `unmodeled`.
+#
+# Values from local files. When the value of an option or a single operand starts with `file://`
+# or `fileb://`, the CLI reads that local file and sends its content as the value. The rule sees
+# only the `file://...` text. Each such value adds `value_from_file`. An option where the real
+# value decides an effect (an ACL, a grant, `--capabilities`, `configure get`) also adds that
+# effect when the value comes from a file. Options with a fixed list of choices (`s3 cp --acl`,
+# `--storage-class`) refuse a `file://` value before the CLI loads it.
+#
+# Not declared, so `unmodeled`: `--cli-input-json` and `--cli-input-yaml` (a JSON or YAML document,
+# often a file, that can set any parameter of the operation, so the fields would not describe the
+# request), `--generate-cli-skeleton`, `--cli-auto-prompt` (an interactive prompt that builds any
+# command), `--help`, `--version`, and the `help` word after an API operation.
+#
+# What this grammar cannot see:
+# - Environment variables: AWS_PROFILE, AWS_REGION, AWS_DEFAULT_REGION, AWS_ENDPOINT_URL and
+#   AWS_ENDPOINT_URL_<SERVICE>, AWS_CA_BUNDLE, AWS_ACCESS_KEY_ID and the other credential
+#   variables, AWS_CONFIG_FILE, AWS_SHARED_CREDENTIALS_FILE, AWS_CLI_AUTO_PROMPT, AWS_PAGER. They
+#   change the account, the region, the endpoint, and the TLS trust without a word on the line.
+# - The config and credentials files (~/.aws/config, ~/.aws/credentials): region, endpoint_url,
+#   ca_bundle, role_arn and source_profile, cli_auto_prompt, and credential_process, which runs a
+#   program to get credentials.
+# - CLI aliases in ~/.aws/cli/alias. An alias can take the name of a built-in command or
+#   subcommand and give it another meaning, and an alias that starts with `!` runs a shell command.
+# - Plugins that the `[plugins]` section of the config file loads.
+# - Child processes: the output pager, credential_process, `!` aliases, and plugins.
+# - The content of a `file://` or `fileb://` value, and of an uploaded file.
+# - Whether a required option such as `--bucket` is present. The CLI refuses a line without it.
+
+format  = 1
+version = 1
+name    = "aws"
+program = "aws"
+
+[effects]
+read_data         = "Reads data or metadata from an AWS account: list, describe, get, download"
+write_data        = "Creates or changes resources or data in an AWS account"
+delete_data       = "Deletes resources or data in an AWS account, or the local files that s3 mv and s3 sync --delete remove"
+read_secret       = "Returns secret plain text: a secret value, a decrypted parameter, unmasked log data, or a credential from the config file"
+credentials       = "Obtains, creates, or prints AWS credentials"
+iam_write         = "Changes IAM identities, policies, or permissions, or lets a stack do so"
+make_public       = "Grants access to everyone, or to every AWS account (a public ACL or grant)"
+grant_access      = "Gives another party access to data: a presigned URL or an ACL grant"
+run_program       = "Runs code in AWS (a Lambda function)"
+upload_local_file = "Sends the content of local files to AWS"
+write_local_file  = "Writes a local file (a download, or a response saved to a file)"
+value_from_file   = "A value starts with file:// or fileb://, so the CLI sends the content of a local file that the rule cannot see"
+override_endpoint = "Sends the requests to an endpoint URL that the line names (--endpoint-url)"
+assume_role       = "Makes AWS act with the permissions of a role that the line names (cloudformation --role-arn)"
+change_account    = "Selects a named profile (--profile), which can hold other credentials, another account, or another role"
+insecure_tls      = "Weakens TLS: skips certificate checks, trusts a CA bundle the line names, or uses an http:// endpoint"
+read_config       = "Reads the local AWS CLI configuration"
+
+# Global options (awscli/data/cli.json). The main parser reads them anywhere on the line.
+# botocore lowercases the URL scheme, so every casing of http:// is plain HTTP.
+[global]
+options.debug               = { flag = "--debug", anywhere = true }
+options.endpoint_url        = { flag = "--endpoint-url", value = "required", anywhere = true, adds = ["override_endpoint"], when = [{ like = ["http://*", "httP://*", "htTp://*", "htTP://*", "hTtp://*", "hTtP://*", "hTTp://*", "hTTP://*", "Http://*", "HttP://*", "HtTp://*", "HtTP://*", "HTtp://*", "HTtP://*", "HTTp://*", "HTTP://*"], adds = ["insecure_tls"] }] }
+options.no_verify_ssl       = { flag = "--no-verify-ssl", anywhere = true, adds = ["insecure_tls"] }
+options.no_paginate         = { flag = "--no-paginate", anywhere = true }
+options.output              = { flag = "--output", value = "required", anywhere = true }
+options.query               = { flag = "--query", value = "required", anywhere = true }
+options.profile             = { flag = "--profile", value = "required", anywhere = true, adds = ["change_account"] }
+options.region              = { flag = "--region", value = "required", anywhere = true }
+options.color               = { flag = "--color", value = "required", anywhere = true }
+options.no_sign_request     = { flag = "--no-sign-request", anywhere = true }
+options.ca_bundle           = { flag = "--ca-bundle", value = "required", anywhere = true, adds = ["insecure_tls"] }
+options.cli_read_timeout    = { flag = "--cli-read-timeout", value = "required", anywhere = true }
+options.cli_connect_timeout = { flag = "--cli-connect-timeout", value = "required", anywhere = true }
+options.cli_binary_format   = { flag = "--cli-binary-format", value = "required", anywhere = true }
+options.no_cli_pager        = { flag = "--no-cli-pager", anywhere = true }
+options.no_cli_auto_prompt  = { flag = "--no-cli-auto-prompt", anywhere = true }
+options.cli_error_format    = { flag = "--cli-error-format", value = "required", anywhere = true }
+
+# --------------------------------------------------------------------------------------------------
+# sts: who am I, and temporary credentials. `aws sts <op> help`, 2.40.0.
+
+[shell.sts_get_caller_identity]
+usage = "aws [global options] sts get-caller-identity"
+adds  = ["read_data"]
+
+[shell.sts_assume_role]
+usage = "aws [global options] sts assume-role [options]"
+adds  = ["credentials"]
+options.role_arn          = { flag = "--role-arn", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.role_session_name = { flag = "--role-session-name", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.duration_seconds  = { flag = "--duration-seconds", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.external_id       = { flag = "--external-id", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.policy            = { flag = "--policy", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.policy_arns       = { flag = "--policy-arns", value = "many", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.serial_number     = { flag = "--serial-number", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.token_code        = { flag = "--token-code", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.source_identity   = { flag = "--source-identity", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+
+[shell.sts_get_session_token]
+usage = "aws [global options] sts get-session-token [options]"
+adds  = ["credentials"]
+options.duration_seconds = { flag = "--duration-seconds", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.serial_number    = { flag = "--serial-number", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.token_code       = { flag = "--token-code", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+
+# --------------------------------------------------------------------------------------------------
+# s3: the high-level transfer commands (awscli/customizations/s3/subcommands.py, 2.40.0).
+# A single path is loaded from a file when it starts with file://; the two paths of cp, mv,
+# and sync are not (they are a two-item list, and the loader reads only a one-item list).
+
+[shell.s3_ls]
+usage = "aws [global options] s3 ls [options] [<path>]"
+adds  = ["read_data"]
+options.recursive          = { flag = "--recursive" }
+options.page_size          = { flag = "--page-size", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.human_readable     = { flag = "--human-readable" }
+options.summarize          = { flag = "--summarize" }
+options.bucket_name_prefix = { flag = "--bucket-name-prefix", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.bucket_region      = { flag = "--bucket-region", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+operands.path              = { when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+
+[shell.s3_cp]
+usage = "aws [global options] s3 cp [options] <source> <destination>"
+options.dryrun                  = { flag = "--dryrun", removes = ["write_data", "delete_data", "upload_local_file", "write_local_file", "make_public", "grant_access"] }
+options.quiet                   = { flag = "--quiet" }
+options.include                 = { flag = "--include", value = "required", repeated = true }
+options.exclude                 = { flag = "--exclude", value = "required", repeated = true }
+options.acl                     = { flag = "--acl", value = "required", when = [{ like = ["public-read", "public-read-write", "authenticated-read"], adds = ["make_public"] }] }
+options.grants                  = { flag = "--grants", value = "many", adds = ["grant_access"], when = [{ like = ["*AllUsers*", "*AuthenticatedUsers*"], adds = ["make_public"] }, { like = "file*://*", adds = ["make_public", "value_from_file"] }] }
+options.follow_symlinks         = { flag = "--follow-symlinks" }
+options.no_follow_symlinks      = { flag = "--no-follow-symlinks" }
+options.no_guess_mime_type      = { flag = "--no-guess-mime-type" }
+options.sse_kms_key_id          = { flag = "--sse-kms-key-id", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.storage_class           = { flag = "--storage-class", value = "required" }
+options.content_type            = { flag = "--content-type", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.cache_control           = { flag = "--cache-control", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.content_disposition     = { flag = "--content-disposition", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.content_encoding        = { flag = "--content-encoding", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.content_language        = { flag = "--content-language", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.expires                 = { flag = "--expires", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.source_region           = { flag = "--source-region", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.only_show_errors        = { flag = "--only-show-errors" }
+options.no_progress             = { flag = "--no-progress" }
+options.page_size               = { flag = "--page-size", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.ignore_glacier_warnings = { flag = "--ignore-glacier-warnings" }
+options.force_glacier_transfer  = { flag = "--force-glacier-transfer" }
+options.checksum_mode           = { flag = "--checksum-mode", value = "required" }
+options.checksum_algorithm      = { flag = "--checksum-algorithm", value = "required" }
+options.metadata_directive      = { flag = "--metadata-directive", value = "required" }
+options.no_overwrite            = { flag = "--no-overwrite" }
+options.recursive               = { flag = "--recursive" }
+options.expected_size           = { flag = "--expected-size", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+operands.source                 = { adds = ["upload_local_file"], when = [{ like = "s3://*", adds = ["read_data"], removes = ["upload_local_file"] }] }
+operands.destination            = { adds = ["write_local_file"], when = [{ like = "s3://*", adds = ["write_data"], removes = ["write_local_file"] }] }
+
+[shell.s3_mv]
+usage = "aws [global options] s3 mv [options] <source> <destination>"
+adds  = ["delete_data"]
+options.dryrun                  = { flag = "--dryrun", removes = ["write_data", "delete_data", "upload_local_file", "write_local_file", "make_public", "grant_access"] }
+options.quiet                   = { flag = "--quiet" }
+options.include                 = { flag = "--include", value = "required", repeated = true }
+options.exclude                 = { flag = "--exclude", value = "required", repeated = true }
+options.acl                     = { flag = "--acl", value = "required", when = [{ like = ["public-read", "public-read-write", "authenticated-read"], adds = ["make_public"] }] }
+options.grants                  = { flag = "--grants", value = "many", adds = ["grant_access"], when = [{ like = ["*AllUsers*", "*AuthenticatedUsers*"], adds = ["make_public"] }, { like = "file*://*", adds = ["make_public", "value_from_file"] }] }
+options.follow_symlinks         = { flag = "--follow-symlinks" }
+options.no_follow_symlinks      = { flag = "--no-follow-symlinks" }
+options.no_guess_mime_type      = { flag = "--no-guess-mime-type" }
+options.sse_kms_key_id          = { flag = "--sse-kms-key-id", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.storage_class           = { flag = "--storage-class", value = "required" }
+options.content_type            = { flag = "--content-type", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.cache_control           = { flag = "--cache-control", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.content_disposition     = { flag = "--content-disposition", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.content_encoding        = { flag = "--content-encoding", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.content_language        = { flag = "--content-language", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.expires                 = { flag = "--expires", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.source_region           = { flag = "--source-region", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.only_show_errors        = { flag = "--only-show-errors" }
+options.no_progress             = { flag = "--no-progress" }
+options.page_size               = { flag = "--page-size", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.ignore_glacier_warnings = { flag = "--ignore-glacier-warnings" }
+options.force_glacier_transfer  = { flag = "--force-glacier-transfer" }
+options.checksum_mode           = { flag = "--checksum-mode", value = "required" }
+options.checksum_algorithm      = { flag = "--checksum-algorithm", value = "required" }
+options.metadata_directive      = { flag = "--metadata-directive", value = "required" }
+options.no_overwrite            = { flag = "--no-overwrite" }
+options.recursive               = { flag = "--recursive" }
+options.validate_same_s3_paths  = { flag = "--validate-same-s3-paths" }
+operands.source                 = { adds = ["upload_local_file"], when = [{ like = "s3://*", adds = ["read_data"], removes = ["upload_local_file"] }] }
+operands.destination            = { adds = ["write_local_file"], when = [{ like = "s3://*", adds = ["write_data"], removes = ["write_local_file"] }] }
+
+[shell.s3_sync]
+usage = "aws [global options] s3 sync [options] <source> <destination>"
+options.dryrun                  = { flag = "--dryrun", removes = ["write_data", "delete_data", "upload_local_file", "write_local_file", "make_public", "grant_access"] }
+options.quiet                   = { flag = "--quiet" }
+options.include                 = { flag = "--include", value = "required", repeated = true }
+options.exclude                 = { flag = "--exclude", value = "required", repeated = true }
+options.acl                     = { flag = "--acl", value = "required", when = [{ like = ["public-read", "public-read-write", "authenticated-read"], adds = ["make_public"] }] }
+options.grants                  = { flag = "--grants", value = "many", adds = ["grant_access"], when = [{ like = ["*AllUsers*", "*AuthenticatedUsers*"], adds = ["make_public"] }, { like = "file*://*", adds = ["make_public", "value_from_file"] }] }
+options.follow_symlinks         = { flag = "--follow-symlinks" }
+options.no_follow_symlinks      = { flag = "--no-follow-symlinks" }
+options.no_guess_mime_type      = { flag = "--no-guess-mime-type" }
+options.sse_kms_key_id          = { flag = "--sse-kms-key-id", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.storage_class           = { flag = "--storage-class", value = "required" }
+options.content_type            = { flag = "--content-type", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.cache_control           = { flag = "--cache-control", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.content_disposition     = { flag = "--content-disposition", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.content_encoding        = { flag = "--content-encoding", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.content_language        = { flag = "--content-language", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.expires                 = { flag = "--expires", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.source_region           = { flag = "--source-region", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.only_show_errors        = { flag = "--only-show-errors" }
+options.no_progress             = { flag = "--no-progress" }
+options.page_size               = { flag = "--page-size", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.ignore_glacier_warnings = { flag = "--ignore-glacier-warnings" }
+options.force_glacier_transfer  = { flag = "--force-glacier-transfer" }
+options.checksum_mode           = { flag = "--checksum-mode", value = "required" }
+options.checksum_algorithm      = { flag = "--checksum-algorithm", value = "required" }
+options.metadata_directive      = { flag = "--metadata-directive", value = "required" }
+options.no_overwrite            = { flag = "--no-overwrite" }
+options.size_only               = { flag = "--size-only" }
+options.exact_timestamps        = { flag = "--exact-timestamps" }
+options.delete                  = { flag = "--delete", adds = ["delete_data"] }
+operands.source                 = { adds = ["upload_local_file"], when = [{ like = "s3://*", adds = ["read_data"], removes = ["upload_local_file"] }] }
+operands.destination            = { adds = ["write_local_file"], when = [{ like = "s3://*", adds = ["write_data"], removes = ["write_local_file"] }] }
+
+[shell.s3_rm]
+usage = "aws [global options] s3 rm [options] <path>"
+adds  = ["delete_data"]
+options.dryrun           = { flag = "--dryrun", removes = ["delete_data"] }
+options.quiet            = { flag = "--quiet" }
+options.recursive        = { flag = "--recursive" }
+options.include          = { flag = "--include", value = "required", repeated = true }
+options.exclude          = { flag = "--exclude", value = "required", repeated = true }
+options.only_show_errors = { flag = "--only-show-errors" }
+options.page_size        = { flag = "--page-size", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+operands.path            = { when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+
+[shell.s3_mb]
+usage = "aws [global options] s3 mb <path>"
+adds  = ["write_data"]
+operands.path = { when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+
+[shell.s3_rb]
+usage = "aws [global options] s3 rb [options] <path>"
+adds  = ["delete_data"]
+options.force = { flag = "--force" }
+operands.path = { when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+
+[shell.s3_presign]
+usage = "aws [global options] s3 presign [options] <path>"
+adds  = ["grant_access"]
+options.expires_in = { flag = "--expires-in", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+operands.path      = { when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+
+# --------------------------------------------------------------------------------------------------
+# s3api: one API operation per command. Every value of these options is loaded from a local
+# file when it starts with file:// or fileb:// (awscli/paramfile.py), so each one carries
+# `value_from_file`.
+
+[shell.s3api_list_buckets]
+usage = "aws [global options] s3api list-buckets [options]"
+adds  = ["read_data"]
+options.prefix         = { flag = "--prefix", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.bucket_region  = { flag = "--bucket-region", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.starting_token = { flag = "--starting-token", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.page_size      = { flag = "--page-size", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.max_items      = { flag = "--max-items", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+
+[shell.s3api_list_objects_v2]
+usage = "aws [global options] s3api list-objects-v2 [options]"
+adds  = ["read_data"]
+options.bucket                = { flag = "--bucket", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.prefix                = { flag = "--prefix", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.delimiter             = { flag = "--delimiter", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.start_after           = { flag = "--start-after", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.fetch_owner           = { flag = "--fetch-owner" }
+options.no_fetch_owner        = { flag = "--no-fetch-owner" }
+options.expected_bucket_owner = { flag = "--expected-bucket-owner", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.starting_token        = { flag = "--starting-token", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.page_size             = { flag = "--page-size", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.max_items             = { flag = "--max-items", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+
+[shell.s3api_head_object]
+usage = "aws [global options] s3api head-object [options]"
+adds  = ["read_data"]
+options.bucket                = { flag = "--bucket", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.key                   = { flag = "--key", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.version_id            = { flag = "--version-id", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.expected_bucket_owner = { flag = "--expected-bucket-owner", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+
+[shell.s3api_get_object]
+usage = "aws [global options] s3api get-object [options] <outfile>"
+adds  = ["read_data", "write_local_file"]
+options.bucket                = { flag = "--bucket", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.key                   = { flag = "--key", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.version_id            = { flag = "--version-id", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.range                 = { flag = "--range", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.expected_bucket_owner = { flag = "--expected-bucket-owner", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+
+[shell.s3api_get_bucket_policy]
+usage = "aws [global options] s3api get-bucket-policy [options]"
+adds  = ["read_data"]
+options.bucket                = { flag = "--bucket", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.expected_bucket_owner = { flag = "--expected-bucket-owner", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+
+[shell.s3api_put_object]
+usage = "aws [global options] s3api put-object [options]"
+adds  = ["write_data"]
+options.bucket                 = { flag = "--bucket", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.key                    = { flag = "--key", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.body                   = { flag = "--body", value = "required", adds = ["upload_local_file"] }
+options.acl                    = { flag = "--acl", value = "required", when = [{ like = ["public-read", "public-read-write", "authenticated-read"], adds = ["make_public"] }, { like = "file*://*", adds = ["make_public", "value_from_file"] }] }
+options.grant_read             = { flag = "--grant-read", value = "required", adds = ["grant_access"], when = [{ like = ["*AllUsers*", "*AuthenticatedUsers*"], adds = ["make_public"] }, { like = "file*://*", adds = ["make_public", "value_from_file"] }] }
+options.grant_read_acp         = { flag = "--grant-read-acp", value = "required", adds = ["grant_access"], when = [{ like = ["*AllUsers*", "*AuthenticatedUsers*"], adds = ["make_public"] }, { like = "file*://*", adds = ["make_public", "value_from_file"] }] }
+options.grant_write_acp        = { flag = "--grant-write-acp", value = "required", adds = ["grant_access"], when = [{ like = ["*AllUsers*", "*AuthenticatedUsers*"], adds = ["make_public"] }, { like = "file*://*", adds = ["make_public", "value_from_file"] }] }
+options.grant_full_control     = { flag = "--grant-full-control", value = "required", adds = ["grant_access"], when = [{ like = ["*AllUsers*", "*AuthenticatedUsers*"], adds = ["make_public"] }, { like = "file*://*", adds = ["make_public", "value_from_file"] }] }
+options.content_type           = { flag = "--content-type", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.cache_control          = { flag = "--cache-control", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.storage_class          = { flag = "--storage-class", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.server_side_encryption = { flag = "--server-side-encryption", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.ssekms_key_id          = { flag = "--ssekms-key-id", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.tagging                = { flag = "--tagging", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.expected_bucket_owner  = { flag = "--expected-bucket-owner", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.if_none_match          = { flag = "--if-none-match", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.if_match               = { flag = "--if-match", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+
+[shell.s3api_delete_object]
+usage = "aws [global options] s3api delete-object [options]"
+adds  = ["delete_data"]
+options.bucket                = { flag = "--bucket", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.key                   = { flag = "--key", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.version_id            = { flag = "--version-id", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.expected_bucket_owner = { flag = "--expected-bucket-owner", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+
+# --------------------------------------------------------------------------------------------------
+# ec2: `--dry-run` asks EC2 to check permission and make no change. `--no-dry-run` is not
+# declared: argparse keeps the last of the pair, so `--dry-run --no-dry-run` runs for real.
+
+[shell.ec2_describe_instances]
+usage = "aws [global options] ec2 describe-instances [options]"
+adds  = ["read_data"]
+options.instance_ids   = { flag = "--instance-ids", value = "many", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.filters        = { flag = "--filters", value = "many", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.dry_run        = { flag = "--dry-run", removes = ["read_data"] }
+options.starting_token = { flag = "--starting-token", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.page_size      = { flag = "--page-size", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.max_items      = { flag = "--max-items", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+
+[shell.ec2_describe_vpcs]
+usage = "aws [global options] ec2 describe-vpcs [options]"
+adds  = ["read_data"]
+options.vpc_ids        = { flag = "--vpc-ids", value = "many", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.filters        = { flag = "--filters", value = "many", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.dry_run        = { flag = "--dry-run", removes = ["read_data"] }
+options.starting_token = { flag = "--starting-token", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.page_size      = { flag = "--page-size", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.max_items      = { flag = "--max-items", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+
+[shell.ec2_describe_subnets]
+usage = "aws [global options] ec2 describe-subnets [options]"
+adds  = ["read_data"]
+options.subnet_ids     = { flag = "--subnet-ids", value = "many", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.filters        = { flag = "--filters", value = "many", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.dry_run        = { flag = "--dry-run", removes = ["read_data"] }
+options.starting_token = { flag = "--starting-token", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.page_size      = { flag = "--page-size", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.max_items      = { flag = "--max-items", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+
+[shell.ec2_describe_security_groups]
+usage = "aws [global options] ec2 describe-security-groups [options]"
+adds  = ["read_data"]
+options.group_ids      = { flag = "--group-ids", value = "many", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.group_names    = { flag = "--group-names", value = "many", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.filters        = { flag = "--filters", value = "many", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.dry_run        = { flag = "--dry-run", removes = ["read_data"] }
+options.starting_token = { flag = "--starting-token", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.page_size      = { flag = "--page-size", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.max_items      = { flag = "--max-items", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+
+[shell.ec2_describe_images]
+usage = "aws [global options] ec2 describe-images [options]"
+adds  = ["read_data"]
+options.image_ids          = { flag = "--image-ids", value = "many", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.owners             = { flag = "--owners", value = "many", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.executable_users   = { flag = "--executable-users", value = "many", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.filters            = { flag = "--filters", value = "many", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.include_deprecated = { flag = "--include-deprecated" }
+options.include_disabled   = { flag = "--include-disabled" }
+options.dry_run            = { flag = "--dry-run", removes = ["read_data"] }
+options.starting_token     = { flag = "--starting-token", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.page_size          = { flag = "--page-size", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.max_items          = { flag = "--max-items", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+
+[shell.ec2_start_instances]
+usage = "aws [global options] ec2 start-instances [options]"
+adds  = ["write_data"]
+options.instance_ids    = { flag = "--instance-ids", value = "many", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.additional_info = { flag = "--additional-info", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.dry_run         = { flag = "--dry-run", removes = ["write_data"] }
+
+[shell.ec2_stop_instances]
+usage = "aws [global options] ec2 stop-instances [options]"
+adds  = ["write_data"]
+options.instance_ids = { flag = "--instance-ids", value = "many", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.hibernate    = { flag = "--hibernate" }
+options.force        = { flag = "--force" }
+options.dry_run      = { flag = "--dry-run", removes = ["write_data"] }
+
+[shell.ec2_terminate_instances]
+usage = "aws [global options] ec2 terminate-instances [options]"
+adds  = ["delete_data"]
+options.instance_ids = { flag = "--instance-ids", value = "many", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.dry_run      = { flag = "--dry-run", removes = ["delete_data"] }
+
+# --------------------------------------------------------------------------------------------------
+# lambda: a function configuration includes its environment variables in plain text, so
+# list-functions and get-function can return values that hold secrets.
+
+[shell.lambda_list_functions]
+usage = "aws [global options] lambda list-functions [options]"
+adds  = ["read_data"]
+options.function_version = { flag = "--function-version", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.master_region    = { flag = "--master-region", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.starting_token   = { flag = "--starting-token", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.page_size        = { flag = "--page-size", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.max_items        = { flag = "--max-items", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+
+[shell.lambda_get_function]
+usage = "aws [global options] lambda get-function [options]"
+adds  = ["read_data"]
+options.function_name = { flag = "--function-name", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.qualifier     = { flag = "--qualifier", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+
+[shell.lambda_invoke]
+usage = "aws [global options] lambda invoke [options] <outfile>"
+adds  = ["run_program", "write_local_file"]
+options.function_name   = { flag = "--function-name", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.qualifier       = { flag = "--qualifier", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.invocation_type = { flag = "--invocation-type", value = "required", when = [{ like = "DryRun", removes = ["run_program"] }, { like = "file*://*", adds = ["value_from_file"] }] }
+options.payload         = { flag = "--payload", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.log_type        = { flag = "--log-type", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.client_context  = { flag = "--client-context", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+
+# --------------------------------------------------------------------------------------------------
+# cloudformation. `deploy` is a custom command (customizations/cloudformation/deploy.py): it
+# reads a local template, and an update deletes each resource that the template no longer
+# holds. `--no-execute-changeset` only creates the change set. `--role-arn` makes CloudFormation act
+# with that service role, so it adds `assume_role`.
+
+[shell.cloudformation_describe_stacks]
+usage = "aws [global options] cloudformation describe-stacks [options]"
+adds  = ["read_data"]
+options.stack_name     = { flag = "--stack-name", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.starting_token = { flag = "--starting-token", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.max_items      = { flag = "--max-items", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+
+[shell.cloudformation_list_stacks]
+usage = "aws [global options] cloudformation list-stacks [options]"
+adds  = ["read_data"]
+options.stack_status_filter = { flag = "--stack-status-filter", value = "many", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.starting_token      = { flag = "--starting-token", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.max_items           = { flag = "--max-items", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+
+[shell.cloudformation_describe_stack_events]
+usage = "aws [global options] cloudformation describe-stack-events [options]"
+adds  = ["read_data"]
+options.stack_name     = { flag = "--stack-name", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.starting_token = { flag = "--starting-token", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.max_items      = { flag = "--max-items", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+
+[shell.cloudformation_list_stack_resources]
+usage = "aws [global options] cloudformation list-stack-resources [options]"
+adds  = ["read_data"]
+options.stack_name     = { flag = "--stack-name", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.starting_token = { flag = "--starting-token", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.max_items      = { flag = "--max-items", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+
+[shell.cloudformation_deploy]
+usage = "aws [global options] cloudformation deploy [options]"
+adds  = ["delete_data", "upload_local_file", "write_data"]
+options.template_file              = { flag = "--template-file", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.stack_name                 = { flag = "--stack-name", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.s3_bucket                  = { flag = "--s3-bucket", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.s3_prefix                  = { flag = "--s3-prefix", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.force_upload               = { flag = "--force-upload" }
+options.kms_key_id                 = { flag = "--kms-key-id", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.parameter_overrides        = { flag = "--parameter-overrides", value = "many", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.capabilities               = { flag = "--capabilities", value = "many", when = [{ like = ["CAPABILITY_IAM", "CAPABILITY_NAMED_IAM"], adds = ["iam_write"] }, { like = "file*://*", adds = ["iam_write", "value_from_file"] }] }
+options.no_execute_changeset       = { flag = "--no-execute-changeset", removes = ["delete_data", "iam_write"] }
+options.disable_rollback           = { flag = "--disable-rollback" }
+options.no_disable_rollback        = { flag = "--no-disable-rollback" }
+options.role_arn                   = { flag = "--role-arn", value = "required", adds = ["assume_role"], when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.notification_arns          = { flag = "--notification-arns", value = "many", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.fail_on_empty_changeset    = { flag = "--fail-on-empty-changeset" }
+options.no_fail_on_empty_changeset = { flag = "--no-fail-on-empty-changeset" }
+options.tags                       = { flag = "--tags", value = "many", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+
+[shell.cloudformation_delete_stack]
+usage = "aws [global options] cloudformation delete-stack [options]"
+adds  = ["delete_data"]
+options.stack_name       = { flag = "--stack-name", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.retain_resources = { flag = "--retain-resources", value = "many", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.role_arn         = { flag = "--role-arn", value = "required", adds = ["assume_role"], when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.deletion_mode    = { flag = "--deletion-mode", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+
+# --------------------------------------------------------------------------------------------------
+# iam: each change to an identity or a policy carries `iam_write` beside `write_data` or
+# `delete_data`.
+
+[shell.iam_list_users]
+usage = "aws [global options] iam list-users [options]"
+adds  = ["read_data"]
+options.path_prefix    = { flag = "--path-prefix", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.starting_token = { flag = "--starting-token", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.page_size      = { flag = "--page-size", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.max_items      = { flag = "--max-items", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+
+[shell.iam_list_roles]
+usage = "aws [global options] iam list-roles [options]"
+adds  = ["read_data"]
+options.path_prefix    = { flag = "--path-prefix", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.starting_token = { flag = "--starting-token", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.page_size      = { flag = "--page-size", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.max_items      = { flag = "--max-items", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+
+[shell.iam_list_attached_role_policies]
+usage = "aws [global options] iam list-attached-role-policies [options]"
+adds  = ["read_data"]
+options.role_name      = { flag = "--role-name", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.path_prefix    = { flag = "--path-prefix", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.starting_token = { flag = "--starting-token", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.page_size      = { flag = "--page-size", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.max_items      = { flag = "--max-items", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+
+[shell.iam_get_user]
+usage = "aws [global options] iam get-user [options]"
+adds  = ["read_data"]
+options.user_name = { flag = "--user-name", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+
+[shell.iam_get_role]
+usage = "aws [global options] iam get-role [options]"
+adds  = ["read_data"]
+options.role_name = { flag = "--role-name", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+
+[shell.iam_create_access_key]
+usage = "aws [global options] iam create-access-key [options]"
+adds  = ["credentials", "iam_write", "write_data"]
+options.user_name = { flag = "--user-name", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+
+[shell.iam_create_user]
+usage = "aws [global options] iam create-user [options]"
+adds  = ["iam_write", "write_data"]
+options.user_name            = { flag = "--user-name", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.path                 = { flag = "--path", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.permissions_boundary = { flag = "--permissions-boundary", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+
+[shell.iam_create_role]
+usage = "aws [global options] iam create-role [options]"
+adds  = ["iam_write", "write_data"]
+options.role_name                   = { flag = "--role-name", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.path                        = { flag = "--path", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.assume_role_policy_document = { flag = "--assume-role-policy-document", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.description                 = { flag = "--description", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.max_session_duration        = { flag = "--max-session-duration", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.permissions_boundary        = { flag = "--permissions-boundary", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+
+[shell.iam_create_policy]
+usage = "aws [global options] iam create-policy [options]"
+adds  = ["iam_write", "write_data"]
+options.policy_name     = { flag = "--policy-name", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.path            = { flag = "--path", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.policy_document = { flag = "--policy-document", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.description     = { flag = "--description", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+
+[shell.iam_attach_role_policy]
+usage = "aws [global options] iam attach-role-policy [options]"
+adds  = ["iam_write", "write_data"]
+options.role_name  = { flag = "--role-name", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.policy_arn = { flag = "--policy-arn", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+
+[shell.iam_put_role_policy]
+usage = "aws [global options] iam put-role-policy [options]"
+adds  = ["iam_write", "write_data"]
+options.role_name       = { flag = "--role-name", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.policy_name     = { flag = "--policy-name", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.policy_document = { flag = "--policy-document", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+
+[shell.iam_delete_role]
+usage = "aws [global options] iam delete-role [options]"
+adds  = ["delete_data", "iam_write"]
+options.role_name = { flag = "--role-name", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+
+[shell.iam_delete_user]
+usage = "aws [global options] iam delete-user [options]"
+adds  = ["delete_data", "iam_write"]
+options.user_name = { flag = "--user-name", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+
+# --------------------------------------------------------------------------------------------------
+# logs. `--unmask` returns log data that a data protection policy masks, so it adds
+# `read_secret`. `tail` is a custom command (customizations/logs/tail.py).
+
+[shell.logs_tail]
+usage = "aws [global options] logs tail [options] <group_name>"
+adds  = ["read_data"]
+options.since                  = { flag = "--since", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.follow                 = { flag = "--follow" }
+options.format                 = { flag = "--format", value = "required" }
+options.filter_pattern         = { flag = "--filter-pattern", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.log_stream_names       = { flag = "--log-stream-names", value = "many", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.log_stream_name_prefix = { flag = "--log-stream-name-prefix", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+operands.group_name            = { when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+
+[shell.logs_describe_log_groups]
+usage = "aws [global options] logs describe-log-groups [options]"
+adds  = ["read_data"]
+options.log_group_name_prefix  = { flag = "--log-group-name-prefix", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.log_group_name_pattern = { flag = "--log-group-name-pattern", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.log_group_class        = { flag = "--log-group-class", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.starting_token         = { flag = "--starting-token", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.page_size              = { flag = "--page-size", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.max_items              = { flag = "--max-items", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+
+[shell.logs_filter_log_events]
+usage = "aws [global options] logs filter-log-events [options]"
+adds  = ["read_data"]
+options.log_group_name         = { flag = "--log-group-name", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.log_group_identifier   = { flag = "--log-group-identifier", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.log_stream_names       = { flag = "--log-stream-names", value = "many", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.log_stream_name_prefix = { flag = "--log-stream-name-prefix", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.start_time             = { flag = "--start-time", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.end_time               = { flag = "--end-time", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.filter_pattern         = { flag = "--filter-pattern", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.unmask                 = { flag = "--unmask", adds = ["read_secret"] }
+options.no_unmask              = { flag = "--no-unmask" }
+options.starting_token         = { flag = "--starting-token", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.page_size              = { flag = "--page-size", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.max_items              = { flag = "--max-items", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+
+[shell.logs_get_log_events]
+usage = "aws [global options] logs get-log-events [options]"
+adds  = ["read_data"]
+options.log_group_name       = { flag = "--log-group-name", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.log_group_identifier = { flag = "--log-group-identifier", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.log_stream_name      = { flag = "--log-stream-name", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.start_time           = { flag = "--start-time", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.end_time             = { flag = "--end-time", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.next_token           = { flag = "--next-token", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.limit                = { flag = "--limit", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.start_from_head      = { flag = "--start-from-head" }
+options.no_start_from_head   = { flag = "--no-start-from-head" }
+options.unmask               = { flag = "--unmask", adds = ["read_secret"] }
+options.no_unmask            = { flag = "--no-unmask" }
+
+# --------------------------------------------------------------------------------------------------
+# dynamodb: items, keys, and expressions are JSON values, often given as file://.
+
+[shell.dynamodb_list_tables]
+usage = "aws [global options] dynamodb list-tables [options]"
+adds  = ["read_data"]
+options.starting_token = { flag = "--starting-token", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.page_size      = { flag = "--page-size", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.max_items      = { flag = "--max-items", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+
+[shell.dynamodb_describe_table]
+usage = "aws [global options] dynamodb describe-table [options]"
+adds  = ["read_data"]
+options.table_name = { flag = "--table-name", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+
+[shell.dynamodb_get_item]
+usage = "aws [global options] dynamodb get-item [options]"
+adds  = ["read_data"]
+options.table_name                 = { flag = "--table-name", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.key                        = { flag = "--key", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.projection_expression      = { flag = "--projection-expression", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.expression_attribute_names = { flag = "--expression-attribute-names", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.consistent_read            = { flag = "--consistent-read" }
+options.no_consistent_read         = { flag = "--no-consistent-read" }
+options.return_consumed_capacity   = { flag = "--return-consumed-capacity", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+
+[shell.dynamodb_query]
+usage = "aws [global options] dynamodb query [options]"
+adds  = ["read_data"]
+options.table_name                  = { flag = "--table-name", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.index_name                  = { flag = "--index-name", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.key_condition_expression    = { flag = "--key-condition-expression", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.filter_expression           = { flag = "--filter-expression", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.expression_attribute_values = { flag = "--expression-attribute-values", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.select                      = { flag = "--select", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.scan_index_forward          = { flag = "--scan-index-forward" }
+options.no_scan_index_forward       = { flag = "--no-scan-index-forward" }
+options.projection_expression       = { flag = "--projection-expression", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.expression_attribute_names  = { flag = "--expression-attribute-names", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.consistent_read             = { flag = "--consistent-read" }
+options.no_consistent_read          = { flag = "--no-consistent-read" }
+options.return_consumed_capacity    = { flag = "--return-consumed-capacity", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.starting_token              = { flag = "--starting-token", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.page_size                   = { flag = "--page-size", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.max_items                   = { flag = "--max-items", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+
+[shell.dynamodb_scan]
+usage = "aws [global options] dynamodb scan [options]"
+adds  = ["read_data"]
+options.table_name                  = { flag = "--table-name", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.index_name                  = { flag = "--index-name", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.filter_expression           = { flag = "--filter-expression", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.expression_attribute_values = { flag = "--expression-attribute-values", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.select                      = { flag = "--select", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.segment                     = { flag = "--segment", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.total_segments              = { flag = "--total-segments", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.projection_expression       = { flag = "--projection-expression", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.expression_attribute_names  = { flag = "--expression-attribute-names", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.consistent_read             = { flag = "--consistent-read" }
+options.no_consistent_read          = { flag = "--no-consistent-read" }
+options.return_consumed_capacity    = { flag = "--return-consumed-capacity", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.starting_token              = { flag = "--starting-token", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.page_size                   = { flag = "--page-size", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.max_items                   = { flag = "--max-items", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+
+[shell.dynamodb_put_item]
+usage = "aws [global options] dynamodb put-item [options]"
+adds  = ["write_data"]
+options.item                        = { flag = "--item", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.table_name                  = { flag = "--table-name", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.condition_expression        = { flag = "--condition-expression", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.expression_attribute_names  = { flag = "--expression-attribute-names", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.expression_attribute_values = { flag = "--expression-attribute-values", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.return_values               = { flag = "--return-values", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.return_consumed_capacity    = { flag = "--return-consumed-capacity", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+
+[shell.dynamodb_delete_item]
+usage = "aws [global options] dynamodb delete-item [options]"
+adds  = ["delete_data"]
+options.key                         = { flag = "--key", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.table_name                  = { flag = "--table-name", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.condition_expression        = { flag = "--condition-expression", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.expression_attribute_names  = { flag = "--expression-attribute-names", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.expression_attribute_values = { flag = "--expression-attribute-values", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.return_values               = { flag = "--return-values", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.return_consumed_capacity    = { flag = "--return-consumed-capacity", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+
+# --------------------------------------------------------------------------------------------------
+# ssm Parameter Store. `--with-decryption` returns the plain text of a SecureString, so it
+# adds `read_secret`. A String parameter is plain text with or without it.
+
+[shell.ssm_get_parameter]
+usage = "aws [global options] ssm get-parameter [options]"
+adds  = ["read_data"]
+options.name               = { flag = "--name", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.with_decryption    = { flag = "--with-decryption", adds = ["read_secret"] }
+options.no_with_decryption = { flag = "--no-with-decryption" }
+
+[shell.ssm_get_parameters]
+usage = "aws [global options] ssm get-parameters [options]"
+adds  = ["read_data"]
+options.names              = { flag = "--names", value = "many", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.with_decryption    = { flag = "--with-decryption", adds = ["read_secret"] }
+options.no_with_decryption = { flag = "--no-with-decryption" }
+
+[shell.ssm_get_parameters_by_path]
+usage = "aws [global options] ssm get-parameters-by-path [options]"
+adds  = ["read_data"]
+options.path               = { flag = "--path", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.recursive          = { flag = "--recursive" }
+options.no_recursive       = { flag = "--no-recursive" }
+options.parameter_filters  = { flag = "--parameter-filters", value = "many", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.with_decryption    = { flag = "--with-decryption", adds = ["read_secret"] }
+options.no_with_decryption = { flag = "--no-with-decryption" }
+options.starting_token     = { flag = "--starting-token", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.page_size          = { flag = "--page-size", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.max_items          = { flag = "--max-items", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+
+[shell.ssm_put_parameter]
+usage = "aws [global options] ssm put-parameter [options]"
+adds  = ["write_data"]
+options.name            = { flag = "--name", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.value           = { flag = "--value", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.type            = { flag = "--type", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.description     = { flag = "--description", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.key_id          = { flag = "--key-id", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.overwrite       = { flag = "--overwrite" }
+options.no_overwrite    = { flag = "--no-overwrite" }
+options.tier            = { flag = "--tier", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.data_type       = { flag = "--data-type", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.allowed_pattern = { flag = "--allowed-pattern", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+
+# --------------------------------------------------------------------------------------------------
+# secretsmanager.
+
+[shell.secretsmanager_get_secret_value]
+usage = "aws [global options] secretsmanager get-secret-value [options]"
+adds  = ["read_data", "read_secret"]
+options.secret_id     = { flag = "--secret-id", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.version_id    = { flag = "--version-id", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.version_stage = { flag = "--version-stage", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+
+[shell.secretsmanager_list_secrets]
+usage = "aws [global options] secretsmanager list-secrets [options]"
+adds  = ["read_data"]
+options.include_planned_deletion    = { flag = "--include-planned-deletion" }
+options.no_include_planned_deletion = { flag = "--no-include-planned-deletion" }
+options.filters                     = { flag = "--filters", value = "many", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.sort_order                  = { flag = "--sort-order", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.sort_by                     = { flag = "--sort-by", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.starting_token              = { flag = "--starting-token", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.page_size                   = { flag = "--page-size", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+options.max_items                   = { flag = "--max-items", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+
+[shell.secretsmanager_describe_secret]
+usage = "aws [global options] secretsmanager describe-secret [options]"
+adds  = ["read_data"]
+options.secret_id = { flag = "--secret-id", value = "required", when = [{ like = "file*://*", adds = ["value_from_file"] }] }
+
+# --------------------------------------------------------------------------------------------------
+# configure: reads the local configuration (customizations/configure/). Only the read verbs
+# are modeled; `configure set`, `configure sso`, and the bare `configure` prompt are not.
+
+[shell.configure_list]
+usage = "aws [global options] configure list"
+adds  = ["read_config"]
+
+[shell.configure_list_profiles]
+usage = "aws [global options] configure list-profiles"
+adds  = ["read_config"]
+
+[shell.configure_get]
+usage = "aws [global options] configure get <varname>"
+adds  = ["read_config"]
+operands.varname = { when = [{ like = ["aws_secret_access_key", "aws_session_token", "aws_security_token", "*.aws_secret_access_key", "*.aws_session_token", "*.aws_security_token"], adds = ["read_secret"] }, { like = "file*://*", adds = ["read_secret", "value_from_file"] }] }
+
+[shell.configure_export_credentials]
+usage = "aws [global options] configure export-credentials [options]"
+adds  = ["credentials", "read_config"]
+options.format = { flag = "--format", value = "required" }

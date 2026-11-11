@@ -1,0 +1,99 @@
+# End-to-end cases for aws.grammar.toml. The harness runs each argv through the Shell of a real box,
+# where `aws` is a stub that prints its arguments and exits 0.
+#
+# The policy permits every modeled command, and forbids deletes, secret reads, and requests to
+# another endpoint. A `--dry-run` or `--dryrun` removes the delete, so it runs.
+
+policy = '''
+@id("aws_modeled")
+permit (principal, action in Tool::aws::Action::"*", resource);
+
+@id("aws_no_delete")
+@description("Deleting AWS data is not allowed.")
+forbid (principal, action in Tool::aws::Action::"*", resource)
+when { context.input.effects.contains(Tool::aws::Effect::"delete_data") };
+
+@id("aws_no_secrets")
+@description("Reading secret values is not allowed.")
+forbid (principal, action in Tool::aws::Action::"*", resource)
+when { context.input.effects.contains(Tool::aws::Effect::"read_secret") };
+
+@id("aws_no_endpoint_override")
+@description("Requests go only to the default AWS endpoints.")
+forbid (principal, action in Tool::aws::Action::"*", resource)
+when { context.input.effects.contains(Tool::aws::Effect::"override_endpoint") };
+'''
+
+# A permitted read runs the program.
+[[case]]
+argv = ["aws", "sts", "get-caller-identity", "--region", "us-east-1"]
+exit = 0
+stdout = "stub-argv: [sts] [get-caller-identity] [--region] [us-east-1]"
+
+# A delete is refused, and the program does not run.
+[[case]]
+argv = ["aws", "s3", "rm", "s3://data/report.csv"]
+exit = 126
+stderr = "[policy: aws_no_delete]: Deleting AWS data is not allowed."
+
+# `--dryrun` removes `delete_data`, so the same command runs.
+[[case]]
+argv = ["aws", "s3", "rm", "--dryrun", "s3://data/report.csv"]
+exit = 0
+stdout = "stub-argv: [s3] [rm] [--dryrun] [s3://data/report.csv]"
+
+# `--with-decryption` adds `read_secret`.
+[[case]]
+argv = ["aws", "ssm", "get-parameter", "--name", "/app/db-password", "--with-decryption"]
+exit = 126
+stderr = "[policy: aws_no_secrets]"
+
+# A global option anywhere on the line changes the target endpoint.
+[[case]]
+argv = ["aws", "s3", "ls", "--endpoint-url", "http://127.0.0.1:9000"]
+exit = 126
+stderr = "[policy: aws_no_endpoint_override]"
+
+# An operation the grammar does not model is `unmodeled`, and nothing permits it.
+[[case]]
+argv = ["aws", "ec2", "run-instances", "--image-id", "ami-1"]
+exit = 126
+stderr = "[default-deny]: No permit policy matched this request."
+
+
+# The read-only and one-region rules from the README load and decide.
+[[case]]
+argv = ["aws", "s3", "cp", "./build.zip", "s3://artifacts/build.zip"]
+exit = 126
+stderr = "[policy: aws_read_only]: Only read commands are allowed."
+policy = '''
+@id("aws_modeled")
+permit (principal, action in Tool::aws::Action::"*", resource);
+
+@id("aws_read_only")
+@description("Only read commands are allowed.")
+forbid (principal, action in Tool::aws::Action::"*", resource)
+when {
+  context.input.effects.contains(Tool::aws::Effect::"write_data") ||
+  context.input.effects.contains(Tool::aws::Effect::"delete_data") ||
+  context.input.effects.contains(Tool::aws::Effect::"run_program") ||
+  context.input.effects.contains(Tool::aws::Effect::"credentials")
+};
+
+@id("aws_one_region")
+forbid (principal, action in Tool::aws::Action::"*", resource)
+when { context.input has region && context.input.region != "eu-west-1" };
+'''
+
+[[case]]
+argv = ["aws", "ec2", "describe-instances", "--region", "us-east-1"]
+exit = 126
+stderr = "[policy: aws_one_region]"
+policy = '''
+@id("aws_modeled")
+permit (principal, action in Tool::aws::Action::"*", resource);
+
+@id("aws_one_region")
+forbid (principal, action in Tool::aws::Action::"*", resource)
+when { context.input has region && context.input.region != "eu-west-1" };
+'''
