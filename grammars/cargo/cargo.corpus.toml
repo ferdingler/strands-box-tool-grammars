@@ -1,0 +1,1174 @@
+# Golden cases for cargo.grammar.toml, checked against cargo 1.99.1 (5f94df478).
+#
+# Each case is one argv and what the grammar must read it as. `fields` lists only fields that do not
+# hold their default. An `unmodeled` case has no fields and no effects. A case with no `effects`
+# key has the empty set.
+#
+# Sources: the help dumps (`cargo <cmd> --help`, `cargo help <cmd>`) for 1.99.1, and the cargo
+# source at commit 5f94df478: src/bin/cargo/cli.rs (`cli`, `expand_aliases`), main.rs
+# (`aliased_command`, `execute_external_subcommand`), commands/*.rs, and
+# src/util/command_prelude.rs (`optional_multi_opt`, `multi_opt`, `check_optional_opts`).
+# clippy: rust-lang/rust 1.99.1 src/tools/clippy/src/main.rs. fmt: src/tools/rustfmt/src/cargo-fmt/main.rs.
+
+# ============================================================ build
+# `cargo build --help`: a plain build may download, may write Cargo.lock, and runs build scripts.
+[[case]]
+argv = ["cargo", "build"]
+action = "build"
+effects = ["network", "run_build_scripts", "update_lockfile"]
+
+# `-r, --release`: short and long spelling
+[[case]]
+argv = ["cargo", "build", "-r"]
+action = "build"
+fields = { release = true }
+effects = ["network", "run_build_scripts", "update_lockfile"]
+
+[[case]]
+argv = ["cargo", "build", "--release"]
+action = "build"
+fields = { release = true }
+effects = ["network", "run_build_scripts", "update_lockfile"]
+
+# `-p, --package` is `optional_multi_opt` (Append): `--package=x`, `--package x`, `-px`, all collected
+[[case]]
+argv = ["cargo", "build", "--package=foo", "--package", "bar", "-pbaz"]
+action = "build"
+fields = { package = ["bar", "baz", "foo"] }
+effects = ["network", "run_build_scripts", "update_lockfile"]
+
+# A short cluster: `-rpfoo` is `-r` then `-p foo`
+[[case]]
+argv = ["cargo", "build", "-rpfoo"]
+action = "build"
+fields = { package = ["foo"], release = true }
+effects = ["network", "run_build_scripts", "update_lockfile"]
+
+# A cluster that mixes an `anywhere` global (`-v`) with action flags, and `-j` takes the rest
+[[case]]
+argv = ["cargo", "build", "-vrj4"]
+action = "build"
+fields = { jobs = "4", release = true, verbose = true }
+effects = ["network", "run_build_scripts", "update_lockfile"]
+
+# `-j` is `allow_hyphen_values` in command_prelude.rs `arg_jobs`: `-j -1` is a value
+[[case]]
+argv = ["cargo", "build", "-j", "-1"]
+action = "build"
+fields = { jobs = "-1" }
+effects = ["network", "run_build_scripts", "update_lockfile"]
+
+[[case]]
+argv = ["cargo", "build", "--jobs=8"]
+action = "build"
+fields = { jobs = "8" }
+effects = ["network", "run_build_scripts", "update_lockfile"]
+
+# `--locked`: Cargo.lock must stay unchanged, so no lockfile write. Global, before or after the command
+[[case]]
+argv = ["cargo", "--locked", "build"]
+action = "build"
+fields = { locked = true }
+effects = ["network", "run_build_scripts"]
+
+[[case]]
+argv = ["cargo", "build", "--locked"]
+action = "build"
+fields = { locked = true }
+effects = ["network", "run_build_scripts"]
+
+# `--offline` stops network access but can still write Cargo.lock from the local cache
+[[case]]
+argv = ["cargo", "build", "--offline"]
+action = "build"
+fields = { offline = true }
+effects = ["run_build_scripts", "update_lockfile"]
+
+# `--frozen` = `--locked` + `--offline`
+[[case]]
+argv = ["cargo", "build", "--frozen"]
+action = "build"
+fields = { frozen = true }
+effects = ["run_build_scripts"]
+
+# The rustup toolchain selector, only directly after `cargo`
+[[case]]
+argv = ["cargo", "+nightly", "build"]
+action = "build"
+fields = { toolchain = "nightly" }
+effects = ["network", "run_build_scripts", "update_lockfile"]
+
+[[case]]
+argv = ["cargo", "+1.99.1", "--offline", "build", "--locked"]
+action = "build"
+fields = { locked = true, offline = true, toolchain = "1.99.1" }
+effects = ["run_build_scripts"]
+
+# A toolchain after the command is an operand, and build takes none
+[[case]]
+argv = ["cargo", "build", "+nightly"]
+action = "unmodeled"
+
+# A toolchain that holds `/` is refused by the parser
+[[case]]
+argv = ["cargo", "+../evil", "build"]
+action = "unmodeled"
+
+# `-Z` (Append, global) enables unstable behaviour: override_config. Separate and attached value
+[[case]]
+argv = ["cargo", "+nightly", "-Z", "build-std", "build", "--target", "x86_64-unknown-linux-gnu"]
+action = "build"
+fields = { target = ["x86_64-unknown-linux-gnu"], toolchain = "nightly", unstable_features = ["build-std"] }
+effects = ["network", "override_config", "run_build_scripts", "update_lockfile"]
+
+[[case]]
+argv = ["cargo", "build", "-Zbuild-std", "-Z", "unstable-options"]
+action = "build"
+fields = { unstable_features = ["build-std", "unstable-options"] }
+effects = ["network", "override_config", "run_build_scripts", "update_lockfile"]
+
+# `--config KEY=VALUE` can set `build.rustc-wrapper`, so it is override_config. It is Append.
+[[case]]
+argv = ["cargo", "build", "--config", "build.rustc-wrapper=\"sccache\"", "--config=net.offline=true"]
+action = "build"
+fields = { config = ["build.rustc-wrapper=\"sccache\"", "net.offline=true"] }
+effects = ["network", "override_config", "run_build_scripts", "update_lockfile"]
+
+# `-m, --manifest-path` builds another package: override_config
+[[case]]
+argv = ["cargo", "build", "--manifest-path", "../other/Cargo.toml"]
+action = "build"
+fields = { manifest_path = "../other/Cargo.toml" }
+effects = ["network", "override_config", "run_build_scripts", "update_lockfile"]
+
+[[case]]
+argv = ["cargo", "build", "-m", "../other/Cargo.toml"]
+action = "build"
+fields = { manifest_path = "../other/Cargo.toml" }
+effects = ["network", "override_config", "run_build_scripts", "update_lockfile"]
+
+# `-F, --features` (Append), and the feature flags
+[[case]]
+argv = ["cargo", "build", "-F", "serde,derive", "--features", "tls", "--no-default-features"]
+action = "build"
+fields = { features = ["serde,derive", "tls"], no_default_features = true }
+effects = ["network", "run_build_scripts", "update_lockfile"]
+
+# Target selection: `--bin`/`--example` are Append
+[[case]]
+argv = ["cargo", "build", "--bin", "app", "--bin=cli", "--example", "demo", "--lib"]
+action = "build"
+fields = { bin = ["app", "cli"], example = ["demo"], lib = true }
+effects = ["network", "run_build_scripts", "update_lockfile"]
+
+# `--target` is Append, `--target-dir` and `--profile` take one value
+[[case]]
+argv = ["cargo", "build", "--target", "a", "--target", "b", "--target-dir", "/tmp/t", "--profile", "dist"]
+action = "build"
+fields = { profile = "dist", target = ["a", "b"], target_dir = "/tmp/t" }
+effects = ["network", "run_build_scripts", "update_lockfile"]
+
+# `--color` is a global with one value; `-v` (Count) may repeat, so `-vv` is fine
+[[case]]
+argv = ["cargo", "-vv", "build", "--color=never", "--timings", "--keep-going"]
+action = "build"
+fields = { color = "never", keep_going = true, timings = true, verbose = true }
+effects = ["network", "run_build_scripts", "update_lockfile"]
+
+[[case]]
+argv = ["cargo", "--color", "always", "build", "--workspace", "--exclude", "xtask", "--all-targets"]
+action = "build"
+fields = { all_targets = true, color = "always", exclude = ["xtask"], workspace = true }
+effects = ["network", "run_build_scripts", "update_lockfile"]
+
+# `--message-format` is Append, `--future-incompat-report` and `--ignore-rust-version` are flags
+[[case]]
+argv = ["cargo", "build", "--message-format", "json", "--future-incompat-report", "--ignore-rust-version"]
+action = "build"
+fields = { future_incompat_report = true, ignore_rust_version = true, message_format = ["json"] }
+effects = ["network", "run_build_scripts", "update_lockfile"]
+
+# A value that looks like a flag: the grammar takes it as the value. clap refuses this line
+# ("a value is required for '--features'"), so cargo builds nothing.
+[[case]]
+argv = ["cargo", "build", "--features", "--release"]
+action = "build"
+fields = { features = ["--release"] }
+effects = ["network", "run_build_scripts", "update_lockfile"]
+
+# `--color` twice is an error in clap and `unmodeled` here; before and after counts twice
+[[case]]
+argv = ["cargo", "--color", "always", "build", "--color", "never"]
+action = "unmodeled"
+
+# `--profile` twice
+[[case]]
+argv = ["cargo", "build", "--profile", "a", "--profile", "b"]
+action = "unmodeled"
+
+# `cargo build` takes no operand, and no words after `--`
+[[case]]
+argv = ["cargo", "build", "foo"]
+action = "unmodeled"
+
+[[case]]
+argv = ["cargo", "build", "--", "foo"]
+action = "unmodeled"
+
+# A prefix of a long flag: clap in cargo does not infer long flags
+[[case]]
+argv = ["cargo", "build", "--rel"]
+action = "unmodeled"
+
+# Help and undeclared flags
+[[case]]
+argv = ["cargo", "build", "--help"]
+action = "unmodeled"
+
+[[case]]
+argv = ["cargo", "build", "-h"]
+action = "unmodeled"
+
+# `--artifact-dir` is unstable and not modeled; `--debug` is a hidden flag that only errors
+[[case]]
+argv = ["cargo", "build", "--artifact-dir", "out"]
+action = "unmodeled"
+
+[[case]]
+argv = ["cargo", "build", "--debug"]
+action = "unmodeled"
+
+# `-p=foo`: clap would read `foo`, the grammar refuses an attached `=`
+[[case]]
+argv = ["cargo", "build", "-p=foo"]
+action = "unmodeled"
+
+# A flag with no value given a value
+[[case]]
+argv = ["cargo", "build", "--release=yes"]
+action = "unmodeled"
+
+# `-C <DIR>` is a top-level, nightly-only option and is not modeled
+[[case]]
+argv = ["cargo", "-C", "sub", "build"]
+action = "unmodeled"
+
+# `b` is a built-in alias that `[alias] b = ...` in a config file can redefine (main.rs
+# `aliased_command` reads the user alias first), so it is not modeled
+[[case]]
+argv = ["cargo", "b"]
+action = "unmodeled"
+
+# ============================================================ check
+[[case]]
+argv = ["cargo", "check", "--all-targets", "--all-features"]
+action = "check"
+fields = { all_features = true, all_targets = true }
+effects = ["network", "run_build_scripts", "update_lockfile"]
+
+[[case]]
+argv = ["cargo", "check", "--workspace", "--tests", "--message-format=short", "--locked", "--offline"]
+action = "check"
+fields = { locked = true, message_format = ["short"], offline = true, tests = true, workspace = true }
+effects = ["run_build_scripts"]
+
+# `--all` is the deprecated alias for `--workspace`; it stays its own field
+[[case]]
+argv = ["cargo", "check", "--all", "--benches", "--bench", "parse", "--test", "it"]
+action = "check"
+fields = { all = true, bench = ["parse"], benches = true, test = ["it"] }
+effects = ["network", "run_build_scripts", "update_lockfile"]
+
+[[case]]
+argv = ["cargo", "c"]
+action = "unmodeled"
+
+[[case]]
+argv = ["cargo", "check", "--al"]
+action = "unmodeled"
+
+# ============================================================ test
+# `cargo test` builds and runs the test binaries
+[[case]]
+argv = ["cargo", "test"]
+action = "test"
+effects = ["execute_built_code", "network", "run_build_scripts", "update_lockfile"]
+
+# TESTNAME is one optional word
+[[case]]
+argv = ["cargo", "test", "parse_header"]
+action = "test"
+fields = { testname = "parse_header" }
+effects = ["execute_built_code", "network", "run_build_scripts", "update_lockfile"]
+
+# ARGS go to the test binary only after `--` (clap `last(true)`), flags included
+[[case]]
+argv = ["cargo", "test", "parse_header", "--", "--nocapture", "--test-threads", "1"]
+action = "test"
+fields = { args_list = ["--nocapture", "--test-threads", "1"], testname = "parse_header" }
+effects = ["execute_built_code", "network", "run_build_scripts", "update_lockfile"]
+
+# A word after `--` is never cargo's: `--release` there is a test-binary argument
+[[case]]
+argv = ["cargo", "test", "--", "--release"]
+action = "test"
+fields = { args_list = ["--release"] }
+effects = ["execute_built_code", "network", "run_build_scripts", "update_lockfile"]
+
+# `--no-run` compiles but does not run the tests
+[[case]]
+argv = ["cargo", "test", "--no-run"]
+action = "test"
+fields = { no_run = true }
+effects = ["network", "run_build_scripts", "update_lockfile"]
+
+[[case]]
+argv = ["cargo", "test", "--no-run", "--frozen"]
+action = "test"
+fields = { frozen = true, no_run = true }
+effects = ["run_build_scripts"]
+
+# Options and the operand interleave
+[[case]]
+argv = ["cargo", "test", "--features=serde", "roundtrip", "--release", "-p", "codec"]
+action = "test"
+fields = { features = ["serde"], package = ["codec"], release = true, testname = "roundtrip" }
+effects = ["execute_built_code", "network", "run_build_scripts", "update_lockfile"]
+
+# `--doc`, `--lib`, `--test <NAME>`, `--no-fail-fast`, and `-q` (test redefines `-q`; still quiet)
+[[case]]
+argv = ["cargo", "test", "--doc", "--lib", "--test", "integration", "--no-fail-fast", "-q"]
+action = "test"
+fields = { doc = true, lib = true, no_fail_fast = true, quiet = true, test = ["integration"] }
+effects = ["execute_built_code", "network", "run_build_scripts", "update_lockfile"]
+
+# `-p` with a word that starts with `-`: the grammar reads it as the value. cargo reads a bare
+# `-p`, prints the packages, and exits with an error (`check_optional_opts`), so no test runs.
+[[case]]
+argv = ["cargo", "test", "-p", "--lib"]
+action = "test"
+fields = { package = ["--lib"] }
+effects = ["execute_built_code", "network", "run_build_scripts", "update_lockfile"]
+
+# A lone `--` with no test arguments: clap accepts an empty ARGS
+[[case]]
+argv = ["cargo", "test", "--"]
+action = "test"
+effects = ["execute_built_code", "network", "run_build_scripts", "update_lockfile"]
+
+# A bare `--bin` at the end needs a value here; cargo would only list the binaries
+[[case]]
+argv = ["cargo", "test", "--bin"]
+action = "unmodeled"
+
+# Two TESTNAME words: clap refuses the second
+[[case]]
+argv = ["cargo", "test", "a", "b"]
+action = "unmodeled"
+
+# A libtest flag before `--` is a cargo flag, and cargo has no `--nocapture`
+[[case]]
+argv = ["cargo", "test", "--nocapture"]
+action = "unmodeled"
+
+# `--keep-going` on test is a hidden flag that only errors (`arg_unsupported_keep_going`)
+[[case]]
+argv = ["cargo", "test", "--keep-going"]
+action = "unmodeled"
+
+[[case]]
+argv = ["cargo", "t"]
+action = "unmodeled"
+
+# ============================================================ bench
+[[case]]
+argv = ["cargo", "bench"]
+action = "bench"
+effects = ["execute_built_code", "network", "run_build_scripts", "update_lockfile"]
+
+[[case]]
+argv = ["cargo", "bench", "parse", "--", "--save-baseline", "main"]
+action = "bench"
+fields = { args_list = ["--save-baseline", "main"], benchname = "parse" }
+effects = ["execute_built_code", "network", "run_build_scripts", "update_lockfile"]
+
+[[case]]
+argv = ["cargo", "bench", "--no-run", "--locked"]
+action = "bench"
+fields = { locked = true, no_run = true }
+effects = ["network", "run_build_scripts"]
+
+# `cargo bench --help` lists no `-r`: bench always uses the bench profile
+[[case]]
+argv = ["cargo", "bench", "--release"]
+action = "unmodeled"
+
+# ============================================================ run
+# `cargo run` builds and runs a binary
+[[case]]
+argv = ["cargo", "run"]
+action = "run"
+effects = ["execute_built_code", "network", "run_build_scripts", "update_lockfile"]
+
+[[case]]
+argv = ["cargo", "run", "--release", "--", "--port", "8080"]
+action = "run"
+fields = { args_list = ["--port", "8080"], release = true }
+effects = ["execute_built_code", "network", "run_build_scripts", "update_lockfile"]
+
+# ARGS is `trailing_var_arg`: from the first operand on, every word goes to the program.
+# Here `--offline` is the program's argument, so cargo itself is still online.
+[[case]]
+argv = ["cargo", "run", "--bin", "server", "serve", "--offline"]
+action = "run"
+fields = { args_list = ["--offline", "serve"], bin = ["server"] }
+effects = ["execute_built_code", "network", "run_build_scripts", "update_lockfile"]
+
+[[case]]
+argv = ["cargo", "run", "--", "--help"]
+action = "run"
+fields = { args_list = ["--help"] }
+effects = ["execute_built_code", "network", "run_build_scripts", "update_lockfile"]
+
+# After the first operand, `-q` is the program's, not cargo's
+[[case]]
+argv = ["cargo", "run", "input.txt", "-q"]
+action = "run"
+fields = { args_list = ["-q", "input.txt"] }
+effects = ["execute_built_code", "network", "run_build_scripts", "update_lockfile"]
+
+# `run -p` is `arg_package` (one value, not Append)
+[[case]]
+argv = ["cargo", "run", "-p", "app", "--example", "demo", "--frozen"]
+action = "run"
+fields = { example = ["demo"], frozen = true, package = "app" }
+effects = ["execute_built_code", "run_build_scripts"]
+
+[[case]]
+argv = ["cargo", "run", "-p", "a", "-p", "b"]
+action = "unmodeled"
+
+# `cargo run --help` lists no `--workspace`
+[[case]]
+argv = ["cargo", "run", "--workspace"]
+action = "unmodeled"
+
+[[case]]
+argv = ["cargo", "r"]
+action = "unmodeled"
+
+# ============================================================ doc
+[[case]]
+argv = ["cargo", "doc"]
+action = "doc"
+effects = ["network", "run_build_scripts", "update_lockfile"]
+
+# `--open` starts a browser on the result (ops/cargo_doc.rs `util::open::open`)
+[[case]]
+argv = ["cargo", "doc", "--no-deps", "--open"]
+action = "doc"
+fields = { no_deps = true, open = true }
+effects = ["network", "open_browser", "run_build_scripts", "update_lockfile"]
+
+[[case]]
+argv = ["cargo", "doc", "--document-private-items", "-p", "core-lib", "--offline"]
+action = "doc"
+fields = { document_private_items = true, offline = true, package = ["core-lib"] }
+effects = ["run_build_scripts", "update_lockfile"]
+
+# `cargo doc --help` lists no `--tests`
+[[case]]
+argv = ["cargo", "doc", "--tests"]
+action = "unmodeled"
+
+[[case]]
+argv = ["cargo", "d"]
+action = "unmodeled"
+
+# ============================================================ clippy
+# clippy runs `cargo check` with the clippy driver, so build scripts run
+[[case]]
+argv = ["cargo", "clippy"]
+action = "clippy"
+effects = ["network", "run_build_scripts", "update_lockfile"]
+
+# Words after `--` go to clippy-driver (`CLIPPY_ARGS`)
+[[case]]
+argv = ["cargo", "clippy", "--all-targets", "--all-features", "--", "-D", "warnings"]
+action = "clippy"
+fields = { all_features = true, all_targets = true, lint_args = ["-D", "warnings"] }
+effects = ["network", "pass_through_args", "run_build_scripts", "update_lockfile"]
+
+# A lone `--`: ClippyCmd stops at it, and nothing goes to the driver
+[[case]]
+argv = ["cargo", "clippy", "--"]
+action = "clippy"
+effects = ["network", "run_build_scripts", "update_lockfile"]
+
+# `--fix` switches to `cargo fix`, which rewrites sources
+[[case]]
+argv = ["cargo", "clippy", "--fix", "--allow-dirty", "--allow-staged"]
+action = "clippy"
+fields = { allow_dirty = true, allow_staged = true, fix = true }
+effects = ["network", "run_build_scripts", "update_lockfile", "write_source"]
+
+# `ClippyCmd::new` matches the word `--fix` anywhere before `--`, even as another option's value
+[[case]]
+argv = ["cargo", "clippy", "--features", "--fix"]
+action = "clippy"
+fields = { features = ["--fix"] }
+effects = ["network", "run_build_scripts", "update_lockfile", "write_source"]
+
+# cargo-clippy passes these words on to `cargo check`, where they are global options
+[[case]]
+argv = ["cargo", "clippy", "--locked", "--offline", "--no-deps", "-p", "core"]
+action = "clippy"
+fields = { locked = true, no_deps = true, offline = true, package = ["core"] }
+effects = ["run_build_scripts"]
+
+[[case]]
+argv = ["cargo", "clippy", "--config", "build.rustc-wrapper=\"x\""]
+action = "clippy"
+fields = { config = ["build.rustc-wrapper=\"x\""] }
+effects = ["network", "override_config", "run_build_scripts", "update_lockfile"]
+
+[[case]]
+argv = ["cargo", "+nightly", "clippy", "-q"]
+action = "clippy"
+fields = { quiet = true, toolchain = "nightly" }
+effects = ["network", "run_build_scripts", "update_lockfile"]
+
+# An option before `clippy` is not forwarded to the external subcommand (main.rs
+# `execute_subcommand` passes only `CARGO`), so `--offline` there would not take effect
+[[case]]
+argv = ["cargo", "--offline", "clippy"]
+action = "unmodeled"
+
+# `--explain` and `-V` are clippy's own help forms
+[[case]]
+argv = ["cargo", "clippy", "--explain", "needless_return"]
+action = "unmodeled"
+
+[[case]]
+argv = ["cargo", "clippy", "-V"]
+action = "unmodeled"
+
+# A word before `--` is passed to `cargo check`, which takes no operand
+[[case]]
+argv = ["cargo", "clippy", "foo"]
+action = "unmodeled"
+
+# ============================================================ fmt
+# cargo-fmt runs rustfmt over the package sources, which rewrites them
+[[case]]
+argv = ["cargo", "fmt"]
+action = "fmt"
+effects = ["write_source"]
+
+# `--check` only reports
+[[case]]
+argv = ["cargo", "fmt", "--check"]
+action = "fmt"
+fields = { check = true }
+
+# Words after `--` go to rustfmt. rustfmt `--print-config <kind> <path>` writes a file even
+# with `--check`, so a pass-through word is its own effect, and `-- --check` removes nothing.
+[[case]]
+argv = ["cargo", "fmt", "--all", "--", "--check"]
+action = "fmt"
+fields = { all = true, rustfmt_options = ["--check"] }
+effects = ["pass_through_args", "write_source"]
+
+[[case]]
+argv = ["cargo", "fmt", "--check", "--", "--print-config", "default", "rustfmt.toml"]
+action = "fmt"
+fields = { check = true, rustfmt_options = ["--print-config", "default", "rustfmt.toml"] }
+effects = ["pass_through_args"]
+
+# `-p, --package <package>...` is `num_args = 1..`: it takes words up to the next option
+[[case]]
+argv = ["cargo", "fmt", "-p", "a", "b", "--check"]
+action = "fmt"
+fields = { check = true, package = ["a", "b"] }
+
+[[case]]
+argv = ["cargo", "fmt", "--package=a", "-v"]
+action = "fmt"
+fields = { package = ["a"], verbose = true }
+effects = ["write_source"]
+
+[[case]]
+argv = ["cargo", "fmt", "--manifest-path", "sub/Cargo.toml", "--message-format", "short"]
+action = "fmt"
+fields = { manifest_path = "sub/Cargo.toml", message_format = "short" }
+effects = ["override_config", "write_source"]
+
+[[case]]
+argv = ["cargo", "+nightly", "fmt", "-q"]
+action = "fmt"
+fields = { quiet = true, toolchain = "nightly" }
+effects = ["write_source"]
+
+# cargo-fmt has its own parser: no `-m`, no `--locked`, and no cargo option before `fmt`
+[[case]]
+argv = ["cargo", "fmt", "-m", "x/Cargo.toml"]
+action = "unmodeled"
+
+[[case]]
+argv = ["cargo", "fmt", "--locked"]
+action = "unmodeled"
+
+[[case]]
+argv = ["cargo", "--locked", "fmt"]
+action = "unmodeled"
+
+[[case]]
+argv = ["cargo", "fmt", "--version"]
+action = "unmodeled"
+
+# ============================================================ clean
+# `cargo clean` deletes the target directory
+[[case]]
+argv = ["cargo", "clean"]
+action = "clean"
+effects = ["delete_files"]
+
+[[case]]
+argv = ["cargo", "clean", "-n"]
+action = "clean"
+fields = { dry_run = true }
+
+[[case]]
+argv = ["cargo", "clean", "--dry-run", "--release", "--doc"]
+action = "clean"
+fields = { doc = true, dry_run = true, release = true }
+
+# `-p` and `--workspace` resolve the workspace (`ops::resolve_ws`), which can fetch and write Cargo.lock
+[[case]]
+argv = ["cargo", "clean", "-p", "foo"]
+action = "clean"
+fields = { package = ["foo"] }
+effects = ["delete_files", "network", "update_lockfile"]
+
+# `resolve_ws(ws, dry_run)` writes no lockfile in a dry run
+[[case]]
+argv = ["cargo", "clean", "-p", "foo", "--dry-run"]
+action = "clean"
+fields = { dry_run = true, package = ["foo"] }
+effects = ["network"]
+
+[[case]]
+argv = ["cargo", "clean", "--workspace", "--frozen"]
+action = "clean"
+fields = { frozen = true, workspace = true }
+effects = ["delete_files"]
+
+# `--target-dir` names the directory that clean deletes
+[[case]]
+argv = ["cargo", "clean", "--target-dir", "/tmp/build"]
+action = "clean"
+fields = { target_dir = "/tmp/build" }
+effects = ["delete_files"]
+
+# `clean gc` is a hidden, unstable subcommand
+[[case]]
+argv = ["cargo", "clean", "gc"]
+action = "unmodeled"
+
+[[case]]
+argv = ["cargo", "clean", "--all"]
+action = "unmodeled"
+
+# ============================================================ add
+[[case]]
+argv = ["cargo", "add", "serde"]
+action = "add"
+fields = { dep_id = ["serde"] }
+effects = ["edit_manifest", "network", "update_lockfile"]
+
+[[case]]
+argv = ["cargo", "add", "serde@1", "-F", "derive", "tokio", "--features=full", "--dev"]
+action = "add"
+fields = { dep_id = ["serde@1", "tokio"], dev = true, features = ["derive", "full"] }
+effects = ["edit_manifest", "network", "update_lockfile"]
+
+# `--dry-run` writes neither Cargo.toml nor Cargo.lock (`resolve_ws(&ws, dry_run)`)
+[[case]]
+argv = ["cargo", "add", "--dry-run", "rand"]
+action = "add"
+fields = { dep_id = ["rand"], dry_run = true }
+effects = ["network"]
+
+[[case]]
+argv = ["cargo", "add", "-n", "rand", "--offline"]
+action = "add"
+fields = { dep_id = ["rand"], dry_run = true, offline = true }
+
+# `--locked` stops the lockfile write; cargo writes the manifest before it resolves
+[[case]]
+argv = ["cargo", "add", "serde", "--locked"]
+action = "add"
+fields = { dep_id = ["serde"], locked = true }
+effects = ["edit_manifest", "network"]
+
+[[case]]
+argv = ["cargo", "add", "--git", "https://github.com/example/lib", "--branch", "main"]
+action = "add"
+fields = { branch = "main", git = "https://github.com/example/lib" }
+effects = ["edit_manifest", "network", "update_lockfile"]
+
+[[case]]
+argv = ["cargo", "add", "--path", "../local", "--rename", "local_lib", "--build", "--optional"]
+action = "add"
+fields = { build = true, optional = true, path = "../local", rename = "local_lib" }
+effects = ["edit_manifest", "network", "update_lockfile"]
+
+[[case]]
+argv = ["cargo", "add", "libc", "--target", "cfg(unix)", "-p", "sys"]
+action = "add"
+fields = { dep_id = ["libc"], package = "sys", target = "cfg(unix)" }
+effects = ["edit_manifest", "network", "update_lockfile"]
+
+[[case]]
+argv = ["cargo", "add", "a", "--rename", "x", "--rename", "y"]
+action = "unmodeled"
+
+# `--public` is unstable and not modeled
+[[case]]
+argv = ["cargo", "add", "--public", "serde"]
+action = "unmodeled"
+
+# ============================================================ remove
+[[case]]
+argv = ["cargo", "remove", "serde"]
+action = "remove"
+fields = { dep_id = ["serde"] }
+effects = ["edit_manifest", "network", "update_lockfile"]
+
+[[case]]
+argv = ["cargo", "remove", "--dev", "a", "b"]
+action = "remove"
+fields = { dep_id = ["a", "b"], dev = true }
+effects = ["edit_manifest", "network", "update_lockfile"]
+
+[[case]]
+argv = ["cargo", "remove", "-n", "serde"]
+action = "remove"
+fields = { dep_id = ["serde"], dry_run = true }
+effects = ["network"]
+
+# DEP_ID is required
+[[case]]
+argv = ["cargo", "remove"]
+action = "unmodeled"
+
+[[case]]
+argv = ["cargo", "rm", "serde"]
+action = "unmodeled"
+
+# ============================================================ update
+[[case]]
+argv = ["cargo", "update"]
+action = "update"
+effects = ["network", "update_lockfile"]
+
+[[case]]
+argv = ["cargo", "update", "serde", "--precise", "1.0.200"]
+action = "update"
+fields = { precise = "1.0.200", spec = ["serde"] }
+effects = ["network", "update_lockfile"]
+
+[[case]]
+argv = ["cargo", "update", "--dry-run", "-w"]
+action = "update"
+fields = { dry_run = true, workspace = true }
+effects = ["network"]
+
+[[case]]
+argv = ["cargo", "update", "--recursive", "tokio", "--offline"]
+action = "update"
+fields = { offline = true, recursive = true, spec = ["tokio"] }
+effects = ["update_lockfile"]
+
+# `cargo up` is not a built-in alias in 1.99.1 (BUILTIN_ALIASES has b c d r t rm)
+[[case]]
+argv = ["cargo", "up"]
+action = "unmodeled"
+
+# `update -p` is hidden, `--aggressive` is a hidden alias, and `--breaking` is unstable
+[[case]]
+argv = ["cargo", "update", "-p", "serde"]
+action = "unmodeled"
+
+[[case]]
+argv = ["cargo", "update", "--aggressive"]
+action = "unmodeled"
+
+[[case]]
+argv = ["cargo", "update", "--breaking"]
+action = "unmodeled"
+
+# ============================================================ fetch
+[[case]]
+argv = ["cargo", "fetch"]
+action = "fetch"
+effects = ["network", "update_lockfile"]
+
+[[case]]
+argv = ["cargo", "fetch", "--target", "aarch64-apple-darwin", "--locked"]
+action = "fetch"
+fields = { locked = true, target = ["aarch64-apple-darwin"] }
+effects = ["network"]
+
+[[case]]
+argv = ["cargo", "fetch", "--release"]
+action = "unmodeled"
+
+# ============================================================ tree
+[[case]]
+argv = ["cargo", "tree"]
+action = "tree"
+effects = ["network", "update_lockfile"]
+
+[[case]]
+argv = ["cargo", "tree", "-e", "normal,build", "-i", "serde", "--depth", "1", "--prefix", "none"]
+action = "tree"
+fields = { depth = "1", edges = ["normal,build"], invert = ["serde"], prefix = "none" }
+effects = ["network", "update_lockfile"]
+
+[[case]]
+argv = ["cargo", "tree", "-d", "--no-dedupe", "-f", "{p} {f}", "--frozen"]
+action = "tree"
+fields = { duplicates = true, format = "{p} {f}", frozen = true, no_dedupe = true }
+
+# `tree -V` and `-a` are hidden compatibility flags
+[[case]]
+argv = ["cargo", "tree", "-V"]
+action = "unmodeled"
+
+[[case]]
+argv = ["cargo", "tree", "-a"]
+action = "unmodeled"
+
+# ============================================================ metadata
+[[case]]
+argv = ["cargo", "metadata", "--format-version", "1"]
+action = "metadata"
+fields = { format_version = "1" }
+effects = ["network", "update_lockfile"]
+
+# `--no-deps` reports only workspace members and does not resolve
+[[case]]
+argv = ["cargo", "metadata", "--no-deps", "--format-version=1"]
+action = "metadata"
+fields = { format_version = "1", no_deps = true }
+
+[[case]]
+argv = ["cargo", "metadata", "--filter-platform", "x86_64-unknown-linux-gnu", "--all-features"]
+action = "metadata"
+fields = { all_features = true, filter_platform = ["x86_64-unknown-linux-gnu"] }
+effects = ["network", "update_lockfile"]
+
+[[case]]
+argv = ["cargo", "metadata", "--format", "1"]
+action = "unmodeled"
+
+# ============================================================ locate-project
+[[case]]
+argv = ["cargo", "locate-project"]
+action = "locate_project"
+
+[[case]]
+argv = ["cargo", "locate-project", "--workspace", "--message-format", "plain"]
+action = "locate_project"
+fields = { message_format = "plain", workspace = true }
+
+[[case]]
+argv = ["cargo", "locate-project", "--manifest-path", "a/Cargo.toml"]
+action = "locate_project"
+fields = { manifest_path = "a/Cargo.toml" }
+effects = ["override_config"]
+
+[[case]]
+argv = ["cargo", "locate-project", "--package", "x"]
+action = "unmodeled"
+
+# ============================================================ version
+[[case]]
+argv = ["cargo", "version"]
+action = "version"
+
+[[case]]
+argv = ["cargo", "version", "-v"]
+action = "version"
+fields = { verbose = true }
+
+[[case]]
+argv = ["cargo", "version", "extra"]
+action = "unmodeled"
+
+# The top-level forms have no command word, so they cannot be modeled
+[[case]]
+argv = ["cargo", "--version"]
+action = "unmodeled"
+
+[[case]]
+argv = ["cargo", "-V"]
+action = "unmodeled"
+
+[[case]]
+argv = ["cargo"]
+action = "unmodeled"
+
+[[case]]
+argv = ["cargo", "--list"]
+action = "unmodeled"
+
+[[case]]
+argv = ["cargo", "--explain", "E0382"]
+action = "unmodeled"
+
+# ============================================================ new and init
+[[case]]
+argv = ["cargo", "new", "hello"]
+action = "new"
+fields = { path = "hello" }
+effects = ["create_package"]
+
+[[case]]
+argv = ["cargo", "new", "--lib", "mylib", "--edition", "2024", "--vcs=none"]
+action = "new"
+fields = { edition = "2024", lib = true, path = "mylib", vcs = "none" }
+effects = ["create_package"]
+
+# `<PATH>` is required for new, and takes one word
+[[case]]
+argv = ["cargo", "new"]
+action = "unmodeled"
+
+[[case]]
+argv = ["cargo", "new", "a", "b"]
+action = "unmodeled"
+
+# `[PATH]` defaults to `.` for init
+[[case]]
+argv = ["cargo", "init"]
+action = "init"
+effects = ["create_package"]
+
+[[case]]
+argv = ["cargo", "init", "--bin", "--name", "tool", "--registry", "internal", "."]
+action = "init"
+fields = { bin = true, name = "tool", path = ".", registry = "internal" }
+effects = ["create_package"]
+
+# ============================================================ install and uninstall
+[[case]]
+argv = ["cargo", "install", "ripgrep"]
+action = "install"
+fields = { crate = ["ripgrep"] }
+effects = ["install_binary", "network", "run_build_scripts"]
+
+[[case]]
+argv = ["cargo", "install", "ripgrep@14.1.0", "--locked", "--root", "/opt/tools", "-f"]
+action = "install"
+fields = { crate = ["ripgrep@14.1.0"], force = true, locked = true, root = "/opt/tools" }
+effects = ["install_binary", "network", "run_build_scripts"]
+
+[[case]]
+argv = ["cargo", "install", "--path", ".", "--offline", "--debug", "--bin", "tool"]
+action = "install"
+fields = { bin = ["tool"], debug = true, offline = true, path = "." }
+effects = ["install_binary", "run_build_scripts"]
+
+[[case]]
+argv = ["cargo", "install", "--git", "https://github.com/example/tool", "--tag", "v1.2.0", "--no-track"]
+action = "install"
+fields = { git = "https://github.com/example/tool", no_track = true, tag = "v1.2.0" }
+effects = ["install_binary", "network", "run_build_scripts"]
+
+[[case]]
+argv = ["cargo", "install", "--version", "1.0.0", "serde-cli", "--registry", "internal"]
+action = "install"
+fields = { crate = ["serde-cli"], registry = "internal", version = "1.0.0" }
+effects = ["install_binary", "network", "run_build_scripts"]
+
+# `--list` prints the installed packages and installs nothing (commands/install.rs `exec`)
+[[case]]
+argv = ["cargo", "install", "--list"]
+action = "install"
+fields = { list = true }
+
+# `--dry-run` is unstable and not modeled
+[[case]]
+argv = ["cargo", "install", "--dry-run", "ripgrep"]
+action = "unmodeled"
+
+# install has no `--manifest-path`
+[[case]]
+argv = ["cargo", "install", "--manifest-path", "a/Cargo.toml"]
+action = "unmodeled"
+
+[[case]]
+argv = ["cargo", "uninstall", "ripgrep"]
+action = "uninstall"
+fields = { spec = ["ripgrep"] }
+effects = ["uninstall_binary"]
+
+[[case]]
+argv = ["cargo", "uninstall", "--root", "/opt/tools", "-p", "bat", "--bin", "bat"]
+action = "uninstall"
+fields = { bin = ["bat"], package = ["bat"], root = "/opt/tools" }
+effects = ["uninstall_binary"]
+
+[[case]]
+argv = ["cargo", "uninstall", "--force", "x"]
+action = "unmodeled"
+
+# ============================================================ search
+[[case]]
+argv = ["cargo", "search", "serde"]
+action = "search"
+fields = { query = ["serde"] }
+effects = ["network"]
+
+[[case]]
+argv = ["cargo", "search", "serde", "json", "--limit", "5"]
+action = "search"
+fields = { limit = "5", query = ["json", "serde"] }
+effects = ["network"]
+
+[[case]]
+argv = ["cargo", "search", "--offline", "serde"]
+action = "search"
+fields = { offline = true, query = ["serde"] }
+
+[[case]]
+argv = ["cargo", "search", "--limt", "5"]
+action = "unmodeled"
+
+# ============================================================ publish
+[[case]]
+argv = ["cargo", "publish"]
+action = "publish"
+effects = ["network", "publish_crate", "run_build_scripts", "update_lockfile"]
+
+# `--dry-run` performs every check and uploads nothing
+[[case]]
+argv = ["cargo", "publish", "--dry-run"]
+action = "publish"
+fields = { dry_run = true }
+effects = ["network", "run_build_scripts", "update_lockfile"]
+
+# `--no-verify` skips the verify build
+[[case]]
+argv = ["cargo", "publish", "-n", "--no-verify", "--locked"]
+action = "publish"
+fields = { dry_run = true, locked = true, no_verify = true }
+effects = ["network"]
+
+[[case]]
+argv = ["cargo", "publish", "--registry", "internal", "-p", "crate-a", "--allow-dirty"]
+action = "publish"
+fields = { allow_dirty = true, package = ["crate-a"], registry = "internal" }
+effects = ["network", "publish_crate", "run_build_scripts", "update_lockfile"]
+
+# `--token` is hidden and deprecated; a token on the command line is not modeled
+[[case]]
+argv = ["cargo", "publish", "--token", "secret"]
+action = "unmodeled"
+
+# ============================================================ package
+[[case]]
+argv = ["cargo", "package"]
+action = "package"
+effects = ["network", "run_build_scripts", "update_lockfile"]
+
+# `--list` prints the files and skips the verify build (ops/cargo_package `package`)
+[[case]]
+argv = ["cargo", "package", "-l"]
+action = "package"
+fields = { list = true }
+effects = ["network", "update_lockfile"]
+
+[[case]]
+argv = ["cargo", "package", "--no-verify", "--allow-dirty", "--exclude-lockfile", "--workspace"]
+action = "package"
+fields = { allow_dirty = true, exclude_lockfile = true, no_verify = true, workspace = true }
+effects = ["network", "update_lockfile"]
+
+[[case]]
+argv = ["cargo", "package", "--dry-run"]
+action = "unmodeled"
+
+# ============================================================ vendor
+[[case]]
+argv = ["cargo", "vendor"]
+action = "vendor"
+effects = ["network", "update_lockfile", "write_files"]
+
+[[case]]
+argv = ["cargo", "vendor", "third_party", "--versioned-dirs", "--no-delete"]
+action = "vendor"
+fields = { no_delete = true, path = "third_party", versioned_dirs = true }
+effects = ["network", "update_lockfile", "write_files"]
+
+# `-s, --sync` vendors for another manifest too
+[[case]]
+argv = ["cargo", "vendor", "-s", "../other/Cargo.toml", "--frozen"]
+action = "vendor"
+fields = { frozen = true, sync = ["../other/Cargo.toml"] }
+effects = ["override_config", "write_files"]
+
+# A flag that cargo vendor refuses on purpose (`unsupported`)
+[[case]]
+argv = ["cargo", "vendor", "--only-git-deps"]
+action = "unmodeled"
+
+# ============================================================ generate-lockfile
+[[case]]
+argv = ["cargo", "generate-lockfile"]
+action = "generate_lockfile"
+effects = ["network", "update_lockfile"]
+
+[[case]]
+argv = ["cargo", "generate-lockfile", "--offline", "--ignore-rust-version"]
+action = "generate_lockfile"
+fields = { ignore_rust_version = true, offline = true }
+effects = ["update_lockfile"]
+
+[[case]]
+argv = ["cargo", "generate-lockfile", "--publish-time", "2026-01-01T00:00:00Z"]
+action = "unmodeled"
+
+# ============================================================ outside the grammar
+# Commands with no action here
+[[case]]
+argv = ["cargo", "help", "build"]
+action = "unmodeled"
+
+[[case]]
+argv = ["cargo", "login"]
+action = "unmodeled"
+
+[[case]]
+argv = ["cargo", "yank", "--version", "1.0.0"]
+action = "unmodeled"
+
+[[case]]
+argv = ["cargo", "fix"]
+action = "unmodeled"
+
+[[case]]
+argv = ["cargo", "frobnicate"]
+action = "unmodeled"
+
+# Command words are case sensitive
+[[case]]
+argv = ["cargo", "BUILD"]
+action = "unmodeled"
+
+# A toolchain alone has no command
+[[case]]
+argv = ["cargo", "+nightly"]
+action = "unmodeled"
