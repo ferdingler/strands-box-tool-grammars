@@ -1,0 +1,73 @@
+# End-to-end cases for uv.grammar.toml. The harness runs each argv through the Shell of a real box,
+# where `uv` is a stub that prints its arguments and exits 0.
+#
+# The policy permits uv's project and read-only commands, forbids publishing and running a program,
+# and lets dry runs through.
+
+policy = '''
+@id("uv_actions")
+permit (principal, action in Tool::uv::Action::"*", resource);
+
+@id("no_publish")
+@description("Publishing packages is not allowed.")
+forbid (principal, action == Tool::uv::Action::"publish", resource)
+when { context.input.effects.contains(Tool::uv::Effect::"publish") };
+
+@id("no_run_program")
+@description("Running programs through uv is not allowed.")
+forbid (principal, action in [Tool::uv::Action::"run", Tool::uv::Action::"tool_run"], resource)
+when { context.input.effects.contains(Tool::uv::Effect::"run_program") };
+
+@id("no_insecure_host")
+@description("Insecure index hosts are not allowed.")
+forbid (principal, action in Tool::uv::Action::"*", resource)
+when { context.input.effects.contains(Tool::uv::Effect::"disable_tls_verification") };
+'''
+
+# A permitted read runs the program
+[[case]]
+argv = ["uv", "pip", "list", "--format=json"]
+exit = 0
+stdout = "stub-argv: [pip] [list] [--format=json]"
+
+# A permitted project command runs
+[[case]]
+argv = ["uv", "sync", "--locked"]
+exit = 0
+stdout = "stub-argv: [sync] [--locked]"
+
+# Publishing is forbidden by an effect rule
+[[case]]
+argv = ["uv", "publish", "--token", "pypi-example"]
+exit = 126
+stderr = "[policy: no_publish]: Publishing packages is not allowed."
+
+# `--dry-run` removes `publish`, so the forbid does not apply
+[[case]]
+argv = ["uv", "publish", "--dry-run"]
+exit = 0
+stdout = "stub-argv: [publish] [--dry-run]"
+
+# `uv run` names a program, so it is forbidden
+[[case]]
+argv = ["uv", "run", "python", "-c", "print(1)"]
+exit = 126
+stderr = "[policy: no_run_program]"
+
+# A global alias that disables TLS verification is forbidden on any action
+[[case]]
+argv = ["uv", "--trusted-host", "pypi.internal", "pip", "install", "requests"]
+exit = 126
+stderr = "[policy: no_insecure_host]"
+
+# An undeclared flag is `unmodeled`, and nothing permits it
+[[case]]
+argv = ["uv", "sync", "--no-frozen"]
+exit = 126
+stderr = "[default-deny]: No permit policy matched this request."
+
+# An excluded family is `unmodeled` too
+[[case]]
+argv = ["uv", "auth", "login", "pypi.org"]
+exit = 126
+stderr = "[default-deny]"
