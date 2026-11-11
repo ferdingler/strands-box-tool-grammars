@@ -1354,3 +1354,49 @@ argv = ["aws", "cloudformation", "delete-stack", "--stack-name", "web", "--role-
 action = "cloudformation_delete_stack"
 fields = { stack_name = "web", role_arn = "arn:aws:iam::123456789012:role/cfn" }
 effects = ["assume_role", "delete_data"]
+
+# --- independent verifier cases, round 2 ---
+# botocore lowercases the URL scheme, so a mixed-case http:// is plain HTTP.
+[[case]]
+argv = ["aws", "s3", "ls", "--endpoint-url", "hTtP://10.0.0.1:9000"]
+action = "s3_ls"
+fields = { endpoint_url = "hTtP://10.0.0.1:9000" }
+effects = ["insecure_tls", "override_endpoint", "read_data"]
+
+[[case]]
+argv = ["aws", "s3", "ls", "--endpoint-url=HTTPS://s3.example.test"]
+action = "s3_ls"
+fields = { endpoint_url = "HTTPS://s3.example.test" }
+effects = ["override_endpoint", "read_data"]
+
+[[case]]
+argv = ["aws", "cloudformation", "delete-stack", "--stack-name", "s", "--role-arn=arn:aws:iam::1:role/cfn"]
+action = "cloudformation_delete_stack"
+fields = { stack_name = "s", role_arn = "arn:aws:iam::1:role/cfn" }
+effects = ["assume_role", "delete_data"]
+
+# --no-execute-changeset does not remove assume_role: the change set is still made with that role.
+[[case]]
+argv = ["aws", "cloudformation", "deploy", "--template-file", "t.yaml", "--stack-name", "s", "--role-arn", "file://r.txt", "--no-execute-changeset"]
+action = "cloudformation_deploy"
+fields = { template_file = "t.yaml", stack_name = "s", role_arn = "file://r.txt", no_execute_changeset = true }
+effects = ["assume_role", "upload_local_file", "value_from_file", "write_data"]
+
+[[case]]
+argv = ["aws", "configure", "get", "profile.prod.aws_security_token"]
+action = "configure_get"
+fields = { varname = "profile.prod.aws_security_token" }
+effects = ["read_config", "read_secret"]
+
+# aws_access_key_id is an identifier, not a secret.
+[[case]]
+argv = ["aws", "configure", "get", "aws_access_key_id"]
+action = "configure_get"
+fields = { varname = "aws_access_key_id" }
+effects = ["read_config"]
+
+[[case]]
+argv = ["aws", "sts", "assume-role", "--role-arn", "arn:aws:iam::2:role/x", "--role-session-name", "s", "--profile", "p"]
+action = "sts_assume_role"
+fields = { role_arn = "arn:aws:iam::2:role/x", role_session_name = "s", profile = "p" }
+effects = ["change_account", "credentials"]
