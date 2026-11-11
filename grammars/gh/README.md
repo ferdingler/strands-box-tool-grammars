@@ -165,8 +165,10 @@ run.
 - **`gh api -X`.** Only the exact spellings `GET`/`get` and `HEAD`/`head` count as reads. A
   mixed-case method such as `Get` gets every write effect.
 - **Prompts.** On a terminal, `repo edit`, `repo create`, and `pr review` with no flags ask
-  questions, and the answers can change visibility or approve. The grammar sees only the command
-  line.
+  questions, and the answers can change visibility or approve. On a terminal,
+  `release create --draft` with no notes asks whether to publish, so the release can be published
+  although `--draft` removed `publish`. The grammar sees only the command line. An agent in a box
+  normally runs without a terminal.
 - **One name, two types.** A few fields have one name and a different type in different actions,
   because gh's own flags do: `assignee`, `comment`, `comments`, `issue`, `json`, `license`, `name`,
   `owner`, `project`, `remote`, `source`, `template`, and `visibility`. A rule over

@@ -27,8 +27,9 @@
 #   that those run), the pager, the browser for `--web`, the editor, shell aliases, and gh
 #   extensions. Box does not decide them; the effects below name the commands that start them.
 # - Prompts. On a terminal some commands with no flags ask questions (for example `repo edit` can
-#   change visibility interactively, and `pr review` can approve). The grammar sees only the
-#   command line.
+#   change visibility interactively, and `pr review` can approve). On a terminal,
+#   `release create --draft` with no notes asks "Submit?", and the answer can publish the release
+#   although `--draft` removed `publish`. The grammar sees only the command line.
 
 format  = 1
 version = 1
