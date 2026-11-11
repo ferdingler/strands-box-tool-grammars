@@ -1,0 +1,1198 @@
+# Golden cases for npm.grammar.toml, checked against npm 12.2.2.
+#
+# Sources: `npm <cmd> --help` and the npm-<cmd>(1) / npm-config(7) man pages that npm 12.2.2 ships,
+# and the v12.2.2 source: lib/commands/<cmd>.js, lib/utils/cmd-list.js (aliases),
+# workspaces/arborist/lib/arborist/reify.js (what dry-run, global, save, and package-lock-only
+# write), and nopt 10.0.1 lib/nopt-lib.js (how flags are read).
+# Expected values were written from that behaviour before the harness ran.
+
+# =============================================================================================
+# install
+# =============================================================================================
+
+# A bare install reads package.json, fetches, writes node_modules and the lockfile, and runs the
+# project's own lifecycle scripts (install.js runRootLifecycle). It does not change package.json.
+[[case]]
+argv = ["npm", "install"]
+action = "install"
+effects = ["modify_lockfile", "modify_node_modules", "network", "run_lifecycle_scripts"]
+
+# A package spec saves to package.json (save defaults to true; npm-install(1) "-S|--save").
+[[case]]
+argv = ["npm", "install", "lodash@4"]
+action = "install"
+fields = { package_spec = ["lodash@4"] }
+effects = ["modify_lockfile", "modify_node_modules", "modify_package_json", "network", "run_lifecycle_scripts"]
+
+# Every alias npm 12 documents for install (`npm install --help`: add, i, in, ins, inst, insta,
+# instal, isnt, isnta, isntal, isntall).
+[[case]]
+argv = ["npm", "i", "react"]
+action = "install"
+fields = { package_spec = ["react"] }
+effects = ["modify_lockfile", "modify_node_modules", "modify_package_json", "network", "run_lifecycle_scripts"]
+
+[[case]]
+argv = ["npm", "add", "react"]
+action = "install"
+fields = { package_spec = ["react"] }
+effects = ["modify_lockfile", "modify_node_modules", "modify_package_json", "network", "run_lifecycle_scripts"]
+
+[[case]]
+argv = ["npm", "in"]
+action = "install"
+effects = ["modify_lockfile", "modify_node_modules", "network", "run_lifecycle_scripts"]
+
+[[case]]
+argv = ["npm", "ins"]
+action = "install"
+effects = ["modify_lockfile", "modify_node_modules", "network", "run_lifecycle_scripts"]
+
+[[case]]
+argv = ["npm", "inst"]
+action = "install"
+effects = ["modify_lockfile", "modify_node_modules", "network", "run_lifecycle_scripts"]
+
+[[case]]
+argv = ["npm", "insta"]
+action = "install"
+effects = ["modify_lockfile", "modify_node_modules", "network", "run_lifecycle_scripts"]
+
+[[case]]
+argv = ["npm", "instal"]
+action = "install"
+effects = ["modify_lockfile", "modify_node_modules", "network", "run_lifecycle_scripts"]
+
+[[case]]
+argv = ["npm", "isnt"]
+action = "install"
+effects = ["modify_lockfile", "modify_node_modules", "network", "run_lifecycle_scripts"]
+
+[[case]]
+argv = ["npm", "isnta"]
+action = "install"
+effects = ["modify_lockfile", "modify_node_modules", "network", "run_lifecycle_scripts"]
+
+[[case]]
+argv = ["npm", "isntal"]
+action = "install"
+effects = ["modify_lockfile", "modify_node_modules", "network", "run_lifecycle_scripts"]
+
+[[case]]
+argv = ["npm", "isntall"]
+action = "install"
+effects = ["modify_lockfile", "modify_node_modules", "network", "run_lifecycle_scripts"]
+
+# --ignore-scripts removes run_lifecycle_scripts (npm-config(7) "ignore-scripts").
+[[case]]
+argv = ["npm", "ci", "--ignore-scripts"]
+action = "ci"
+fields = { ignore_scripts = true }
+effects = ["modify_node_modules", "network"]
+
+[[case]]
+argv = ["npm", "install", "--ignore-scripts", "left-pad"]
+action = "install"
+fields = { ignore_scripts = true, package_spec = ["left-pad"] }
+effects = ["modify_lockfile", "modify_node_modules", "modify_package_json", "network"]
+
+# -g installs into the global prefix: no project lockfile or package.json is saved
+# (reify.js `_saveIdealTree` skips when global).
+[[case]]
+argv = ["npm", "install", "-g", "typescript"]
+action = "install"
+fields = { global = true, package_spec = ["typescript"] }
+effects = ["global_install", "modify_node_modules", "network", "run_lifecycle_scripts"]
+
+# The long spelling, after the operand (nopt reads options anywhere).
+[[case]]
+argv = ["npm", "install", "typescript", "--global"]
+action = "install"
+fields = { global = true, package_spec = ["typescript"] }
+effects = ["global_install", "modify_node_modules", "network", "run_lifecycle_scripts"]
+
+# Short flags cluster: `-DE` is `--save-dev --save-exact` (nopt expands a cluster of single-char
+# shorthands).
+[[case]]
+argv = ["npm", "i", "-DE", "jest"]
+action = "install"
+fields = { save_dev = true, save_exact = true, package_spec = ["jest"] }
+effects = ["modify_lockfile", "modify_node_modules", "modify_package_json", "network", "run_lifecycle_scripts"]
+
+# `-gS` mixes global and save; global still removes the project writes.
+[[case]]
+argv = ["npm", "i", "-gS", "pnpm"]
+action = "install"
+fields = { global = true, save = true, package_spec = ["pnpm"] }
+effects = ["global_install", "modify_node_modules", "network", "run_lifecycle_scripts"]
+
+# --dry-run writes nothing, but a bare install still runs the root lifecycle scripts:
+# runRootLifecycle in install.js does not check dry-run.
+[[case]]
+argv = ["npm", "install", "--dry-run"]
+action = "install"
+fields = { dry_run = true }
+effects = ["network", "run_lifecycle_scripts"]
+
+[[case]]
+argv = ["npm", "install", "--dry-run", "--ignore-scripts", "express"]
+action = "install"
+fields = { dry_run = true, ignore_scripts = true, package_spec = ["express"] }
+effects = ["network"]
+
+# --no-save writes neither package.json nor the lockfile.
+[[case]]
+argv = ["npm", "install", "--no-save", "chalk"]
+action = "install"
+fields = { no_save = true, package_spec = ["chalk"] }
+effects = ["modify_node_modules", "network", "run_lifecycle_scripts"]
+
+# --no-package-lock skips the lockfile; --package-lock-only skips node_modules.
+[[case]]
+argv = ["npm", "install", "--no-package-lock"]
+action = "install"
+fields = { no_package_lock = true }
+effects = ["modify_node_modules", "network", "run_lifecycle_scripts"]
+
+[[case]]
+argv = ["npm", "install", "--package-lock-only"]
+action = "install"
+fields = { package_lock_only = true }
+effects = ["modify_lockfile", "network", "run_lifecycle_scripts"]
+
+# --offline makes no network request (npm-config(7) "offline").
+[[case]]
+argv = ["npm", "install", "--offline"]
+action = "install"
+fields = { offline = true }
+effects = ["modify_lockfile", "modify_node_modules", "run_lifecycle_scripts"]
+
+# --dangerously-allow-all-scripts and --allow-scripts bypass the allowScripts policy; --ignore-scripts
+# still takes precedence (npm-config(7)), and in the grammar a remove wins.
+[[case]]
+argv = ["npm", "install", "--dangerously-allow-all-scripts"]
+action = "install"
+fields = { dangerously_allow_all_scripts = true }
+effects = ["bypass_script_policy", "modify_lockfile", "modify_node_modules", "network", "run_lifecycle_scripts"]
+
+[[case]]
+argv = ["npm", "install", "-g", "esbuild", "--allow-scripts=esbuild", "--allow-scripts", "sharp"]
+action = "install"
+fields = { global = true, package_spec = ["esbuild"], allow_scripts = ["esbuild", "sharp"] }
+effects = ["bypass_script_policy", "global_install", "modify_node_modules", "network", "run_lifecycle_scripts"]
+
+[[case]]
+argv = ["npm", "install", "--dangerously-allow-all-scripts", "--ignore-scripts"]
+action = "install"
+fields = { dangerously_allow_all_scripts = true, ignore_scripts = true }
+effects = ["bypass_script_policy", "modify_lockfile", "modify_node_modules", "network"]
+
+# A repeated option collects a set; `--x=v` and `--x v` are the same.
+[[case]]
+argv = ["npm", "install", "--omit=dev", "--omit", "optional"]
+action = "install"
+fields = { omit = ["dev", "optional"] }
+effects = ["modify_lockfile", "modify_node_modules", "network", "run_lifecycle_scripts"]
+
+# --force adds force (npm-config(7) "force").
+[[case]]
+argv = ["npm", "install", "--force", "--legacy-peer-deps"]
+action = "install"
+fields = { force = true, legacy_peer_deps = true }
+effects = ["force", "modify_lockfile", "modify_node_modules", "network", "run_lifecycle_scripts"]
+
+# Workspaces: --workspace takes a value and repeats.
+[[case]]
+argv = ["npm", "install", "--workspace", "a", "--workspace=b", "zod"]
+action = "install"
+fields = { workspace = ["a", "b"], package_spec = ["zod"] }
+effects = ["modify_lockfile", "modify_node_modules", "modify_package_json", "network", "run_lifecycle_scripts"]
+
+# `-w` takes a value, so it is not modeled (npm expands `-wg` as `-w -g`); use --workspace.
+[[case]]
+argv = ["npm", "install", "-w", "a"]
+action = "unmodeled"
+
+# --registry is an anywhere global: before or after the command word.
+[[case]]
+argv = ["npm", "--registry", "https://registry.example.com/", "install"]
+action = "install"
+fields = { registry = "https://registry.example.com/" }
+effects = ["modify_lockfile", "modify_node_modules", "network", "override_registry", "run_lifecycle_scripts"]
+
+[[case]]
+argv = ["npm", "install", "--registry=https://registry.example.com/", "lodash"]
+action = "install"
+fields = { registry = "https://registry.example.com/", package_spec = ["lodash"] }
+effects = ["modify_lockfile", "modify_node_modules", "modify_package_json", "network", "override_registry", "run_lifecycle_scripts"]
+
+# An anywhere global given twice is two values of a non-repeated option: unmodeled.
+[[case]]
+argv = ["npm", "--registry", "a", "install", "--registry", "b"]
+action = "unmodeled"
+
+# --prefix and --userconfig.
+[[case]]
+argv = ["npm", "--prefix", "packages/web", "install"]
+action = "install"
+fields = { prefix = "packages/web" }
+effects = ["modify_lockfile", "modify_node_modules", "network", "override_prefix", "run_lifecycle_scripts"]
+
+[[case]]
+argv = ["npm", "install", "--userconfig", "/tmp/npmrc"]
+action = "install"
+fields = { userconfig = "/tmp/npmrc" }
+effects = ["modify_lockfile", "modify_node_modules", "network", "override_config", "run_lifecycle_scripts"]
+
+# -s / --silent / -q / --loglevel are plain globals; `-s` clusters with an action flag.
+[[case]]
+argv = ["npm", "-s", "install", "--loglevel", "warn"]
+action = "install"
+fields = { silent = true, loglevel = "warn" }
+effects = ["modify_lockfile", "modify_node_modules", "network", "run_lifecycle_scripts"]
+
+# nopt: a boolean flag takes a following `true`/`false` as its value. `--ignore-scripts false`
+# means "run scripts", so the operand `false` adds ambiguous_argv.
+[[case]]
+argv = ["npm", "install", "--ignore-scripts", "false"]
+action = "install"
+fields = { ignore_scripts = true, package_spec = ["false"] }
+effects = ["ambiguous_argv", "modify_lockfile", "modify_node_modules", "modify_package_json", "network"]
+
+# nopt: a string option followed by a flag-like word gets "" and the word is read as a flag.
+[[case]]
+argv = ["npm", "install", "--registry", "--global"]
+action = "install"
+fields = { registry = "--global" }
+effects = ["ambiguous_argv", "modify_lockfile", "modify_node_modules", "network", "override_registry", "run_lifecycle_scripts"]
+
+# `--` ends options: a word after it is a package spec.
+[[case]]
+argv = ["npm", "install", "--", "-weird-name"]
+action = "install"
+fields = { package_spec = ["-weird-name"] }
+effects = ["modify_lockfile", "modify_node_modules", "modify_package_json", "network", "run_lifecycle_scripts"]
+
+# Unmodeled install lines: an undeclared flag, an abbreviation (npm 12 errors on abbreviated
+# flags), `--ignore-scripts=false`, a negation the grammar does not declare, help, -v (npm reads it as
+# --version), and `--location=global` (another spelling of -g).
+[[case]]
+argv = ["npm", "install", "--foo"]
+action = "unmodeled"
+
+[[case]]
+argv = ["npm", "install", "--ignore-script"]
+action = "unmodeled"
+
+[[case]]
+argv = ["npm", "install", "--ignore-scripts=false"]
+action = "unmodeled"
+
+[[case]]
+argv = ["npm", "install", "--no-ignore-scripts"]
+action = "unmodeled"
+
+[[case]]
+argv = ["npm", "install", "--help"]
+action = "unmodeled"
+
+[[case]]
+argv = ["npm", "install", "-h"]
+action = "unmodeled"
+
+[[case]]
+argv = ["npm", "install", "-v"]
+action = "unmodeled"
+
+[[case]]
+argv = ["npm", "install", "--location=global", "tsx"]
+action = "unmodeled"
+
+# An action flag before the command word is not a global option.
+[[case]]
+argv = ["npm", "--ignore-scripts", "install"]
+action = "unmodeled"
+
+# Command words are case sensitive here. (npm turns camelCase into kebab-case, but an
+# all-uppercase word is no npm command.)
+[[case]]
+argv = ["npm", "INSTALL"]
+action = "unmodeled"
+
+# =============================================================================================
+# ci
+# =============================================================================================
+
+# ci never saves package.json or the lockfile (ci.js `save: false`).
+[[case]]
+argv = ["npm", "ci"]
+action = "ci"
+effects = ["modify_node_modules", "network", "run_lifecycle_scripts"]
+
+# Aliases (cmd-list.js and `npm ci --help`).
+[[case]]
+argv = ["npm", "clean-install"]
+action = "ci"
+effects = ["modify_node_modules", "network", "run_lifecycle_scripts"]
+
+[[case]]
+argv = ["npm", "ic"]
+action = "ci"
+effects = ["modify_node_modules", "network", "run_lifecycle_scripts"]
+
+[[case]]
+argv = ["npm", "install-clean"]
+action = "ci"
+effects = ["modify_node_modules", "network", "run_lifecycle_scripts"]
+
+[[case]]
+argv = ["npm", "isntall-clean"]
+action = "ci"
+effects = ["modify_node_modules", "network", "run_lifecycle_scripts"]
+
+# `install clean` (two words) is install with the package `clean`; only `install-clean` is ci.
+[[case]]
+argv = ["npm", "install", "clean"]
+action = "install"
+fields = { package_spec = ["clean"] }
+effects = ["modify_lockfile", "modify_node_modules", "modify_package_json", "network", "run_lifecycle_scripts"]
+
+# ci --dry-run still runs root scripts (ci.js checks only ignore-scripts).
+[[case]]
+argv = ["npm", "ci", "--dry-run"]
+action = "ci"
+fields = { dry_run = true }
+effects = ["network", "run_lifecycle_scripts"]
+
+[[case]]
+argv = ["npm", "ci", "--omit=dev", "--prefer-offline", "--no-audit", "--no-fund"]
+action = "ci"
+fields = { omit = ["dev"], prefer_offline = true, no_audit = true, no_fund = true }
+effects = ["modify_node_modules", "network", "run_lifecycle_scripts"]
+
+# ci takes no operand; `--ignore-scripts false` leaves `false` over, so unmodeled.
+[[case]]
+argv = ["npm", "ci", "--ignore-scripts", "false"]
+action = "unmodeled"
+
+[[case]]
+argv = ["npm", "ci", "lodash"]
+action = "unmodeled"
+
+# ci has no -g (npm errors: ECIGLOBAL).
+[[case]]
+argv = ["npm", "ci", "-g"]
+action = "unmodeled"
+
+# =============================================================================================
+# uninstall
+# =============================================================================================
+
+[[case]]
+argv = ["npm", "uninstall", "lodash"]
+action = "uninstall"
+fields = { pkg = ["lodash"] }
+effects = ["modify_lockfile", "modify_node_modules", "modify_package_json", "network", "run_lifecycle_scripts"]
+
+# Aliases: unlink, remove, rm, r, un.
+[[case]]
+argv = ["npm", "rm", "a", "b"]
+action = "uninstall"
+fields = { pkg = ["a", "b"] }
+effects = ["modify_lockfile", "modify_node_modules", "modify_package_json", "network", "run_lifecycle_scripts"]
+
+[[case]]
+argv = ["npm", "un", "a"]
+action = "uninstall"
+fields = { pkg = ["a"] }
+effects = ["modify_lockfile", "modify_node_modules", "modify_package_json", "network", "run_lifecycle_scripts"]
+
+[[case]]
+argv = ["npm", "r", "a"]
+action = "uninstall"
+fields = { pkg = ["a"] }
+effects = ["modify_lockfile", "modify_node_modules", "modify_package_json", "network", "run_lifecycle_scripts"]
+
+[[case]]
+argv = ["npm", "remove", "a"]
+action = "uninstall"
+fields = { pkg = ["a"] }
+effects = ["modify_lockfile", "modify_node_modules", "modify_package_json", "network", "run_lifecycle_scripts"]
+
+[[case]]
+argv = ["npm", "unlink", "a"]
+action = "uninstall"
+fields = { pkg = ["a"] }
+effects = ["modify_lockfile", "modify_node_modules", "modify_package_json", "network", "run_lifecycle_scripts"]
+
+[[case]]
+argv = ["npm", "uninstall", "-g", "typescript"]
+action = "uninstall"
+fields = { global = true, pkg = ["typescript"] }
+effects = ["global_install", "modify_node_modules", "network", "run_lifecycle_scripts"]
+
+[[case]]
+argv = ["npm", "uninstall", "--no-save", "x"]
+action = "uninstall"
+fields = { no_save = true, pkg = ["x"] }
+effects = ["modify_node_modules", "network", "run_lifecycle_scripts"]
+
+# Uninstall needs a package.
+[[case]]
+argv = ["npm", "uninstall"]
+action = "unmodeled"
+
+[[case]]
+argv = ["npm", "uninstall", "--dry-run", "x"]
+action = "unmodeled"
+
+# =============================================================================================
+# update
+# =============================================================================================
+
+[[case]]
+argv = ["npm", "update"]
+action = "update"
+effects = ["modify_lockfile", "modify_node_modules", "network", "run_lifecycle_scripts"]
+
+# Aliases: u, up, upgrade, udpate.
+[[case]]
+argv = ["npm", "up", "react"]
+action = "update"
+fields = { pkg = ["react"] }
+effects = ["modify_lockfile", "modify_node_modules", "network", "run_lifecycle_scripts"]
+
+[[case]]
+argv = ["npm", "u"]
+action = "update"
+effects = ["modify_lockfile", "modify_node_modules", "network", "run_lifecycle_scripts"]
+
+[[case]]
+argv = ["npm", "upgrade"]
+action = "update"
+effects = ["modify_lockfile", "modify_node_modules", "network", "run_lifecycle_scripts"]
+
+[[case]]
+argv = ["npm", "udpate"]
+action = "update"
+effects = ["modify_lockfile", "modify_node_modules", "network", "run_lifecycle_scripts"]
+
+# update saves to package.json only with --save.
+[[case]]
+argv = ["npm", "update", "--save"]
+action = "update"
+fields = { save = true }
+effects = ["modify_lockfile", "modify_node_modules", "modify_package_json", "network", "run_lifecycle_scripts"]
+
+[[case]]
+argv = ["npm", "update", "-g"]
+action = "update"
+fields = { global = true }
+effects = ["global_install", "modify_node_modules", "network", "run_lifecycle_scripts"]
+
+[[case]]
+argv = ["npm", "update", "--dry-run"]
+action = "update"
+fields = { dry_run = true }
+effects = ["network"]
+
+[[case]]
+argv = ["npm", "update", "--save-dev"]
+action = "unmodeled"
+
+# =============================================================================================
+# dedupe, prune
+# =============================================================================================
+
+[[case]]
+argv = ["npm", "dedupe"]
+action = "dedupe"
+effects = ["modify_lockfile", "modify_node_modules", "network", "run_lifecycle_scripts"]
+
+[[case]]
+argv = ["npm", "ddp", "--dry-run"]
+action = "dedupe"
+fields = { dry_run = true }
+effects = ["network"]
+
+[[case]]
+argv = ["npm", "dedupe", "lodash"]
+action = "unmodeled"
+
+[[case]]
+argv = ["npm", "prune", "--omit=dev"]
+action = "prune"
+fields = { omit = ["dev"] }
+effects = ["modify_lockfile", "modify_node_modules", "network", "run_lifecycle_scripts"]
+
+[[case]]
+argv = ["npm", "prune", "--dry-run", "--json"]
+action = "prune"
+fields = { dry_run = true, json = true }
+effects = ["network"]
+
+[[case]]
+argv = ["npm", "prune", "--ignore-scripts", "left-pad"]
+action = "prune"
+fields = { ignore_scripts = true, pkg = ["left-pad"] }
+effects = ["modify_lockfile", "modify_node_modules", "network"]
+
+[[case]]
+argv = ["npm", "prune", "--production"]
+action = "unmodeled"
+
+# =============================================================================================
+# link
+# =============================================================================================
+
+# `npm link` with no argument links this folder into the global prefix.
+[[case]]
+argv = ["npm", "link"]
+action = "link"
+effects = ["global_install", "modify_node_modules", "network", "run_lifecycle_scripts"]
+
+[[case]]
+argv = ["npm", "ln", "my-lib"]
+action = "link"
+fields = { package_spec = ["my-lib"] }
+effects = ["global_install", "modify_node_modules", "network", "run_lifecycle_scripts"]
+
+# link saves only with an explicit --save / --save-* (link.js).
+[[case]]
+argv = ["npm", "link", "-D", "my-lib"]
+action = "link"
+fields = { save_dev = true, package_spec = ["my-lib"] }
+effects = ["global_install", "modify_lockfile", "modify_node_modules", "modify_package_json", "network", "run_lifecycle_scripts"]
+
+[[case]]
+argv = ["npm", "link", "--dry-run"]
+action = "link"
+fields = { dry_run = true }
+effects = ["global_install", "network"]
+
+# link -g is an error in npm ("link should never be --global").
+[[case]]
+argv = ["npm", "link", "-g"]
+action = "unmodeled"
+
+# =============================================================================================
+# run, run-script
+# =============================================================================================
+
+# `npm run` alone lists the scripts and runs nothing.
+[[case]]
+argv = ["npm", "run"]
+action = "run"
+
+[[case]]
+argv = ["npm", "run", "build"]
+action = "run"
+fields = { command = "build" }
+effects = ["run_program"]
+
+# Aliases: run-script, rum, urn.
+[[case]]
+argv = ["npm", "run-script", "lint"]
+action = "run"
+fields = { command = "lint" }
+effects = ["run_program"]
+
+[[case]]
+argv = ["npm", "rum", "lint"]
+action = "run"
+fields = { command = "lint" }
+effects = ["run_program"]
+
+[[case]]
+argv = ["npm", "urn", "lint"]
+action = "run"
+fields = { command = "lint" }
+effects = ["run_program"]
+
+# Words after `--` go to the script, flags included.
+[[case]]
+argv = ["npm", "run", "test", "--", "--watch", "-t", "x"]
+action = "run"
+fields = { command = "test", script_args = ["--watch", "-t", "x"] }
+effects = ["run_program"]
+
+# `npm run -- build` runs `build` too (nopt puts it in the positional args), so script_args alone
+# still adds run_program.
+[[case]]
+argv = ["npm", "run", "--", "build"]
+action = "run"
+fields = { script_args = ["build"] }
+effects = ["run_program"]
+
+# --ignore-scripts only skips pre/post scripts; the named script still runs (run.js).
+[[case]]
+argv = ["npm", "run", "build", "--ignore-scripts"]
+action = "run"
+fields = { command = "build", ignore_scripts = true }
+effects = ["run_program"]
+
+[[case]]
+argv = ["npm", "run", "--workspace=api", "--if-present", "build"]
+action = "run"
+fields = { workspace = ["api"], if_present = true, command = "build" }
+effects = ["run_program"]
+
+[[case]]
+argv = ["npm", "run", "build", "--script-shell", "/bin/bash"]
+action = "run"
+fields = { command = "build", script_shell = "/bin/bash" }
+effects = ["run_program"]
+
+# Without `--`, npm 12 reads `--watch` as its own (unknown) option: unmodeled. A second positional
+# word is also unmodeled.
+[[case]]
+argv = ["npm", "run", "build", "--watch"]
+action = "unmodeled"
+
+[[case]]
+argv = ["npm", "run", "build", "extra"]
+action = "unmodeled"
+
+[[case]]
+argv = ["npm", "run", "-w", "api", "build"]
+action = "unmodeled"
+
+# =============================================================================================
+# test, start, stop, restart
+# =============================================================================================
+
+[[case]]
+argv = ["npm", "test"]
+action = "test"
+effects = ["run_program"]
+
+# Aliases: tst, t.
+[[case]]
+argv = ["npm", "t"]
+action = "test"
+effects = ["run_program"]
+
+[[case]]
+argv = ["npm", "tst", "--", "--coverage"]
+action = "test"
+fields = { script_args = ["--coverage"] }
+effects = ["run_program"]
+
+[[case]]
+argv = ["npm", "test", "--ignore-scripts"]
+action = "test"
+fields = { ignore_scripts = true }
+effects = ["run_program"]
+
+[[case]]
+argv = ["npm", "start"]
+action = "start"
+effects = ["run_program"]
+
+[[case]]
+argv = ["npm", "start", "--", "--port", "3000"]
+action = "start"
+fields = { script_args = ["--port", "3000"] }
+effects = ["run_program"]
+
+[[case]]
+argv = ["npm", "stop"]
+action = "stop"
+effects = ["run_program"]
+
+[[case]]
+argv = ["npm", "restart"]
+action = "restart"
+effects = ["run_program"]
+
+# npm passes a positional word to the test script; the grammar only reads words after `--`.
+[[case]]
+argv = ["npm", "test", "unit"]
+action = "unmodeled"
+
+[[case]]
+argv = ["npm", "start", "--watch"]
+action = "unmodeled"
+
+# =============================================================================================
+# exec
+# =============================================================================================
+
+[[case]]
+argv = ["npm", "exec", "--", "eslint", "--fix", "."]
+action = "exec"
+fields = { command = ["eslint", "--fix", "."] }
+effects = ["network", "run_program"]
+
+# Alias x; --package repeats; -y skips the install prompt.
+[[case]]
+argv = ["npm", "x", "-y", "--package=typescript", "--package", "tsx", "--", "tsc", "--version"]
+action = "exec"
+fields = { yes = true, package = ["tsx", "typescript"], command = ["--version", "tsc"] }
+effects = ["network", "run_program"]
+
+[[case]]
+argv = ["npm", "exec", "--call", "echo hi"]
+action = "exec"
+fields = { call = "echo hi" }
+effects = ["network", "run_program"]
+
+[[case]]
+argv = ["npm", "exec", "--allow-scripts=esbuild", "--", "esbuild", "--help"]
+action = "exec"
+fields = { allow_scripts = ["esbuild"], command = ["--help", "esbuild"] }
+effects = ["bypass_script_policy", "network", "run_lifecycle_scripts", "run_program"]
+
+# Without `--`, npm reads `--fix` as an npm option, not as the program's.
+[[case]]
+argv = ["npm", "exec", "eslint", "--fix"]
+action = "unmodeled"
+
+# -c takes a value, so only --call is modeled.
+[[case]]
+argv = ["npm", "exec", "-c", "echo hi"]
+action = "unmodeled"
+
+# =============================================================================================
+# ls, outdated, view
+# =============================================================================================
+
+[[case]]
+argv = ["npm", "ls"]
+action = "ls"
+
+[[case]]
+argv = ["npm", "list", "--all", "--json"]
+action = "ls"
+fields = { all = true, json = true }
+
+[[case]]
+argv = ["npm", "ls", "-gp", "--depth=0"]
+action = "ls"
+fields = { global = true, parseable = true, depth = "0" }
+
+[[case]]
+argv = ["npm", "ls", "react", "react-dom", "-l"]
+action = "ls"
+fields = { package_spec = ["react", "react-dom"], long = true }
+
+[[case]]
+argv = ["npm", "ls", "--depth"]
+action = "unmodeled"
+
+[[case]]
+argv = ["npm", "outdated"]
+action = "outdated"
+effects = ["network"]
+
+[[case]]
+argv = ["npm", "outdated", "--json", "-l", "react"]
+action = "outdated"
+fields = { json = true, long = true, package_spec = ["react"] }
+effects = ["network"]
+
+[[case]]
+argv = ["npm", "outdated", "--depth", "1"]
+action = "unmodeled"
+
+[[case]]
+argv = ["npm", "view", "react", "version"]
+action = "view"
+fields = { package_spec = "react", field = ["version"] }
+effects = ["network"]
+
+# Aliases: info, show, v.
+[[case]]
+argv = ["npm", "info", "react", "versions", "--json"]
+action = "view"
+fields = { package_spec = "react", field = ["versions"], json = true }
+effects = ["network"]
+
+[[case]]
+argv = ["npm", "show", "lodash"]
+action = "view"
+fields = { package_spec = "lodash" }
+effects = ["network"]
+
+[[case]]
+argv = ["npm", "v", "lodash", "dist.tarball", "maintainers"]
+action = "view"
+fields = { package_spec = "lodash", field = ["dist.tarball", "maintainers"] }
+effects = ["network"]
+
+[[case]]
+argv = ["npm", "view", "lodash", "--registry", "https://r.example/"]
+action = "view"
+fields = { package_spec = "lodash", registry = "https://r.example/" }
+effects = ["network", "override_registry"]
+
+[[case]]
+argv = ["npm", "view", "--jsn", "lodash"]
+action = "unmodeled"
+
+# =============================================================================================
+# audit
+# =============================================================================================
+
+[[case]]
+argv = ["npm", "audit"]
+action = "audit"
+effects = ["network"]
+
+[[case]]
+argv = ["npm", "audit", "--audit-level=high", "--omit", "dev"]
+action = "audit"
+fields = { audit_level = "high", omit = ["dev"] }
+effects = ["network"]
+
+# `audit fix` is the longer spelling and wins over `audit`.
+[[case]]
+argv = ["npm", "audit", "fix"]
+action = "audit_fix"
+effects = ["modify_lockfile", "modify_node_modules", "modify_package_json", "network", "run_lifecycle_scripts"]
+
+[[case]]
+argv = ["npm", "audit", "fix", "--dry-run"]
+action = "audit_fix"
+fields = { dry_run = true }
+effects = ["network"]
+
+[[case]]
+argv = ["npm", "audit", "fix", "-f"]
+action = "audit_fix"
+fields = { force = true }
+effects = ["force", "modify_lockfile", "modify_node_modules", "modify_package_json", "network", "run_lifecycle_scripts"]
+
+[[case]]
+argv = ["npm", "audit", "fix", "--package-lock-only", "--ignore-scripts"]
+action = "audit_fix"
+fields = { package_lock_only = true, ignore_scripts = true }
+effects = ["modify_lockfile", "modify_package_json", "network"]
+
+[[case]]
+argv = ["npm", "audit", "signatures"]
+action = "audit_signatures"
+effects = ["network"]
+
+# `--dry-run` is not declared on a bare audit (it only matters for fix).
+[[case]]
+argv = ["npm", "audit", "--dry-run"]
+action = "unmodeled"
+
+[[case]]
+argv = ["npm", "audit", "fixx"]
+action = "unmodeled"
+
+# =============================================================================================
+# pack, publish
+# =============================================================================================
+
+[[case]]
+argv = ["npm", "pack"]
+action = "pack"
+effects = ["run_lifecycle_scripts"]
+
+# pack --dry-run still runs prepack/prepare/postpack (libnpmpack checks only ignoreScripts).
+[[case]]
+argv = ["npm", "pack", "--dry-run", "--json"]
+action = "pack"
+fields = { dry_run = true, json = true }
+effects = ["run_lifecycle_scripts"]
+
+[[case]]
+argv = ["npm", "pack", "lodash@4", "--pack-destination", "dist", "--ignore-scripts"]
+action = "pack"
+fields = { package_spec = ["lodash@4"], pack_destination = "dist", ignore_scripts = true }
+effects = ["network"]
+
+[[case]]
+argv = ["npm", "publish"]
+action = "publish"
+effects = ["network", "publish", "run_lifecycle_scripts"]
+
+# --dry-run removes publish, but npm still contacts the registry and runs the scripts.
+[[case]]
+argv = ["npm", "publish", "--dry-run"]
+action = "publish"
+fields = { dry_run = true }
+effects = ["network", "run_lifecycle_scripts"]
+
+# --access public adds make_public (`--access=v` and `--access v`).
+[[case]]
+argv = ["npm", "publish", "--access", "public"]
+action = "publish"
+fields = { access = "public" }
+effects = ["make_public", "network", "publish", "run_lifecycle_scripts"]
+
+[[case]]
+argv = ["npm", "publish", "--access=restricted", "--tag", "beta"]
+action = "publish"
+fields = { access = "restricted", tag = "beta" }
+effects = ["network", "publish", "run_lifecycle_scripts"]
+
+[[case]]
+argv = ["npm", "publish", "--access=public", "--dry-run"]
+action = "publish"
+fields = { access = "public", dry_run = true }
+effects = ["network", "run_lifecycle_scripts"]
+
+[[case]]
+argv = ["npm", "publish", "./pkg.tgz", "--provenance", "--ignore-scripts"]
+action = "publish"
+fields = { package_spec = "./pkg.tgz", provenance = true, ignore_scripts = true }
+effects = ["network", "publish"]
+
+# nopt: `--tag --access=public` gives tag "" and reads --access=public, so the value adds
+# ambiguous_argv.
+[[case]]
+argv = ["npm", "publish", "--tag", "--access=public"]
+action = "publish"
+fields = { tag = "--access=public" }
+effects = ["ambiguous_argv", "network", "publish", "run_lifecycle_scripts"]
+
+# nopt: `--dry-run false` is dry-run=false, a real publish; the operand `false` flags it.
+[[case]]
+argv = ["npm", "publish", "--dry-run", "false"]
+action = "publish"
+fields = { dry_run = true, package_spec = "false" }
+effects = ["ambiguous_argv", "network", "run_lifecycle_scripts"]
+
+[[case]]
+argv = ["npm", "--registry", "https://npm.example.com/", "publish"]
+action = "publish"
+fields = { registry = "https://npm.example.com/" }
+effects = ["network", "override_registry", "publish", "run_lifecycle_scripts"]
+
+# --otp is not modeled; two specs are unmodeled.
+[[case]]
+argv = ["npm", "publish", "--otp", "123456"]
+action = "unmodeled"
+
+[[case]]
+argv = ["npm", "publish", "a", "b"]
+action = "unmodeled"
+
+# =============================================================================================
+# version
+# =============================================================================================
+
+# With no argument it prints the versions.
+[[case]]
+argv = ["npm", "version"]
+action = "version"
+
+[[case]]
+argv = ["npm", "version", "patch"]
+action = "version"
+fields = { newversion = "patch" }
+effects = ["git_commit", "modify_lockfile", "modify_package_json", "run_lifecycle_scripts"]
+
+[[case]]
+argv = ["npm", "verison", "1.2.3", "--no-git-tag-version", "--ignore-scripts"]
+action = "version"
+fields = { newversion = "1.2.3", no_git_tag_version = true, ignore_scripts = true }
+effects = ["modify_lockfile", "modify_package_json"]
+
+[[case]]
+argv = ["npm", "version", "prerelease", "--preid=rc"]
+action = "version"
+fields = { newversion = "prerelease", preid = "rc" }
+effects = ["git_commit", "modify_lockfile", "modify_package_json", "run_lifecycle_scripts"]
+
+[[case]]
+argv = ["npm", "version", "-m", "v%s"]
+action = "unmodeled"
+
+# =============================================================================================
+# init
+# =============================================================================================
+
+[[case]]
+argv = ["npm", "init", "-y"]
+action = "init"
+fields = { yes = true }
+effects = ["modify_package_json"]
+
+# `npm init vite my-app` runs create-vite with `my-app`.
+[[case]]
+argv = ["npm", "create", "vite", "my-app"]
+action = "init"
+fields = { package_spec = "vite", initializer_args = ["my-app"] }
+effects = ["modify_package_json", "network", "run_program"]
+
+[[case]]
+argv = ["npm", "init", "vite@latest", "my-app", "--", "--template", "react"]
+action = "init"
+fields = { package_spec = "vite@latest", initializer_args = ["--template", "my-app", "react"] }
+effects = ["modify_package_json", "network", "run_program"]
+
+[[case]]
+argv = ["npm", "innit", "--scope=@acme", "--init-license", "MIT", "-y"]
+action = "init"
+fields = { scope = "@acme", init_license = "MIT", yes = true }
+effects = ["modify_package_json"]
+
+[[case]]
+argv = ["npm", "init", "--template", "react"]
+action = "unmodeled"
+
+# =============================================================================================
+# config, get, set
+# =============================================================================================
+
+[[case]]
+argv = ["npm", "config", "get", "registry"]
+action = "config_get"
+fields = { key = ["registry"] }
+
+[[case]]
+argv = ["npm", "c", "get"]
+action = "config_get"
+
+[[case]]
+argv = ["npm", "get", "registry", "cache"]
+action = "get"
+fields = { key = ["cache", "registry"] }
+
+[[case]]
+argv = ["npm", "config", "list", "-l", "--json"]
+action = "config_list"
+fields = { long = true, json = true }
+
+[[case]]
+argv = ["npm", "config", "ls"]
+action = "config_list"
+
+[[case]]
+argv = ["npm", "c", "ls"]
+action = "config_list"
+
+[[case]]
+argv = ["npm", "config", "set", "save-exact=true"]
+action = "config_set"
+fields = { entry = ["save-exact=true"] }
+effects = ["override_config"]
+
+# Setting the registry adds override_registry, in `k=v` and `k v` form and for a scope registry.
+[[case]]
+argv = ["npm", "config", "set", "registry=https://r.example/"]
+action = "config_set"
+fields = { entry = ["registry=https://r.example/"] }
+effects = ["override_config", "override_registry"]
+
+[[case]]
+argv = ["npm", "c", "set", "@acme:registry", "https://r.example/", "-g"]
+action = "config_set"
+fields = { entry = ["@acme:registry", "https://r.example/"], global = true }
+effects = ["override_config", "override_registry"]
+
+[[case]]
+argv = ["npm", "set", "registry", "https://r.example/", "--location=project"]
+action = "set"
+fields = { entry = ["registry", "https://r.example/"], location = "project" }
+effects = ["override_config", "override_registry"]
+
+[[case]]
+argv = ["npm", "config", "delete", "registry"]
+action = "config_delete"
+fields = { key = ["registry"] }
+effects = ["override_config"]
+
+[[case]]
+argv = ["npm", "config", "rm", "a"]
+action = "config_delete"
+fields = { key = ["a"] }
+effects = ["override_config"]
+
+[[case]]
+argv = ["npm", "c", "del", "a"]
+action = "config_delete"
+fields = { key = ["a"] }
+effects = ["override_config"]
+
+# config set needs an entry; `config edit` is not modeled; `-L` is not modeled.
+[[case]]
+argv = ["npm", "config", "set"]
+action = "unmodeled"
+
+[[case]]
+argv = ["npm", "config", "edit"]
+action = "unmodeled"
+
+[[case]]
+argv = ["npm", "config", "set", "-L", "user", "a=b"]
+action = "unmodeled"
+
+[[case]]
+argv = ["npm", "config"]
+action = "unmodeled"
+
+# =============================================================================================
+# cache
+# =============================================================================================
+
+[[case]]
+argv = ["npm", "cache", "clean", "--force"]
+action = "cache_clean"
+fields = { force = true }
+effects = ["delete_cache", "force"]
+
+[[case]]
+argv = ["npm", "cache", "rm", "make-fetch-happen:request-cache:x"]
+action = "cache_clean"
+fields = { key = ["make-fetch-happen:request-cache:x"] }
+effects = ["delete_cache"]
+
+[[case]]
+argv = ["npm", "cache", "clear", "-f", "--cache", "/tmp/c"]
+action = "cache_clean"
+fields = { force = true, cache = "/tmp/c" }
+effects = ["delete_cache", "force"]
+
+[[case]]
+argv = ["npm", "cache", "verify"]
+action = "cache_verify"
+
+[[case]]
+argv = ["npm", "cache", "check"]
+action = "cache_verify"
+
+[[case]]
+argv = ["npm", "cache", "ls"]
+action = "cache_ls"
+
+[[case]]
+argv = ["npm", "cache", "add", "lodash"]
+action = "unmodeled"
+
+# =============================================================================================
+# Commands that are not modeled at all
+# =============================================================================================
+
+[[case]]
+argv = ["npm"]
+action = "unmodeled"
+
+[[case]]
+argv = ["npm", "--version"]
+action = "unmodeled"
+
+[[case]]
+argv = ["npm", "-v"]
+action = "unmodeled"
+
+[[case]]
+argv = ["npm", "login"]
+action = "unmodeled"
+
+[[case]]
+argv = ["npm", "unpublish", "x@1.0.0"]
+action = "unmodeled"
+
+[[case]]
+argv = ["npm", "pub"]
+action = "unmodeled"
+
+[[case]]
+argv = ["npm", "token", "list"]
+action = "unmodeled"
