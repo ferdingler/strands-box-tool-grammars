@@ -92,7 +92,7 @@ A remote-only command (`functions`, `secrets`, `projects`, `orgs`, `branches`, `
 | `write_secret` | Sets or unsets Edge Function secrets |
 | `write_storage` | Uploads or moves Storage objects; hosted when the line also has `remote` |
 | `delete_storage` | Removes Storage objects; hosted when the line also has `remote` |
-| `write_files` | Writes, replaces, or deletes files in the project directory |
+| `write_files` | Writes, replaces, or deletes local files: in the project directory, or at a path the line names |
 | `write_link_config` | Changes which hosted project the directory is linked to |
 | `local_stack` | Starts or stops local Docker containers |
 | `run_sql` | Runs SQL from the line or from files it names (`db query`, `test db`) |
