@@ -1,0 +1,130 @@
+# End-to-end cases for vercel.grammar.toml. The harness runs each argv through the Shell of a real
+# box, where `vercel` is a stub that prints its arguments and exits 0.
+
+policy = '''
+@id("vercel_actions")
+permit (principal, action in Tool::vercel::Action::"*", resource);
+
+@id("vercel_no_production")
+@description("Production deployments and production traffic changes need a person.")
+forbid (principal, action in Tool::vercel::Action::"*", resource)
+when { context.input.effects.contains(Tool::vercel::Effect::"deploy_production") ||
+       context.input.effects.contains(Tool::vercel::Effect::"change_traffic") };
+
+@id("vercel_no_secret_reads")
+@description("Reading decrypted Environment Variables is not allowed.")
+forbid (principal, action in Tool::vercel::Action::"*", resource)
+when { context.input.effects.contains(Tool::vercel::Effect::"read_secret") };
+
+@id("vercel_no_token_argument")
+@description("Do not pass a login token on the command line.")
+forbid (principal, action in Tool::vercel::Action::"*", resource)
+when { context.input.effects.contains(Tool::vercel::Effect::"token_argument") };
+'''
+
+# A read runs.
+[[case]]
+argv = ["vercel", "list", "--json"]
+exit = 0
+stdout = "stub-argv: [list] [--json]"
+
+# A preview deployment runs: `--environment preview` removes the production effects.
+[[case]]
+argv = ["vercel", "deploy", "--environment", "preview"]
+exit = 0
+stdout = "stub-argv: [deploy] [--environment] [preview]"
+
+# A production deployment is refused, and the program does not run.
+[[case]]
+argv = ["vercel", "deploy", "--prod"]
+exit = 126
+stderr = "[policy: vercel_no_production]"
+
+# A plain `deploy` can go to production (first deployment), so it is refused too.
+[[case]]
+argv = ["vercel", "deploy"]
+exit = 126
+stderr = "[policy: vercel_no_production]"
+
+# Every deploy can copy the CLI's own variables into the deployment (`--env KEY`, or the
+# `env` list in vercel.json), so a rule on `export_local_env` refuses even a preview deploy.
+[[case]]
+argv = ["vercel", "deploy", "--environment", "preview"]
+exit = 126
+stderr = "[policy: vercel_no_local_env]"
+policy = '''
+@id("vercel_actions")
+permit (principal, action in Tool::vercel::Action::"*", resource);
+
+@id("vercel_no_local_env")
+@description("A deploy can copy local variables into the deployment; a person deploys.")
+forbid (principal, action in Tool::vercel::Action::"*", resource)
+when { context.input.effects.contains(Tool::vercel::Effect::"export_local_env") };
+'''
+
+# Promoting a preview deployment builds a new production deployment.
+[[case]]
+argv = ["vercel", "promote", "dpl_preview", "--yes"]
+exit = 126
+stderr = "[policy: vercel_no_production]"
+
+# `env pull` reads decrypted values.
+[[case]]
+argv = ["vercel", "env", "pull", ".env.local"]
+exit = 126
+stderr = "[policy: vercel_no_secret_reads]"
+
+# A token on the command line is refused, wherever the global option sits.
+[[case]]
+argv = ["vercel", "whoami", "-t", "tok_123"]
+exit = 126
+stderr = "[policy: vercel_no_token_argument]"
+
+# A bare path deploys in the CLI, but the grammar cannot read it, and nothing permits it.
+[[case]]
+argv = ["vercel", "./site"]
+exit = 126
+stderr = "[default-deny]: No permit policy matched this request."
+
+# An undeclared option makes the line unmodeled.
+[[case]]
+argv = ["vercel", "deploy", "--api", "https://example.test"]
+exit = 126
+stderr = "[default-deny]"
+
+# The README's example rules load together, and the team rule reads `--scope`.
+[[case]]
+argv = ["vercel", "list", "-S", "other"]
+exit = 126
+stderr = "[policy: vercel_one_team]"
+policy = '''
+@id("vercel_actions")
+permit (principal, action in Tool::vercel::Action::"*", resource);
+
+@id("vercel_no_production")
+@description("Production deployments and production traffic changes need a person.")
+forbid (principal, action in Tool::vercel::Action::"*", resource)
+when { context.input.effects.contains(Tool::vercel::Effect::"deploy_production") ||
+       context.input.effects.contains(Tool::vercel::Effect::"change_traffic") };
+
+@id("vercel_no_local_env")
+@description("A deploy can copy local variables into the deployment; a person deploys.")
+forbid (principal, action in Tool::vercel::Action::"*", resource)
+when { context.input.effects.contains(Tool::vercel::Effect::"export_local_env") };
+
+@id("vercel_no_delete")
+@description("Deleting Vercel resources is not allowed.")
+forbid (principal, action in Tool::vercel::Action::"*", resource)
+when { context.input.effects.contains(Tool::vercel::Effect::"delete_remote") };
+
+@id("vercel_no_secrets")
+@description("Reading secrets and changing production variables is not allowed.")
+forbid (principal, action in Tool::vercel::Action::"*", resource)
+when { context.input.effects.contains(Tool::vercel::Effect::"read_secret") ||
+       context.input.effects.contains(Tool::vercel::Effect::"production_env") };
+
+@id("vercel_one_team")
+@description("Use the acme team.")
+forbid (principal, action in Tool::vercel::Action::"*", resource)
+when { context.input has scope && context.input.scope != "acme" };
+'''
