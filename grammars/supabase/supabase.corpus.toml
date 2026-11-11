@@ -1326,3 +1326,117 @@ argv = ["supabase", "inspect", "db", "locks", "--remote", "--yes"]
 action = "inspect_db_locks"
 fields = { remote = "", yes = true }
 effects = ["remote", "skip_confirmation", "clear_network_bans"]
+
+# --- independent verifier cases, round 2 ---
+# CLI: `--remote <true-literal>` is joined in any case (remote-vocabulary.ts LINKED_LITERAL /i).
+# So `tRUE` after a bare --remote is the linked project, and `storage rm -r` then empties every bucket.
+[[case]]
+argv = ["supabase", "storage", "rm", "-r", "--remote", "tRUE", "--yes"]
+action = "storage_rm"
+fields = { recursive = true, remote = "", yes = true, file = ["tRUE"] }
+effects = ["delete_storage", "remote", "skip_confirmation", "ambiguous_argv", "all_targets"]
+
+[[case]]
+argv = ["supabase", "functions", "deploy", "--remote", "Yes"]
+action = "functions_deploy"
+fields = { remote = "", function_name = ["Yes"] }
+effects = ["remote", "deploy_remote", "ambiguous_argv", "all_targets"]
+
+[[case]]
+argv = ["supabase", "secrets", "unset", "--remote", "oN"]
+action = "secrets_unset"
+fields = { remote = "", names = ["oN"] }
+effects = ["remote", "write_secret", "ambiguous_argv", "all_targets"]
+
+# CLI: a short boolean takes a literal too. `-r true` is recursive with no paths: every bucket.
+[[case]]
+argv = ["supabase", "storage", "rm", "-r", "true", "--remote"]
+action = "storage_rm"
+fields = { recursive = true, remote = "", file = ["true"] }
+effects = ["delete_storage", "remote", "ambiguous_argv", "all_targets"]
+
+# CLI: effect/cli literals are exact lowercase, so `--debug TRUE` leaves TRUE as the operand.
+# The grammar still flags it, which is the safe direction.
+[[case]]
+argv = ["supabase", "functions", "deploy", "--debug", "TRUE"]
+action = "functions_deploy"
+fields = { debug = true, function_name = ["TRUE"] }
+effects = ["remote", "deploy_remote", "ambiguous_argv", "all_targets"]
+
+# CLI: DB_URL_PATTERN is /^postgres(ql)?:\/\//i, so an uppercase or mixed-case scheme is joined too.
+[[case]]
+argv = ["supabase", "db", "query", "--remote", "POSTGRESQL://u@prod.example.com/postgres", "-f", "x.sql"]
+action = "db_query"
+fields = { remote = "", sql = "POSTGRESQL://u@prod.example.com/postgres", file = "x.sql" }
+effects = ["remote", "run_sql", "write_remote_db", "clear_network_bans", "ambiguous_argv"]
+
+[[case]]
+argv = ["supabase", "test", "db", "--remote", "pOsTgReS://u@prod.example.com/postgres"]
+action = "test_db"
+fields = { remote = "", path = ["pOsTgReS://u@prod.example.com/postgres"] }
+effects = ["remote", "run_sql", "write_remote_db", "clear_network_bans", "ambiguous_argv"]
+
+[[case]]
+argv = ["supabase", "db", "pull", "--remote", "postgres://u@prod.example.com/postgres"]
+action = "db_pull"
+fields = { remote = "", migration_name = "postgres://u@prod.example.com/postgres" }
+effects = ["write_files", "remote", "write_remote_db", "clear_network_bans", "ambiguous_argv"]
+
+[[case]]
+argv = ["supabase", "gen", "types", "--remote", "Postgresql://u@prod.example.com/postgres"]
+action = "gen_types"
+fields = { remote = "", language = "Postgresql://u@prod.example.com/postgres" }
+effects = ["remote", "clear_network_bans", "ambiguous_argv"]
+
+# CLI: a URL with no --remote is plain SQL for the local database. The grammar over-reports
+# hosted effects, which is the safe direction.
+[[case]]
+argv = ["supabase", "db", "query", "postgres://x"]
+action = "db_query"
+fields = { sql = "postgres://x" }
+effects = ["run_sql", "write_local_db", "remote", "write_remote_db", "clear_network_bans", "ambiguous_argv"]
+
+# CLI: a ref-shaped word after a bare --remote fails before any request (rejectRefShapedRemote).
+# A branch-shaped word that is not a branch keeps the operand reading, the same as the grammar.
+[[case]]
+argv = ["supabase", "functions", "delete", "--remote", "abcdefghijklmnopqrst"]
+action = "functions_delete"
+fields = { remote = "", function_name = "abcdefghijklmnopqrst" }
+effects = ["remote", "delete_remote_data"]
+
+# CLI: operands overflow, so `feature-x` is joined as `--remote=feature-x`. The grammar leaves a word over.
+[[case]]
+argv = ["supabase", "storage", "cp", "--remote", "feature-x", "a.txt", "ss:///b/a.txt"]
+action = "unmodeled"
+
+# clear_network_bans on the read-only remote database actions
+[[case]]
+argv = ["supabase", "db", "dump", "--remote", "--yes"]
+action = "db_dump"
+fields = { remote = "", yes = true }
+effects = ["remote", "clear_network_bans", "skip_confirmation"]
+
+[[case]]
+argv = ["supabase", "db", "push", "--remote", "--dry-run", "--yes"]
+action = "db_push"
+fields = { remote = "", dry_run = true, yes = true }
+effects = ["remote", "clear_network_bans", "skip_confirmation"]
+
+[[case]]
+argv = ["supabase", "migration", "list", "--remote=abcdefghijklmnopqrst"]
+action = "migration_list"
+fields = { remote = "abcdefghijklmnopqrst" }
+effects = ["remote", "clear_network_bans"]
+
+[[case]]
+argv = ["supabase", "inspect", "report", "--remote", "--output-dir", "out"]
+action = "inspect_report"
+fields = { remote = "", output_dir = "out" }
+effects = ["write_files", "remote", "clear_network_bans"]
+
+# CLI: hosted storage takes no database connection, so no ban clearing.
+[[case]]
+argv = ["supabase", "storage", "ls", "--remote"]
+action = "storage_ls"
+fields = { remote = "" }
+effects = ["remote"]
