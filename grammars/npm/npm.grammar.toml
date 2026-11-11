@@ -19,6 +19,8 @@
 # - Child processes. Lifecycle scripts, `npm run`/`test`/`exec` targets, `npm init <initializer>`,
 #   and git (for `npm version` and git dependencies) run inside the tool's own sandbox and are not
 #   decided by the Shell.
+# - `npm init` without an initializer loads the `init-module` file (default `~/.npm-init.js`,
+#   settable in `.npmrc`), which init-package-json runs as code. The grammar cannot see it.
 # - `npx`. It is a different program name, so this grammar does not bind it.
 # - Command abbreviations and camelCase. npm resolves any unique prefix of a command (`npm pub`,
 #   `npm uni`) and `runScript`-style names. Only the spellings npm documents are modeled; every
@@ -453,7 +455,9 @@ operands.package_spec = { when = [{ like = "true", adds = ["ambiguous_argv"] }, 
 
 # `npm version` with no argument prints versions. With one, it writes package.json and the
 # lockfile, runs preversion/version/postversion, and in a git work tree commits and tags
-# (libnpmversion).
+# (libnpmversion). With --workspace/--workspaces it then reifies the tree
+# (lib/commands/version.js -> lib/utils/update-workspaces.js) unless --no-workspaces-update; with no
+# <newversion> it only lists, so the workspace effects over-state that case.
 [shell.version]
 usage   = "npm [global options] version [options] [<newversion>]"
 aliases = ["verison"]
@@ -464,14 +468,17 @@ options.json                   = { flag = ["--json"] }
 options.preid                  = { flag = ["--preid"], value = "required", when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
 options.sign_git_tag           = { flag = ["--sign-git-tag"] }
 options.ignore_scripts         = { flag = ["--ignore-scripts"], removes = ["run_lifecycle_scripts"] }
-options.workspace              = { flag = ["--workspace"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
-options.workspaces             = { flag = ["--workspaces"] }
-options.no_workspaces_update   = { flag = ["--no-workspaces-update"] }
+options.workspace              = { flag = ["--workspace"], value = "required", repeated = true, adds = ["network", "modify_node_modules"], when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
+options.workspaces             = { flag = ["--workspaces"], adds = ["network", "modify_node_modules"] }
+options.no_workspaces_update   = { flag = ["--no-workspaces-update"], removes = ["modify_node_modules"] }
 options.include_workspace_root = { flag = ["--include-workspace-root"] }
 operands.newversion = { adds = ["modify_package_json", "modify_lockfile", "git_commit", "run_lifecycle_scripts"] }
 
 # `npm init` writes package.json. `npm init <initializer> [args...]` runs `create-<initializer>`
-# through `npm exec`, passing the extra words to it (lib/commands/init.js).
+# through `npm exec`, passing the extra words to it (lib/commands/init.js). `--workspace` creates a
+# workspace and then reifies the tree (init.js `update` -> lib/utils/update-workspaces.js), unless
+# --no-workspaces-update. With an initializer, init.js returns before that reify, so the
+# --workspace effects over-state that case.
 [shell.init]
 usage   = "npm [global options] init [options] [<package_spec> [<initializer_args>...]]"
 aliases = ["create", "innit"]
@@ -484,8 +491,8 @@ options.init_license           = { flag = ["--init-license"], value = "required"
 options.init_version           = { flag = ["--init-version"], value = "required", when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
 options.init_type              = { flag = ["--init-type"], value = "required", when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
 options.init_private           = { flag = ["--init-private"] }
-options.workspace              = { flag = ["--workspace"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
-options.no_workspaces_update   = { flag = ["--no-workspaces-update"] }
+options.workspace              = { flag = ["--workspace"], value = "required", repeated = true, adds = ["network", "modify_node_modules", "modify_lockfile", "run_lifecycle_scripts"], when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
+options.no_workspaces_update   = { flag = ["--no-workspaces-update"], removes = ["modify_node_modules", "modify_lockfile", "run_lifecycle_scripts"] }
 options.include_workspace_root = { flag = ["--include-workspace-root"] }
 operands.package_spec     = { adds = ["network", "run_program"] }
 operands.initializer_args = { adds = ["network", "run_program"] }

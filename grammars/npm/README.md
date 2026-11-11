@@ -70,7 +70,7 @@ Global options on every action, before or after the command: `--registry`, `--us
 | Effect | Meaning |
 |---|---|
 | `network` | Contacts the registry or another remote host. `--offline` removes it from `install` and `ci`. |
-| `modify_node_modules` | Changes the installed package tree. `--dry-run` removes it; `--package-lock-only` removes it from `install` and `audit fix`. |
+| `modify_node_modules` | Changes the installed package tree (also `init --workspace` and `version <v> --workspace`, unless `--no-workspaces-update`). `--dry-run` removes it; `--package-lock-only` removes it from `install` and `audit fix`. |
 | `modify_lockfile` | Writes `package-lock.json`. `--no-package-lock`, `--no-save`, `-g`, and `--dry-run` remove it where npm skips the write. `npm ci` never has it. |
 | `modify_package_json` | Writes `package.json`: `install <pkg>`, `uninstall`, `update --save`, `link --save*`, `version <v>`, `init`, `audit fix`. |
 | `run_lifecycle_scripts` | May run package.json lifecycle scripts (the project's own, or dependency scripts that npm 12's allowScripts policy approves). `--ignore-scripts` removes it. **`--dry-run` does not remove it** from `install`, `ci`, `pack`, or `publish`, because npm still runs those scripts. |
@@ -148,6 +148,8 @@ These are `unmodeled`, so a policy refuses them unless it permits `unmodeled`:
 - **Package contents.** `run_lifecycle_scripts` and `run_program` mean "may run code that
   package.json or a package names". Those scripts, `exec` binaries, `init` initializers, and git
   (for `version` and git dependencies) run inside the tool's sandbox; the Shell does not decide them.
+- **`~/.npm-init.js`.** A bare `npm init` runs the `init-module` file (default `~/.npm-init.js`,
+  settable in `.npmrc`) as code. The grammar does not see it.
 - **`npx` is a different program** and is not bound by this grammar.
 - **`true`/`false` after a boolean flag.** npm takes `--ignore-scripts false` as "ignore-scripts is
   false". The grammar reads `false` as an operand, so each operand that could hold it adds
@@ -156,5 +158,8 @@ These are `unmodeled`, so a policy refuses them unless it permits `unmodeled`:
   looks like a flag, and reads that word as a flag (`--tag --access=public` publishes publicly).
   Each value option adds `ambiguous_argv` when its value starts with `-`.
 - **Over-statement.** `pack <spec>` adds `network` also for a local folder; `init <initializer>`
-  adds `modify_package_json` though the initializer, not npm, writes it; `uninstall` and `prune`
+  adds `modify_package_json` though the initializer, not npm, writes it; `init --workspace` and
+  `version --workspace` add the reify effects (`network`, `modify_node_modules`, and for init
+  `modify_lockfile` and `run_lifecycle_scripts`) also where npm skips the reify (an initializer, or no
+  new version); `ls -all` is `--all` to npm but `-a -l -l` here; `uninstall` and `prune`
   add `network` for the audit report even with `--no-audit`.

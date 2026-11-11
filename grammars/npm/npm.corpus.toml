@@ -1439,3 +1439,27 @@ argv = ["npm", "isntall", "foo", "--omit", "dev", "--omit=optional"]
 action = "install"
 fields = { package_spec = ["foo"], omit = ["dev", "optional"] }
 effects = ["network", "modify_node_modules", "modify_lockfile", "modify_package_json", "run_lifecycle_scripts"]
+
+# --- author cases after verification (F1, F2) ---
+
+# --no-workspaces-update skips the reify that `init --workspace` runs (update-workspaces.js returns
+# when workspacesUpdate is false).
+[[case]]
+argv = ["npm", "init", "-y", "--workspace", "pkgs/a", "--no-workspaces-update"]
+action = "init"
+fields = { yes = true, workspace = ["pkgs/a"], no_workspaces_update = true }
+effects = ["modify_package_json", "network"]
+
+# `version <v> --workspace` versions the workspace, then reifies the tree (version.js
+# updateWorkspaces).
+[[case]]
+argv = ["npm", "version", "minor", "--workspace=api"]
+action = "version"
+fields = { newversion = "minor", workspace = ["api"] }
+effects = ["git_commit", "modify_lockfile", "modify_node_modules", "modify_package_json", "network", "run_lifecycle_scripts"]
+
+[[case]]
+argv = ["npm", "version", "patch", "--workspaces", "--no-workspaces-update"]
+action = "version"
+fields = { newversion = "patch", workspaces = true, no_workspaces_update = true }
+effects = ["git_commit", "modify_lockfile", "modify_package_json", "network", "run_lifecycle_scripts"]
