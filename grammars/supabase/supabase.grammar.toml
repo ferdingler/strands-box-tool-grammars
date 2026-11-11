@@ -1,0 +1,516 @@
+# Tool grammar for the Supabase CLI.
+#
+# Project:    Supabase CLI, https://github.com/supabase/cli (official, by Supabase)
+# Executable: supabase (a native single-file binary; v3 is a Bun-compiled TypeScript app that
+#             parses its command line with `effect/cli` 4.1.2)
+# Checked:    supabase 3.1.0 (tag v3.1.0, commit d4fc0e5b), from `supabase <command> --help` and
+#             the command sources under apps/cli/src/commands/ at that tag.
+#
+# What this grammar cannot see:
+# - Environment variables. SUPABASE_ACCESS_TOKEN picks the account. SUPABASE_PROJECT_ID picks the
+#   project that a bare `--remote` targets. SUPABASE_YES answers every prompt like `--yes`.
+#   SUPABASE_WORKDIR is `--workdir`. SUPABASE_EXPERIMENTAL is `--experimental`. SUPABASE_DB_PASSWORD
+#   is `--password`. A rule cannot read these.
+# - Files. `supabase/config.toml`, `supabase/.env*`, and the link state in `supabase/.temp/`
+#   (written by `link`) decide which hosted project "the linked project" is. A remote-only command
+#   with no `--remote` acts on that project.
+# - What SQL does. `db query`, `test db`, and migrations run SQL from files that the line only names.
+# - Child processes. The CLI runs Docker containers, `pg_dump`, `deno`, and, for
+#   `gen types --lang dart|swift`, the language's own tool. None of them reach the Shell.
+#
+# Effect naming: `remote` marks every line that contacts the hosted Supabase platform (or a
+# database URL given to `--remote`). A local-or-remote command adds `remote` only with `--remote`.
+# The database effects come in local/remote pairs, so a rule can forbid hosted writes and keep
+# local ones.
+
+format  = 1
+version = 1
+name    = "supabase"
+program = "supabase"
+
+[effects]
+remote             = "Contacts the hosted Supabase platform: the Management API, a hosted project or branch, or the database URL given to --remote"
+write_local_db     = "Changes the schema, data, or migration history of the local database, or runs SQL there that can"
+write_remote_db    = "Changes the schema, data, or migration history of a hosted database, or runs SQL there that can"
+delete_local_data  = "Deletes local data: drops the local database objects or deletes the local data volumes"
+delete_remote_data = "Deletes hosted data or resources: drops hosted database objects, or deletes a project, branch, or Edge Function"
+create_remote      = "Creates a hosted project or preview branch, which can cost money"
+deploy_remote      = "Deploys Edge Functions to a hosted project"
+write_secret       = "Sets or unsets Edge Function secrets on a hosted project"
+write_storage      = "Uploads or moves Storage objects (hosted when the line also has remote, else the local stack)"
+delete_storage     = "Removes Storage objects (hosted when the line also has remote, else the local stack)"
+write_files        = "Writes, replaces, or deletes files in the local project directory"
+write_link_config  = "Changes which hosted project the local directory is linked to"
+local_stack        = "Starts or stops local Supabase Docker containers"
+run_sql            = "Runs SQL from the command line or from files it names"
+run_program        = "Runs another program that the CLI starts itself"
+reveal_secrets     = "Prints secret keys or database passwords"
+dump_data          = "Dumps table data, not only the schema"
+skip_confirmation  = "Answers yes to every prompt, including the prompts before hosted changes"
+
+# Persistent flags. effect/cli reads them before, between, and after the command words.
+[global]
+options.workdir       = { flag = ["--workdir"], value = "required", anywhere = true }
+options.profile       = { flag = ["--profile"], value = "required", anywhere = true }
+options.debug         = { flag = ["--debug"], anywhere = true }
+options.experimental  = { flag = ["--experimental"], anywhere = true }
+options.network_id    = { flag = ["--network-id"], value = "required", anywhere = true }
+options.yes           = { flag = ["--yes"], anywhere = true, adds = ["skip_confirmation"] }
+options.output        = { flag = ["-o", "--output"], value = "required", anywhere = true }
+options.output_format = { flag = ["--output-format"], value = "required", anywhere = true }
+options.log_level     = { flag = ["--log-level"], value = "required", anywhere = true }
+options.dns_resolver  = { flag = ["--dns-resolver"], value = "required", anywhere = true }
+options.agent         = { flag = ["--agent"], value = "required", anywhere = true }
+
+# ---------------------------------------------------------------- local project and stack
+
+[shell.init]
+usage = "supabase [global options] init [options]"
+adds  = ["write_files"]
+options.interactive  = { flag = ["-i", "--interactive"] }
+options.use_orioledb = { flag = ["--use-orioledb"] }
+options.force        = { flag = ["--force"] }
+
+[shell.start]
+usage = "supabase [global options] start [options]"
+adds  = ["local_stack"]
+options.exclude             = { flag = ["-x", "--exclude"], value = "required", repeated = true }
+options.ignore_health_check = { flag = ["--ignore-health-check"] }
+
+[shell.stop]
+usage = "supabase [global options] stop [options]"
+adds  = ["local_stack"]
+options.project_id = { flag = ["--project-id"], value = "required" }
+options.no_backup  = { flag = ["--no-backup"], adds = ["delete_local_data"] }
+options.all        = { flag = ["--all"] }
+
+[shell.status]
+usage = "supabase [global options] status [options]"
+options.override_name = { flag = ["--override-name"], value = "required", repeated = true }
+
+[shell.link]
+usage = "supabase [global options] link [options] [<ref_or_branch>]"
+adds  = ["remote", "write_link_config"]
+options.project_ref = { flag = ["--project-ref"], value = "required" }
+options.skip_pooler = { flag = ["--skip-pooler"] }
+
+[shell.unlink]
+usage = "supabase [global options] unlink"
+adds  = ["write_link_config"]
+
+# ---------------------------------------------------------------- db
+
+# No `[global options]`: `db diff` owns `-o/--output` (a file to write), and effect/cli gives
+# a command's own flag precedence over the global `-o`.
+[shell.db_diff]
+usage = "supabase db diff [options]"
+options.use_migra       = { flag = ["--use-migra"] }
+options.use_pgadmin     = { flag = ["--use-pgadmin"] }
+options.use_pg_delta    = { flag = ["--use-pg-delta"] }
+options.strict_coverage = { flag = ["--strict-coverage"] }
+options.output          = { flag = ["-o", "--output"], value = "required", adds = ["write_files"] }
+options.file            = { flag = ["-f", "--file"], value = "required", adds = ["write_files"] }
+options.schema          = { flag = ["-s", "--schema"], value = "required", repeated = true }
+options.remote          = { flag = ["--remote"], value = "optional", adds = ["remote"] }
+
+[shell.db_dump]
+usage = "supabase [global options] db dump [options]"
+options.dry_run       = { flag = ["--dry-run"] }
+options.data_only     = { flag = ["--data-only"], adds = ["dump_data"] }
+options.use_copy      = { flag = ["--use-copy"] }
+options.exclude       = { flag = ["-x", "--exclude"], value = "required", repeated = true }
+options.role_only     = { flag = ["--role-only"] }
+options.keep_comments = { flag = ["--keep-comments"] }
+options.file          = { flag = ["-f", "--file"], value = "required", adds = ["write_files"] }
+options.remote        = { flag = ["--remote"], value = "optional", adds = ["remote"] }
+options.password      = { flag = ["-p", "--password"], value = "required" }
+options.schema        = { flag = ["-s", "--schema"], value = "required", repeated = true }
+
+[shell.db_lint]
+usage = "supabase [global options] db lint [options]"
+options.remote  = { flag = ["--remote"], value = "optional", adds = ["remote"] }
+options.schema  = { flag = ["-s", "--schema"], value = "required", repeated = true }
+options.level   = { flag = ["--level"], value = "required" }
+options.fail_on = { flag = ["--fail-on"], value = "required" }
+
+# Writes a migration file and records it in the target's migration history. `--declarative`
+# writes schema files instead, but it removes no effect: a boolean flag here can be followed by a
+# literal such as `false` that the CLI reads as the flag's value and this grammar reads as the
+# operand.
+[shell.db_pull]
+usage = "supabase [global options] db pull [options] [<migration_name>]"
+adds  = ["write_files", "write_local_db"]
+options.declarative     = { flag = ["--declarative"] }
+options.diff_engine     = { flag = ["--diff-engine"], value = "required" }
+options.strict_coverage = { flag = ["--strict-coverage"] }
+options.schema          = { flag = ["-s", "--schema"], value = "required", repeated = true }
+options.remote          = { flag = ["--remote"], value = "optional", adds = ["remote", "write_remote_db"], removes = ["write_local_db"] }
+options.password        = { flag = ["-p", "--password"], value = "required" }
+
+[shell.db_push]
+usage = "supabase [global options] db push [options]"
+adds  = ["write_local_db"]
+options.include_all   = { flag = ["--include-all"] }
+options.include_roles = { flag = ["--include-roles"] }
+options.include_seed  = { flag = ["--include-seed"] }
+options.skip_vault    = { flag = ["--skip-vault"] }
+options.dry_run       = { flag = ["--dry-run"], removes = ["write_local_db", "write_remote_db"] }
+options.remote        = { flag = ["--remote"], value = "optional", adds = ["remote", "write_remote_db"], removes = ["write_local_db"] }
+options.password      = { flag = ["-p", "--password"], value = "required" }
+
+[shell.db_reset]
+usage = "supabase [global options] db reset [options]"
+adds  = ["write_local_db", "delete_local_data"]
+options.remote    = { flag = ["--remote"], value = "optional", adds = ["remote", "write_remote_db", "delete_remote_data"], removes = ["write_local_db", "delete_local_data"] }
+options.no_seed   = { flag = ["--no-seed"] }
+options.sql_paths = { flag = ["--sql-paths"], value = "required", repeated = true }
+options.version   = { flag = ["--version"], value = "required" }
+options.last      = { flag = ["--last"], value = "required" }
+
+# `--read-only` removes no effect, for the same reason as `db pull --declarative`.
+[shell.db_query]
+usage = "supabase [global options] db query [options] [<sql>]"
+adds  = ["run_sql", "write_local_db"]
+options.remote    = { flag = ["--remote"], value = "optional", adds = ["remote", "write_remote_db"], removes = ["write_local_db"] }
+options.file      = { flag = ["-f", "--file"], value = "required" }
+options.read_only = { flag = ["--read-only"] }
+
+[shell.db_start]
+usage = "supabase [global options] db start [options]"
+adds  = ["local_stack"]
+options.from_backup = { flag = ["--from-backup"], value = "required", adds = ["write_local_db"] }
+
+# ---------------------------------------------------------------- migration (alias: migrations)
+
+[shell.migration_new]
+usage   = "supabase [global options] migration new <migration_name>"
+aliases = ["migrations new"]
+adds    = ["write_files"]
+
+[shell.migration_list]
+usage   = "supabase [global options] migration list [options]"
+aliases = ["migrations list"]
+options.remote   = { flag = ["--remote"], value = "optional", adds = ["remote"] }
+options.password = { flag = ["-p", "--password"], value = "required" }
+
+[shell.migration_up]
+usage   = "supabase [global options] migration up [options]"
+aliases = ["migrations up"]
+adds    = ["write_local_db"]
+options.include_all = { flag = ["--include-all"] }
+options.remote      = { flag = ["--remote"], value = "optional", adds = ["remote", "write_remote_db"], removes = ["write_local_db"] }
+
+# Drops every user schema object, then re-applies migrations up to the chosen version.
+[shell.migration_down]
+usage   = "supabase [global options] migration down [options]"
+aliases = ["migrations down"]
+adds    = ["write_local_db", "delete_local_data"]
+options.last   = { flag = ["--last"], value = "required" }
+options.remote = { flag = ["--remote"], value = "optional", adds = ["remote", "write_remote_db", "delete_remote_data"], removes = ["write_local_db", "delete_local_data"] }
+
+[shell.migration_repair]
+usage   = "supabase [global options] migration repair [options] [<version>...]"
+aliases = ["migrations repair"]
+adds    = ["write_local_db"]
+options.status   = { flag = ["--status"], value = "required" }
+options.remote   = { flag = ["--remote"], value = "optional", adds = ["remote", "write_remote_db"], removes = ["write_local_db"] }
+options.password = { flag = ["-p", "--password"], value = "required" }
+
+# Rewrites and deletes local migration files; on a hosted target it also rewrites the hosted
+# migration history.
+[shell.migration_squash]
+usage   = "supabase [global options] migration squash [options]"
+aliases = ["migrations squash"]
+adds    = ["write_files"]
+options.version  = { flag = ["--version"], value = "required" }
+options.remote   = { flag = ["--remote"], value = "optional", adds = ["remote", "write_remote_db"] }
+options.password = { flag = ["-p", "--password"], value = "required" }
+
+[shell.migration_fetch]
+usage   = "supabase [global options] migration fetch [options]"
+aliases = ["migrations fetch"]
+adds    = ["write_files"]
+options.remote = { flag = ["--remote"], value = "optional", adds = ["remote"] }
+
+# ---------------------------------------------------------------- gen
+
+# Prints types on stdout. `--lang dart` and `--lang swift` run that language's own generator.
+[shell.gen_types]
+usage = "supabase [global options] gen types [options] [<language>]"
+options.remote               = { flag = ["--remote"], value = "optional", adds = ["remote"] }
+options.lang                 = { flag = ["--lang"], value = "required", when = [{ like = ["dart", "swift"], adds = ["run_program"] }] }
+options.schema               = { flag = ["-s", "--schema"], value = "required", repeated = true }
+options.query_timeout        = { flag = ["--query-timeout"], value = "required" }
+options.swift_access_control = { flag = ["--swift-access-control"], value = "required" }
+
+# ---------------------------------------------------------------- functions
+
+[shell.functions_new]
+usage = "supabase [global options] functions new [options] <function_name>"
+adds  = ["write_files"]
+options.auth = { flag = ["--auth"], value = "required" }
+
+[shell.functions_serve]
+usage = "supabase [global options] functions serve [options] [<function_name>...]"
+adds  = ["local_stack"]
+options.no_verify_jwt = { flag = ["--no-verify-jwt"] }
+options.env_file      = { flag = ["--env-file"], value = "required" }
+options.import_map    = { flag = ["--import-map"], value = "required" }
+options.inspect       = { flag = ["--inspect"] }
+options.inspect_mode  = { flag = ["--inspect-mode"], value = "required" }
+options.inspect_main  = { flag = ["--inspect-main"] }
+
+[shell.functions_deploy]
+usage = "supabase [global options] functions deploy [options] [<function_name>...]"
+adds  = ["remote", "deploy_remote"]
+options.remote        = { flag = ["--remote"], value = "optional" }
+options.no_verify_jwt = { flag = ["--no-verify-jwt"] }
+options.use_api       = { flag = ["--use-api"] }
+options.import_map    = { flag = ["--import-map"], value = "required" }
+options.prune         = { flag = ["--prune"], adds = ["delete_remote_data"] }
+options.jobs          = { flag = ["-j", "--jobs"], value = "required" }
+
+[shell.functions_delete]
+usage = "supabase [global options] functions delete [options] <function_name>"
+adds  = ["remote", "delete_remote_data"]
+options.remote = { flag = ["--remote"], value = "optional" }
+
+[shell.functions_list]
+usage = "supabase [global options] functions list [options]"
+adds  = ["remote"]
+options.remote = { flag = ["--remote"], value = "optional" }
+
+[shell.functions_download]
+usage = "supabase [global options] functions download [options] [<function_name>]"
+adds  = ["remote", "write_files"]
+options.remote  = { flag = ["--remote"], value = "optional" }
+options.use_api = { flag = ["--use-api"] }
+
+# ---------------------------------------------------------------- secrets
+
+[shell.secrets_list]
+usage = "supabase [global options] secrets list [options]"
+adds  = ["remote"]
+options.remote = { flag = ["--remote"], value = "optional" }
+
+[shell.secrets_set]
+usage = "supabase [global options] secrets set [options] [<secrets>...]"
+adds  = ["remote", "write_secret"]
+options.remote   = { flag = ["--remote"], value = "optional" }
+options.env_file = { flag = ["--env-file"], value = "required" }
+
+# `--dry-run` removes no effect, for the same reason as `db pull --declarative`.
+[shell.secrets_unset]
+usage = "supabase [global options] secrets unset [options] [<names>...]"
+adds  = ["remote", "write_secret"]
+options.remote  = { flag = ["--remote"], value = "optional" }
+options.all     = { flag = ["--all"] }
+options.dry_run = { flag = ["--dry-run"] }
+
+# ---------------------------------------------------------------- projects, orgs, branches
+
+[shell.projects_list]
+usage = "supabase [global options] projects list"
+adds  = ["remote"]
+
+[shell.projects_create]
+usage = "supabase [global options] projects create [options] [<name>]"
+adds  = ["remote", "create_remote"]
+options.org_id            = { flag = ["--org-id"], value = "required" }
+options.db_password       = { flag = ["--db-password"], value = "required" }
+options.region            = { flag = ["--region"], value = "required" }
+options.size              = { flag = ["--size"], value = "required" }
+options.high_availability = { flag = ["--high-availability"] }
+
+[shell.projects_delete]
+usage = "supabase [global options] projects delete [<ref>]"
+adds  = ["remote", "delete_remote_data"]
+
+[shell.projects_api_keys]
+usage = "supabase [global options] projects api-keys [options]"
+adds  = ["remote"]
+options.remote = { flag = ["--remote"], value = "optional" }
+options.reveal = { flag = ["--reveal"], adds = ["reveal_secrets"] }
+
+[shell.orgs_list]
+usage = "supabase [global options] orgs list"
+adds  = ["remote"]
+
+[shell.branches_list]
+usage = "supabase [global options] branches list [options]"
+adds  = ["remote"]
+options.remote = { flag = ["--remote"], value = "optional" }
+
+# Prints the branch's connection strings, which hold its database password.
+[shell.branches_get]
+usage = "supabase [global options] branches get [options] [<name>]"
+adds  = ["remote", "reveal_secrets"]
+options.remote = { flag = ["--remote"], value = "optional" }
+
+[shell.branches_create]
+usage = "supabase [global options] branches create [options] [<name>]"
+adds  = ["remote", "create_remote"]
+options.remote     = { flag = ["--remote"], value = "optional" }
+options.region     = { flag = ["--region"], value = "required" }
+options.size       = { flag = ["--size"], value = "required" }
+options.persistent = { flag = ["--persistent"] }
+options.with_data  = { flag = ["--with-data"] }
+options.notify_url = { flag = ["--notify-url"], value = "required" }
+options.git_branch = { flag = ["--git-branch"], value = "required" }
+
+[shell.branches_delete]
+usage = "supabase [global options] branches delete [options] [<name>]"
+adds  = ["remote", "delete_remote_data"]
+options.remote = { flag = ["--remote"], value = "optional" }
+
+# ---------------------------------------------------------------- storage
+
+[shell.storage_ls]
+usage = "supabase [global options] storage ls [options] [<path>]"
+options.recursive = { flag = ["-r", "--recursive"] }
+options.remote    = { flag = ["--remote"], value = "optional", adds = ["remote"] }
+
+# The scheme picks the direction: a `ss://` destination uploads, a `ss://` source downloads to a
+# local path.
+[shell.storage_cp]
+usage = "supabase [global options] storage cp [options] <src> <dst>"
+options.recursive     = { flag = ["-r", "--recursive"] }
+options.cache_control = { flag = ["--cache-control"], value = "required" }
+options.content_type  = { flag = ["--content-type"], value = "required" }
+options.jobs          = { flag = ["-j", "--jobs"], value = "required" }
+options.remote        = { flag = ["--remote"], value = "optional", adds = ["remote"] }
+operands.src          = { like = "ss://*", adds = ["write_files"] }
+operands.dst          = { like = "ss://*", adds = ["write_storage"] }
+
+[shell.storage_mv]
+usage = "supabase [global options] storage mv [options] <src> <dst>"
+adds  = ["write_storage"]
+options.recursive = { flag = ["-r", "--recursive"] }
+options.remote    = { flag = ["--remote"], value = "optional", adds = ["remote"] }
+
+[shell.storage_rm]
+usage = "supabase [global options] storage rm [options] [<file>...]"
+adds  = ["delete_storage"]
+options.recursive = { flag = ["-r", "--recursive"] }
+options.remote    = { flag = ["--remote"], value = "optional", adds = ["remote"] }
+
+# ---------------------------------------------------------------- inspect (read-only queries)
+
+[shell.inspect_report]
+usage = "supabase [global options] inspect report [options]"
+adds  = ["write_files"]
+options.remote     = { flag = ["--remote"], value = "optional", adds = ["remote"] }
+options.output_dir = { flag = ["--output-dir"], value = "required" }
+
+[shell.inspect_db_db_stats]
+usage = "supabase [global options] inspect db db-stats [options]"
+options.remote = { flag = ["--remote"], value = "optional", adds = ["remote"] }
+
+[shell.inspect_db_replication_slots]
+usage = "supabase [global options] inspect db replication-slots [options]"
+options.remote = { flag = ["--remote"], value = "optional", adds = ["remote"] }
+
+[shell.inspect_db_locks]
+usage = "supabase [global options] inspect db locks [options]"
+options.remote = { flag = ["--remote"], value = "optional", adds = ["remote"] }
+
+[shell.inspect_db_blocking]
+usage = "supabase [global options] inspect db blocking [options]"
+options.remote = { flag = ["--remote"], value = "optional", adds = ["remote"] }
+
+[shell.inspect_db_outliers]
+usage = "supabase [global options] inspect db outliers [options]"
+options.remote = { flag = ["--remote"], value = "optional", adds = ["remote"] }
+
+[shell.inspect_db_calls]
+usage = "supabase [global options] inspect db calls [options]"
+options.remote = { flag = ["--remote"], value = "optional", adds = ["remote"] }
+
+[shell.inspect_db_index_stats]
+usage = "supabase [global options] inspect db index-stats [options]"
+options.remote = { flag = ["--remote"], value = "optional", adds = ["remote"] }
+
+[shell.inspect_db_collation_drift]
+usage = "supabase [global options] inspect db collation-drift [options]"
+options.remote = { flag = ["--remote"], value = "optional", adds = ["remote"] }
+
+[shell.inspect_db_long_running_queries]
+usage = "supabase [global options] inspect db long-running-queries [options]"
+options.remote = { flag = ["--remote"], value = "optional", adds = ["remote"] }
+
+[shell.inspect_db_bloat]
+usage = "supabase [global options] inspect db bloat [options]"
+options.remote = { flag = ["--remote"], value = "optional", adds = ["remote"] }
+
+[shell.inspect_db_role_stats]
+usage = "supabase [global options] inspect db role-stats [options]"
+options.remote = { flag = ["--remote"], value = "optional", adds = ["remote"] }
+
+[shell.inspect_db_vacuum_stats]
+usage = "supabase [global options] inspect db vacuum-stats [options]"
+options.remote = { flag = ["--remote"], value = "optional", adds = ["remote"] }
+
+[shell.inspect_db_table_stats]
+usage = "supabase [global options] inspect db table-stats [options]"
+options.remote = { flag = ["--remote"], value = "optional", adds = ["remote"] }
+
+[shell.inspect_db_traffic_profile]
+usage = "supabase [global options] inspect db traffic-profile [options]"
+options.remote = { flag = ["--remote"], value = "optional", adds = ["remote"] }
+
+[shell.inspect_db_toast_sizes]
+usage = "supabase [global options] inspect db toast-sizes [options]"
+options.remote = { flag = ["--remote"], value = "optional", adds = ["remote"] }
+
+[shell.inspect_db_xid_age]
+usage = "supabase [global options] inspect db xid-age [options]"
+options.remote = { flag = ["--remote"], value = "optional", adds = ["remote"] }
+
+[shell.inspect_db_cache_hit]
+usage = "supabase [global options] inspect db cache-hit [options]"
+options.remote = { flag = ["--remote"], value = "optional", adds = ["remote"] }
+
+[shell.inspect_db_index_usage]
+usage = "supabase [global options] inspect db index-usage [options]"
+options.remote = { flag = ["--remote"], value = "optional", adds = ["remote"] }
+
+[shell.inspect_db_index_sizes]
+usage = "supabase [global options] inspect db index-sizes [options]"
+options.remote = { flag = ["--remote"], value = "optional", adds = ["remote"] }
+
+[shell.inspect_db_table_sizes]
+usage = "supabase [global options] inspect db table-sizes [options]"
+options.remote = { flag = ["--remote"], value = "optional", adds = ["remote"] }
+
+[shell.inspect_db_unused_indexes]
+usage = "supabase [global options] inspect db unused-indexes [options]"
+options.remote = { flag = ["--remote"], value = "optional", adds = ["remote"] }
+
+[shell.inspect_db_table_record_counts]
+usage = "supabase [global options] inspect db table-record-counts [options]"
+options.remote = { flag = ["--remote"], value = "optional", adds = ["remote"] }
+
+[shell.inspect_db_seq_scans]
+usage = "supabase [global options] inspect db seq-scans [options]"
+options.remote = { flag = ["--remote"], value = "optional", adds = ["remote"] }
+
+[shell.inspect_db_role_configs]
+usage = "supabase [global options] inspect db role-configs [options]"
+options.remote = { flag = ["--remote"], value = "optional", adds = ["remote"] }
+
+[shell.inspect_db_role_connections]
+usage = "supabase [global options] inspect db role-connections [options]"
+options.remote = { flag = ["--remote"], value = "optional", adds = ["remote"] }
+
+# ---------------------------------------------------------------- test
+
+# pgTAP files are SQL, and nothing stops one from writing.
+[shell.test_db]
+usage = "supabase [global options] test db [options] [<path>...]"
+adds  = ["run_sql", "write_local_db"]
+options.remote = { flag = ["--remote"], value = "optional", adds = ["remote", "write_remote_db"], removes = ["write_local_db"] }
+
+[shell.test_new]
+usage = "supabase [global options] test new [options] <name>"
+adds  = ["write_files"]
+options.template = { flag = ["-t", "--template"], value = "required" }

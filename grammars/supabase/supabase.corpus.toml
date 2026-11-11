@@ -1,0 +1,1006 @@
+# Golden cases for supabase.grammar.toml, checked against supabase 3.1.0.
+#
+# Sources: the help files `supabase <command> --help` (3.1.0), and at tag v3.1.0 the command
+# definitions apps/cli/src/commands/**/<name>.command.ts, the SIDE_EFFECTS.md beside each
+# command, apps/cli/src/command-internal/global-flags.ts and target/target-flags.ts, and the
+# effect/cli 4.1.2 lexer and parser that the CLI uses (dist/cli/internal/lexer.js, parser.js).
+#
+# effect/cli rules that these cases pin:
+# - A long flag takes `--x v` or `--x=v`. No prefix of a long flag is accepted.
+# - A global flag (GlobalFlag.Setting) is read before, between, and after the command words.
+# - A command's own flags are read anywhere after its command words, among the operands.
+# - `--remote` is a Boolean-tagged primitive: bare `--remote` is the linked project and never
+#   takes the next word; `--remote=<ref|branch|url>` names another target (target-flags.ts,
+#   remotePrimitive).
+# - `--` ends the flags; later words are operands.
+
+# ================================================================ globals
+
+# Global flags before the command words, `--x v` spelling (supabase --help, GLOBAL FLAGS)
+[[case]]
+argv = ["supabase", "--workdir", "app", "--profile", "work", "status"]
+action = "status"
+fields = { workdir = "app", profile = "work" }
+
+# Global flags after the command words, `--x=v` spelling, and a short `-o` (status --help
+# example `supabase status -o env`)
+[[case]]
+argv = ["supabase", "status", "-o", "env", "--network-id=net1", "--debug", "--experimental"]
+action = "status"
+fields = { output = "env", network_id = "net1", debug = true, experimental = true }
+
+# A global flag between two command words (parser.js consumeGlobalFlags walks every level)
+[[case]]
+argv = ["supabase", "migration", "--debug", "list"]
+action = "migration_list"
+fields = { debug = true }
+
+# `--yes` answers every prompt, so it adds skip_confirmation, before or after the words
+[[case]]
+argv = ["supabase", "--yes", "db", "push", "--remote"]
+action = "db_push"
+fields = { yes = true, remote = "" }
+effects = ["remote", "write_remote_db", "skip_confirmation"]
+
+[[case]]
+argv = ["supabase", "db", "reset", "--yes"]
+action = "db_reset"
+fields = { yes = true }
+effects = ["write_local_db", "delete_local_data", "skip_confirmation"]
+
+# `--output-format`, `--log-level`, `--dns-resolver`, and `--agent` are global value flags
+[[case]]
+argv = ["supabase", "projects", "list", "--output-format", "json", "--log-level=error", "--dns-resolver", "https", "--agent", "yes"]
+action = "projects_list"
+fields = { output_format = "json", log_level = "error", dns_resolver = "https", agent = "yes" }
+effects = ["remote"]
+
+# A repeated global value flag is unmodeled (the CLI keeps only the first, effect patch)
+[[case]]
+argv = ["supabase", "--profile", "a", "status", "--profile", "b"]
+action = "unmodeled"
+
+# `--version`, a bare program, `--help`, and `--wizard` are not modeled
+[[case]]
+argv = ["supabase", "--version"]
+action = "unmodeled"
+
+[[case]]
+argv = ["supabase"]
+action = "unmodeled"
+
+[[case]]
+argv = ["supabase", "status", "--help"]
+action = "unmodeled"
+
+[[case]]
+argv = ["supabase", "--wizard", "init"]
+action = "unmodeled"
+
+# The hidden `--create-ticket` global and the hidden `--project-ref` selector are not modeled
+[[case]]
+argv = ["supabase", "status", "--create-ticket"]
+action = "unmodeled"
+
+[[case]]
+argv = ["supabase", "db", "push", "--project-ref", "abcdefghijklmnopqrst"]
+action = "unmodeled"
+
+# The negated boolean form that effect/cli adds (`--no-<name>`) is not modeled
+[[case]]
+argv = ["supabase", "status", "--no-debug"]
+action = "unmodeled"
+
+# `--yes=false` is a value on a flag the grammar reads as a plain flag, so unmodeled
+[[case]]
+argv = ["supabase", "db", "push", "--yes=false"]
+action = "unmodeled"
+
+# A boolean flag followed by a boolean literal: the CLI reads `false` as the flag's value
+# (parser.js consumeFlagValueWithTokens); with no operand slot the word is left over
+[[case]]
+argv = ["supabase", "db", "push", "--yes", "false"]
+action = "unmodeled"
+
+# ================================================================ init, start, stop, status
+
+# init writes supabase/config.toml (init --help)
+[[case]]
+argv = ["supabase", "init"]
+action = "init"
+effects = ["write_files"]
+
+# Short `-i` and long `--force` (init --help)
+[[case]]
+argv = ["supabase", "init", "-i", "--force", "--use-orioledb"]
+action = "init"
+fields = { interactive = true, force = true, use_orioledb = true }
+effects = ["write_files"]
+
+# A prefix of a long flag is not accepted
+[[case]]
+argv = ["supabase", "init", "--forc"]
+action = "unmodeled"
+
+# init takes no operand
+[[case]]
+argv = ["supabase", "init", "myproject"]
+action = "unmodeled"
+
+# Hidden init flags are not modeled
+[[case]]
+argv = ["supabase", "init", "--with-vscode-settings"]
+action = "unmodeled"
+
+# start runs the local containers; `-x` and `--exclude` repeat (start --help, stringSliceFlag)
+[[case]]
+argv = ["supabase", "start", "-x", "studio", "--exclude=imgproxy", "--ignore-health-check"]
+action = "start"
+fields = { exclude = ["studio", "imgproxy"], ignore_health_check = true }
+effects = ["local_stack"]
+
+# Hidden `--preview` is not modeled
+[[case]]
+argv = ["supabase", "start", "--preview"]
+action = "unmodeled"
+
+# stop: `--no-backup` deletes the data volumes (stop --help)
+[[case]]
+argv = ["supabase", "stop"]
+action = "stop"
+effects = ["local_stack"]
+
+[[case]]
+argv = ["supabase", "stop", "--no-backup"]
+action = "stop"
+fields = { no_backup = true }
+effects = ["local_stack", "delete_local_data"]
+
+[[case]]
+argv = ["supabase", "stop", "--all", "--project-id", "demo"]
+action = "stop"
+fields = { all = true, project_id = "demo" }
+effects = ["local_stack"]
+
+# The hidden `--backup=false` also deletes the volumes, so it is not modeled (stop.command.ts)
+[[case]]
+argv = ["supabase", "stop", "--backup=false"]
+action = "unmodeled"
+
+# status reads only; `--override-name` repeats (status --help example)
+[[case]]
+argv = ["supabase", "status", "-o", "env", "--override-name", "api.url=NEXT_PUBLIC_SUPABASE_URL"]
+action = "status"
+fields = { output = "env", override_name = ["api.url=NEXT_PUBLIC_SUPABASE_URL"] }
+
+# A typo command word is unmodeled
+[[case]]
+argv = ["supabase", "statu"]
+action = "unmodeled"
+
+# ================================================================ link, unlink
+
+# link writes the link state and calls the API (link --help, link SIDE_EFFECTS.md)
+[[case]]
+argv = ["supabase", "link", "abcdefghijklmnopqrst"]
+action = "link"
+fields = { ref_or_branch = "abcdefghijklmnopqrst" }
+effects = ["remote", "write_link_config"]
+
+[[case]]
+argv = ["supabase", "link", "--project-ref", "abcdefghijklmnopqrst", "--skip-pooler"]
+action = "link"
+fields = { project_ref = "abcdefghijklmnopqrst", skip_pooler = true }
+effects = ["remote", "write_link_config"]
+
+# The hidden `-p/--password` of link is not modeled
+[[case]]
+argv = ["supabase", "link", "-p", "secret"]
+action = "unmodeled"
+
+# link takes no `--remote` (link SIDE_EFFECTS.md)
+[[case]]
+argv = ["supabase", "link", "--remote"]
+action = "unmodeled"
+
+[[case]]
+argv = ["supabase", "unlink"]
+action = "unlink"
+effects = ["write_link_config"]
+
+[[case]]
+argv = ["supabase", "unlink", "abcdefghijklmnopqrst"]
+action = "unmodeled"
+
+# ================================================================ db diff
+
+# Local by default; reads only (db diff --help TARGET)
+[[case]]
+argv = ["supabase", "db", "diff"]
+action = "db_diff"
+
+# `-f` saves a migration file, `-s` repeats, `--remote` targets the linked project
+[[case]]
+argv = ["supabase", "db", "diff", "-f", "add_users", "-s", "public", "--schema=auth", "--remote"]
+action = "db_diff"
+fields = { file = "add_users", schema = ["public", "auth"], remote = "" }
+effects = ["write_files", "remote"]
+
+# db diff owns `-o`: a file to write, not the global output format
+[[case]]
+argv = ["supabase", "db", "diff", "-o", "review.sql", "--use-pg-delta"]
+action = "db_diff"
+fields = { output = "review.sql", use_pg_delta = true }
+effects = ["write_files"]
+
+# `--remote=<url>` names another database
+[[case]]
+argv = ["supabase", "db", "diff", "--remote=postgresql://db.example.com/postgres", "--use-migra"]
+action = "db_diff"
+fields = { remote = "postgresql://db.example.com/postgres", use_migra = true }
+effects = ["remote"]
+
+# `--from` and `--to` are not modeled: their values can name local or remote databases
+[[case]]
+argv = ["supabase", "db", "diff", "--from", "migrations", "--to", "local"]
+action = "unmodeled"
+
+# db diff takes no global flags in this grammar (its own `-o` wins over the global one)
+[[case]]
+argv = ["supabase", "--workdir", "app", "db", "diff"]
+action = "unmodeled"
+
+# `--remote <ref>` with a separate word: the CLI joins it to `--remote=<ref>` for a command with
+# no operands (remote-argv.ts joinRemoteOperands); the grammar leaves the word over
+[[case]]
+argv = ["supabase", "db", "diff", "--remote", "abcdefghijklmnopqrst"]
+action = "unmodeled"
+
+# ================================================================ db dump
+
+[[case]]
+argv = ["supabase", "db", "dump", "-f", "schema.sql"]
+action = "db_dump"
+fields = { file = "schema.sql" }
+effects = ["write_files"]
+
+# `--data-only` dumps table data; `-x` repeats; `--remote` with `-p` password
+[[case]]
+argv = ["supabase", "db", "dump", "--data-only", "-x", "public.logs", "--remote", "-p", "pw", "--use-copy"]
+action = "db_dump"
+fields = { data_only = true, exclude = ["public.logs"], remote = "", password = "pw", use_copy = true }
+effects = ["dump_data", "remote"]
+
+# Plain flags of db dump; `--dry-run` prints the pg_dump script
+[[case]]
+argv = ["supabase", "db", "dump", "--dry-run", "--role-only", "--keep-comments"]
+action = "db_dump"
+fields = { dry_run = true, role_only = true, keep_comments = true }
+
+[[case]]
+argv = ["supabase", "db", "dump", "--data"]
+action = "unmodeled"
+
+# ================================================================ db lint
+
+[[case]]
+argv = ["supabase", "db", "lint", "--level", "error", "--fail-on=warning", "-s", "public"]
+action = "db_lint"
+fields = { level = "error", fail_on = "warning", schema = ["public"] }
+
+[[case]]
+argv = ["supabase", "db", "lint", "--remote=abcdefghijklmnopqrst"]
+action = "db_lint"
+fields = { remote = "abcdefghijklmnopqrst" }
+effects = ["remote"]
+
+# ================================================================ db pull
+
+# Writes a migration and records it in the local history (db pull --help)
+[[case]]
+argv = ["supabase", "db", "pull", "init_schema"]
+action = "db_pull"
+fields = { migration_name = "init_schema" }
+effects = ["write_files", "write_local_db"]
+
+# With `--remote` it records it in the hosted history instead
+[[case]]
+argv = ["supabase", "db", "pull", "--remote", "init_schema", "-s", "public"]
+action = "db_pull"
+fields = { remote = "", migration_name = "init_schema", schema = ["public"] }
+effects = ["write_files", "remote", "write_remote_db"]
+
+# `--declarative` removes no effect (see the grammar comment)
+[[case]]
+argv = ["supabase", "db", "pull", "--declarative", "--diff-engine", "pg-delta"]
+action = "db_pull"
+fields = { declarative = true, diff_engine = "pg-delta" }
+effects = ["write_files", "write_local_db"]
+
+# Two operands are one too many
+[[case]]
+argv = ["supabase", "db", "pull", "a", "b"]
+action = "unmodeled"
+
+# ================================================================ db push
+
+[[case]]
+argv = ["supabase", "db", "push"]
+action = "db_push"
+effects = ["write_local_db"]
+
+# `--remote` moves the write to the hosted database
+[[case]]
+argv = ["supabase", "db", "push", "--remote", "--include-all", "--include-roles", "--include-seed", "--skip-vault"]
+action = "db_push"
+fields = { remote = "", include_all = true, include_roles = true, include_seed = true, skip_vault = true }
+effects = ["remote", "write_remote_db"]
+
+# `--remote=<branch>` and `--password=<pw>`
+[[case]]
+argv = ["supabase", "db", "push", "--remote=staging", "--password=pw"]
+action = "db_push"
+fields = { remote = "staging", password = "pw" }
+effects = ["remote", "write_remote_db"]
+
+# `--dry-run` prints the migrations without applying them, so the write effect goes
+[[case]]
+argv = ["supabase", "db", "push", "--dry-run", "--remote"]
+action = "db_push"
+fields = { dry_run = true, remote = "" }
+effects = ["remote"]
+
+[[case]]
+argv = ["supabase", "db", "push", "--dry-run"]
+action = "db_push"
+fields = { dry_run = true }
+
+# The deprecated hidden selectors are not modeled
+[[case]]
+argv = ["supabase", "db", "push", "--linked"]
+action = "unmodeled"
+
+[[case]]
+argv = ["supabase", "db", "push", "--db-url", "postgresql://x/y"]
+action = "unmodeled"
+
+[[case]]
+argv = ["supabase", "db", "push", "--local"]
+action = "unmodeled"
+
+# `--dry-run false` makes the CLI apply the migrations; the word is left over here
+[[case]]
+argv = ["supabase", "db", "push", "--dry-run", "false"]
+action = "unmodeled"
+
+# `--remote true` is the linked project to the CLI; here the word `true` is left over
+[[case]]
+argv = ["supabase", "db", "push", "--remote", "true"]
+action = "unmodeled"
+
+# ================================================================ db reset
+
+[[case]]
+argv = ["supabase", "db", "reset"]
+action = "db_reset"
+effects = ["write_local_db", "delete_local_data"]
+
+[[case]]
+argv = ["supabase", "db", "reset", "--remote", "--no-seed", "--version", "20240101000000"]
+action = "db_reset"
+fields = { remote = "", no_seed = true, version = "20240101000000" }
+effects = ["remote", "write_remote_db", "delete_remote_data"]
+
+# `--sql-paths` repeats (db reset --help), `--last` takes a number
+[[case]]
+argv = ["supabase", "db", "reset", "--sql-paths", "seed/a.sql", "--sql-paths=seed/b.sql", "--last", "2"]
+action = "db_reset"
+fields = { sql_paths = ["seed/a.sql", "seed/b.sql"], last = "2" }
+effects = ["write_local_db", "delete_local_data"]
+
+# A non-repeated value option given twice is unmodeled
+[[case]]
+argv = ["supabase", "db", "reset", "--last", "1", "--last", "2"]
+action = "unmodeled"
+
+# ================================================================ db query
+
+# Runs SQL; counted as a write because SQL can write (db query --help)
+[[case]]
+argv = ["supabase", "db", "query", "select 1"]
+action = "db_query"
+fields = { sql = "select 1" }
+effects = ["run_sql", "write_local_db"]
+
+# `--read-only` removes no effect (see the grammar comment); `-f` names a file
+[[case]]
+argv = ["supabase", "db", "query", "--read-only", "-f", "report.sql", "--remote=abcdefghijklmnopqrst"]
+action = "db_query"
+fields = { read_only = true, file = "report.sql", remote = "abcdefghijklmnopqrst" }
+effects = ["run_sql", "remote", "write_remote_db"]
+
+# A value that looks like a flag after `--` is the operand
+[[case]]
+argv = ["supabase", "db", "query", "--", "-1"]
+action = "db_query"
+fields = { sql = "-1" }
+effects = ["run_sql", "write_local_db"]
+
+[[case]]
+argv = ["supabase", "db", "query", "--readonly", "select 1"]
+action = "unmodeled"
+
+# ================================================================ db start
+
+[[case]]
+argv = ["supabase", "db", "start"]
+action = "db_start"
+effects = ["local_stack"]
+
+[[case]]
+argv = ["supabase", "db", "start", "--from-backup", "backup.sql"]
+action = "db_start"
+fields = { from_backup = "backup.sql" }
+effects = ["local_stack", "write_local_db"]
+
+# Other db subcommands are not modeled
+[[case]]
+argv = ["supabase", "db", "advisors"]
+action = "unmodeled"
+
+# The hidden alias `db test` is not modeled
+[[case]]
+argv = ["supabase", "db", "test"]
+action = "unmodeled"
+
+# ================================================================ migration
+
+# `migration new` writes a file; `migrations` is the documented alias (supabase --help)
+[[case]]
+argv = ["supabase", "migration", "new", "create_users"]
+action = "migration_new"
+fields = { migration_name = "create_users" }
+effects = ["write_files"]
+
+[[case]]
+argv = ["supabase", "migrations", "new", "create_users"]
+action = "migration_new"
+fields = { migration_name = "create_users" }
+effects = ["write_files"]
+
+# The name is required
+[[case]]
+argv = ["supabase", "migration", "new"]
+action = "unmodeled"
+
+[[case]]
+argv = ["supabase", "migration", "list", "--remote", "-p", "pw"]
+action = "migration_list"
+fields = { remote = "", password = "pw" }
+effects = ["remote"]
+
+[[case]]
+argv = ["supabase", "migrations", "list"]
+action = "migration_list"
+
+[[case]]
+argv = ["supabase", "migration", "up", "--include-all"]
+action = "migration_up"
+fields = { include_all = true }
+effects = ["write_local_db"]
+
+[[case]]
+argv = ["supabase", "migration", "up", "--remote"]
+action = "migration_up"
+fields = { remote = "" }
+effects = ["remote", "write_remote_db"]
+
+# down drops objects and re-applies migrations (migration/down SIDE_EFFECTS.md)
+[[case]]
+argv = ["supabase", "migration", "down", "--last", "1"]
+action = "migration_down"
+fields = { last = "1" }
+effects = ["write_local_db", "delete_local_data"]
+
+[[case]]
+argv = ["supabase", "migrations", "down", "--remote=abcdefghijklmnopqrst"]
+action = "migration_down"
+fields = { remote = "abcdefghijklmnopqrst" }
+effects = ["remote", "write_remote_db", "delete_remote_data"]
+
+# repair writes the history table; versions are variadic; options after operands
+[[case]]
+argv = ["supabase", "migration", "repair", "20240101000000", "20240102000000", "--status", "reverted"]
+action = "migration_repair"
+fields = { version = ["20240101000000", "20240102000000"], status = "reverted" }
+effects = ["write_local_db"]
+
+[[case]]
+argv = ["supabase", "migration", "repair", "--status=applied", "--remote", "20240101000000"]
+action = "migration_repair"
+fields = { status = "applied", remote = "", version = ["20240101000000"] }
+effects = ["remote", "write_remote_db"]
+
+# squash rewrites local files; hosted target also rewrites the hosted history
+[[case]]
+argv = ["supabase", "migration", "squash", "--version", "20240101000000"]
+action = "migration_squash"
+fields = { version = "20240101000000" }
+effects = ["write_files"]
+
+[[case]]
+argv = ["supabase", "migration", "squash", "--remote"]
+action = "migration_squash"
+fields = { remote = "" }
+effects = ["write_files", "remote", "write_remote_db"]
+
+[[case]]
+argv = ["supabase", "migration", "fetch", "--remote"]
+action = "migration_fetch"
+fields = { remote = "" }
+effects = ["write_files", "remote"]
+
+[[case]]
+argv = ["supabase", "migration", "fetch", "--all"]
+action = "unmodeled"
+
+# ================================================================ gen types
+
+# Prints TypeScript types from the local database (gen types --help examples)
+[[case]]
+argv = ["supabase", "gen", "types"]
+action = "gen_types"
+
+[[case]]
+argv = ["supabase", "gen", "types", "--lang=typescript", "--remote", "-s", "public", "--schema", "private"]
+action = "gen_types"
+fields = { lang = "typescript", remote = "", schema = ["public", "private"] }
+effects = ["remote"]
+
+# The legacy positional language
+[[case]]
+argv = ["supabase", "gen", "types", "typescript", "--remote=abcdefghijklmnopqrst"]
+action = "gen_types"
+fields = { language = "typescript", remote = "abcdefghijklmnopqrst" }
+effects = ["remote"]
+
+# `--lang dart` and `--lang swift` run that language's own tool (gen/types SIDE_EFFECTS.md)
+[[case]]
+argv = ["supabase", "gen", "types", "--lang", "swift", "--swift-access-control", "public", "--query-timeout", "30s"]
+action = "gen_types"
+fields = { lang = "swift", swift_access_control = "public", query_timeout = "30s" }
+effects = ["run_program"]
+
+[[case]]
+argv = ["supabase", "gen", "types", "--lang", "go"]
+action = "gen_types"
+fields = { lang = "go" }
+
+# The hidden `--project-id` is not modeled
+[[case]]
+argv = ["supabase", "gen", "types", "--project-id", "abcdefghijklmnopqrst"]
+action = "unmodeled"
+
+[[case]]
+argv = ["supabase", "gen", "signing-key"]
+action = "unmodeled"
+
+# ================================================================ functions
+
+[[case]]
+argv = ["supabase", "functions", "new", "hello-world", "--auth", "none"]
+action = "functions_new"
+fields = { function_name = "hello-world", auth = "none" }
+effects = ["write_files"]
+
+[[case]]
+argv = ["supabase", "functions", "serve", "--env-file", ".env.local", "--no-verify-jwt", "--inspect-mode", "brk", "--inspect-main"]
+action = "functions_serve"
+fields = { env_file = ".env.local", no_verify_jwt = true, inspect_mode = "brk", inspect_main = true }
+effects = ["local_stack"]
+
+[[case]]
+argv = ["supabase", "functions", "serve", "--inspect", "--import-map", "map.json", "a", "b"]
+action = "functions_serve"
+fields = { inspect = true, import_map = "map.json", function_name = ["a", "b"] }
+effects = ["local_stack"]
+
+# deploy is remote-only and uses the linked project by default (functions deploy --help)
+[[case]]
+argv = ["supabase", "functions", "deploy", "hello-world"]
+action = "functions_deploy"
+fields = { function_name = ["hello-world"] }
+effects = ["remote", "deploy_remote"]
+
+# `--prune` deletes hosted functions that are not local; `-j` short value
+[[case]]
+argv = ["supabase", "functions", "deploy", "--remote=abcdefghijklmnopqrst", "--prune", "--use-api", "-j", "4", "--no-verify-jwt"]
+action = "functions_deploy"
+fields = { remote = "abcdefghijklmnopqrst", prune = true, use_api = true, jobs = "4", no_verify_jwt = true }
+effects = ["remote", "deploy_remote", "delete_remote_data"]
+
+# The hidden `--use-docker` is not modeled
+[[case]]
+argv = ["supabase", "functions", "deploy", "--use-docker"]
+action = "unmodeled"
+
+[[case]]
+argv = ["supabase", "functions", "delete", "hello-world", "--remote=abcdefghijklmnopqrst"]
+action = "functions_delete"
+fields = { function_name = "hello-world", remote = "abcdefghijklmnopqrst" }
+effects = ["remote", "delete_remote_data"]
+
+# delete needs exactly one name
+[[case]]
+argv = ["supabase", "functions", "delete"]
+action = "unmodeled"
+
+[[case]]
+argv = ["supabase", "functions", "delete", "a", "b"]
+action = "unmodeled"
+
+[[case]]
+argv = ["supabase", "functions", "list"]
+action = "functions_list"
+effects = ["remote"]
+
+[[case]]
+argv = ["supabase", "functions", "download", "hello-world", "--use-api"]
+action = "functions_download"
+fields = { function_name = "hello-world", use_api = true }
+effects = ["remote", "write_files"]
+
+[[case]]
+argv = ["supabase", "functions", "download", "--legacy-bundle"]
+action = "unmodeled"
+
+# ================================================================ secrets
+
+[[case]]
+argv = ["supabase", "secrets", "list"]
+action = "secrets_list"
+effects = ["remote"]
+
+[[case]]
+argv = ["supabase", "secrets", "set", "MY_SECRET=myvalue", "OTHER=1"]
+action = "secrets_set"
+fields = { secrets = ["MY_SECRET=myvalue", "OTHER=1"] }
+effects = ["remote", "write_secret"]
+
+[[case]]
+argv = ["supabase", "secrets", "set", "--env-file", ".env", "--remote=staging"]
+action = "secrets_set"
+fields = { env_file = ".env", remote = "staging" }
+effects = ["remote", "write_secret"]
+
+# `--dry-run` removes no effect (see the grammar comment)
+[[case]]
+argv = ["supabase", "secrets", "unset", "--all", "--dry-run"]
+action = "secrets_unset"
+fields = { all = true, dry_run = true }
+effects = ["remote", "write_secret"]
+
+[[case]]
+argv = ["supabase", "secrets", "unset", "MY_SECRET", "OTHER_SECRET"]
+action = "secrets_unset"
+fields = { names = ["MY_SECRET", "OTHER_SECRET"] }
+effects = ["remote", "write_secret"]
+
+# A boolean literal after a boolean flag is read here as an operand (a known limit: the CLI reads
+# it as the flag's value, and the effects stay, so a forbid still applies)
+[[case]]
+argv = ["supabase", "secrets", "unset", "--dry-run", "false", "--all"]
+action = "secrets_unset"
+fields = { dry_run = true, names = ["false"], all = true }
+effects = ["remote", "write_secret"]
+
+[[case]]
+argv = ["supabase", "secrets", "get"]
+action = "unmodeled"
+
+# ================================================================ projects, orgs
+
+[[case]]
+argv = ["supabase", "projects", "list"]
+action = "projects_list"
+effects = ["remote"]
+
+# projects list takes no options of its own
+[[case]]
+argv = ["supabase", "projects", "list", "--all"]
+action = "unmodeled"
+
+# projects create (projects create --help example)
+[[case]]
+argv = ["supabase", "projects", "create", "my-project", "--org-id", "cool-green-pqdr0qc", "--db-password", "pw", "--region", "us-east-1", "--size", "micro", "--high-availability"]
+action = "projects_create"
+fields = { name = "my-project", org_id = "cool-green-pqdr0qc", db_password = "pw", region = "us-east-1", size = "micro", high_availability = true }
+effects = ["remote", "create_remote"]
+
+# Hidden `--plan` is not modeled
+[[case]]
+argv = ["supabase", "projects", "create", "x", "--plan", "pro"]
+action = "unmodeled"
+
+[[case]]
+argv = ["supabase", "projects", "delete", "abcdefghijklmnopqrst"]
+action = "projects_delete"
+fields = { ref = "abcdefghijklmnopqrst" }
+effects = ["remote", "delete_remote_data"]
+
+# `--yes` on delete
+[[case]]
+argv = ["supabase", "projects", "delete", "abcdefghijklmnopqrst", "--yes"]
+action = "projects_delete"
+fields = { ref = "abcdefghijklmnopqrst", yes = true }
+effects = ["remote", "delete_remote_data", "skip_confirmation"]
+
+# api-keys: `--reveal` prints secret keys in full
+[[case]]
+argv = ["supabase", "projects", "api-keys", "--reveal", "--output", "json"]
+action = "projects_api_keys"
+fields = { reveal = true, output = "json" }
+effects = ["remote", "reveal_secrets"]
+
+[[case]]
+argv = ["supabase", "projects", "api-keys", "--remote=abcdefghijklmnopqrst"]
+action = "projects_api_keys"
+fields = { remote = "abcdefghijklmnopqrst" }
+effects = ["remote"]
+
+[[case]]
+argv = ["supabase", "orgs", "list"]
+action = "orgs_list"
+effects = ["remote"]
+
+[[case]]
+argv = ["supabase", "orgs", "create", "acme"]
+action = "unmodeled"
+
+# ================================================================ branches
+
+[[case]]
+argv = ["supabase", "branches", "list"]
+action = "branches_list"
+effects = ["remote"]
+
+[[case]]
+argv = ["supabase", "branches", "get", "feature-x"]
+action = "branches_get"
+fields = { name = "feature-x" }
+effects = ["remote", "reveal_secrets"]
+
+[[case]]
+argv = ["supabase", "branches", "create", "feature-x", "--with-data", "--persistent", "--region", "us-east-1", "--size", "micro", "--git-branch", "feat/x", "--notify-url", "https://example.com/hook"]
+action = "branches_create"
+fields = { name = "feature-x", with_data = true, persistent = true, region = "us-east-1", size = "micro", git_branch = "feat/x", notify_url = "https://example.com/hook" }
+effects = ["remote", "create_remote"]
+
+[[case]]
+argv = ["supabase", "branches", "delete", "feature-x", "--remote=abcdefghijklmnopqrst"]
+action = "branches_delete"
+fields = { name = "feature-x", remote = "abcdefghijklmnopqrst" }
+effects = ["remote", "delete_remote_data"]
+
+[[case]]
+argv = ["supabase", "branches", "pause", "feature-x"]
+action = "unmodeled"
+
+# ================================================================ storage
+
+[[case]]
+argv = ["supabase", "storage", "ls", "ss:///bucket/docs", "-r"]
+action = "storage_ls"
+fields = { path = "ss:///bucket/docs", recursive = true }
+
+[[case]]
+argv = ["supabase", "storage", "ls", "--remote"]
+action = "storage_ls"
+fields = { remote = "" }
+effects = ["remote"]
+
+# cp upload: a `ss://` destination (storage cp --help examples)
+[[case]]
+argv = ["supabase", "storage", "cp", "readme.md", "ss:///bucket/readme.md"]
+action = "storage_cp"
+fields = { src = "readme.md", dst = "ss:///bucket/readme.md" }
+effects = ["write_storage"]
+
+# cp upload to hosted Storage, short cluster `-rj` with the value of `-j` as the next word
+[[case]]
+argv = ["supabase", "storage", "cp", "-rj", "4", "docs", "ss:///bucket/docs", "--remote", "--cache-control", "max-age=60", "--content-type=text/plain"]
+action = "storage_cp"
+fields = { recursive = true, jobs = "4", src = "docs", dst = "ss:///bucket/docs", remote = "", cache_control = "max-age=60", content_type = "text/plain" }
+effects = ["write_storage", "remote"]
+
+# cp download: a `ss://` source writes local files
+[[case]]
+argv = ["supabase", "storage", "cp", "-r", "ss:///bucket/docs", "."]
+action = "storage_cp"
+fields = { recursive = true, src = "ss:///bucket/docs", dst = "." }
+effects = ["write_files"]
+
+# cp needs both operands
+[[case]]
+argv = ["supabase", "storage", "cp", "readme.md"]
+action = "unmodeled"
+
+[[case]]
+argv = ["supabase", "storage", "mv", "-r", "ss:///bucket/docs", "ss:///bucket/www/docs"]
+action = "storage_mv"
+fields = { recursive = true, src = "ss:///bucket/docs", dst = "ss:///bucket/www/docs" }
+effects = ["write_storage"]
+
+[[case]]
+argv = ["supabase", "storage", "rm", "ss:///bucket/docs/example.md", "ss:///bucket/readme.md", "--remote"]
+action = "storage_rm"
+fields = { file = ["ss:///bucket/docs/example.md", "ss:///bucket/readme.md"], remote = "" }
+effects = ["delete_storage", "remote"]
+
+[[case]]
+argv = ["supabase", "storage", "rm", "--recursive"]
+action = "storage_rm"
+fields = { recursive = true }
+effects = ["delete_storage"]
+
+# ================================================================ inspect
+
+[[case]]
+argv = ["supabase", "inspect", "db", "bloat"]
+action = "inspect_db_bloat"
+
+[[case]]
+argv = ["supabase", "inspect", "db", "locks", "--remote"]
+action = "inspect_db_locks"
+fields = { remote = "" }
+effects = ["remote"]
+
+[[case]]
+argv = ["supabase", "inspect", "db", "long-running-queries", "--remote=postgres://db.example.com/postgres"]
+action = "inspect_db_long_running_queries"
+fields = { remote = "postgres://db.example.com/postgres" }
+effects = ["remote"]
+
+[[case]]
+argv = ["supabase", "inspect", "db", "db-stats"]
+action = "inspect_db_db_stats"
+
+[[case]]
+argv = ["supabase", "inspect", "db", "replication-slots"]
+action = "inspect_db_replication_slots"
+
+[[case]]
+argv = ["supabase", "inspect", "db", "blocking"]
+action = "inspect_db_blocking"
+
+[[case]]
+argv = ["supabase", "inspect", "db", "outliers"]
+action = "inspect_db_outliers"
+
+[[case]]
+argv = ["supabase", "inspect", "db", "calls"]
+action = "inspect_db_calls"
+
+[[case]]
+argv = ["supabase", "inspect", "db", "index-stats"]
+action = "inspect_db_index_stats"
+
+[[case]]
+argv = ["supabase", "inspect", "db", "collation-drift"]
+action = "inspect_db_collation_drift"
+
+[[case]]
+argv = ["supabase", "inspect", "db", "role-stats"]
+action = "inspect_db_role_stats"
+
+[[case]]
+argv = ["supabase", "inspect", "db", "vacuum-stats"]
+action = "inspect_db_vacuum_stats"
+
+[[case]]
+argv = ["supabase", "inspect", "db", "table-stats"]
+action = "inspect_db_table_stats"
+
+[[case]]
+argv = ["supabase", "inspect", "db", "traffic-profile"]
+action = "inspect_db_traffic_profile"
+
+[[case]]
+argv = ["supabase", "inspect", "db", "toast-sizes"]
+action = "inspect_db_toast_sizes"
+
+[[case]]
+argv = ["supabase", "inspect", "db", "xid-age"]
+action = "inspect_db_xid_age"
+
+[[case]]
+argv = ["supabase", "inspect", "db", "cache-hit"]
+action = "inspect_db_cache_hit"
+
+[[case]]
+argv = ["supabase", "inspect", "db", "index-usage"]
+action = "inspect_db_index_usage"
+
+[[case]]
+argv = ["supabase", "inspect", "db", "index-sizes"]
+action = "inspect_db_index_sizes"
+
+[[case]]
+argv = ["supabase", "inspect", "db", "table-sizes"]
+action = "inspect_db_table_sizes"
+
+[[case]]
+argv = ["supabase", "inspect", "db", "unused-indexes"]
+action = "inspect_db_unused_indexes"
+
+[[case]]
+argv = ["supabase", "inspect", "db", "table-record-counts"]
+action = "inspect_db_table_record_counts"
+
+[[case]]
+argv = ["supabase", "inspect", "db", "seq-scans"]
+action = "inspect_db_seq_scans"
+
+[[case]]
+argv = ["supabase", "inspect", "db", "role-configs"]
+action = "inspect_db_role_configs"
+
+[[case]]
+argv = ["supabase", "inspect", "db", "role-connections"]
+action = "inspect_db_role_connections"
+
+# The hidden inspect commands are not modeled
+[[case]]
+argv = ["supabase", "inspect", "db", "total-table-sizes"]
+action = "unmodeled"
+
+[[case]]
+argv = ["supabase", "inspect", "db", "bloat", "public"]
+action = "unmodeled"
+
+# report writes CSV files into the output directory (inspect/report SIDE_EFFECTS.md)
+[[case]]
+argv = ["supabase", "inspect", "report", "--output-dir", "reports", "--remote"]
+action = "inspect_report"
+fields = { output_dir = "reports", remote = "" }
+effects = ["write_files", "remote"]
+
+# ================================================================ test
+
+[[case]]
+argv = ["supabase", "test", "db"]
+action = "test_db"
+effects = ["run_sql", "write_local_db"]
+
+[[case]]
+argv = ["supabase", "test", "db", "supabase/tests/a.sql", "--remote"]
+action = "test_db"
+fields = { path = ["supabase/tests/a.sql"], remote = "" }
+effects = ["run_sql", "remote", "write_remote_db"]
+
+[[case]]
+argv = ["supabase", "test", "new", "users", "-t", "pgtap"]
+action = "test_new"
+fields = { name = "users", template = "pgtap" }
+effects = ["write_files"]
+
+[[case]]
+argv = ["supabase", "test", "new", "users", "--template=pgtap"]
+action = "test_new"
+fields = { name = "users", template = "pgtap" }
+effects = ["write_files"]
+
+# `-t=pgtap` is not a value spelling the grammar reads
+[[case]]
+argv = ["supabase", "test", "new", "users", "-t=pgtap"]
+action = "unmodeled"
+
+# ================================================================ other families
+
+[[case]]
+argv = ["supabase", "login"]
+action = "unmodeled"
+
+[[case]]
+argv = ["supabase", "config", "push"]
+action = "unmodeled"
