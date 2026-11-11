@@ -1,0 +1,2298 @@
+# Golden cases for git.grammar.toml, checked against git 2.56.1.
+#
+# Each expectation comes from git's documented behaviour: the `git <cmd> -h` output and the man
+# pages for 2.56.1, and, where the man page is silent, the 2.56.1 source (named per case).
+# `fields` lists only fields that do not hold their default. An `unmodeled` case has no fields and
+# no effects.
+#
+# OUT below means the outside-path patterns: an absolute path or a path that contains `..`.
+
+# ---------------------------------------------------------------- global options (git.c)
+
+# git(1): `-C <path>` runs as if started in <path>; it takes the next word.
+[[case]]
+argv = ["git", "-C", "../other", "status"]
+action = "status"
+fields = { change_directory = "../other" }
+effects = ["other_repository", "run_program"]
+
+# git(1): `-c <name>=<value>` sets configuration for this command; configuration can name
+# programs (core.sshCommand) and skip hooks (core.hooksPath).
+[[case]]
+argv = ["git", "-c", "core.hooksPath=/dev/null", "-c", "user.name=x", "commit", "-m", "wip"]
+action = "commit"
+fields = { config = ["core.hooksPath=/dev/null", "user.name=x"], message = ["wip"] }
+effects = ["override_config", "run_program", "skip_hooks"]
+
+# git.c handle_options: `--config-env=<name>=<envvar>` and `--config-env <name>=<envvar>`.
+[[case]]
+argv = ["git", "--config-env=core.pager=PAGER_VAR", "log"]
+action = "log"
+fields = { config_env = ["core.pager=PAGER_VAR"] }
+effects = ["override_config", "run_program", "skip_hooks"]
+
+# git(1): `--git-dir=<path>` and `--git-dir <path>`; also `--work-tree`.
+[[case]]
+argv = ["git", "--git-dir", "/srv/repo.git", "--work-tree=/srv/wt", "status", "-s"]
+action = "status"
+fields = { git_dir = "/srv/repo.git", short = true, work_tree = "/srv/wt" }
+effects = ["other_repository", "run_program"]
+
+# git(1): `-P`/`--no-pager` and `--no-optional-locks` change no outcome.
+[[case]]
+argv = ["git", "--no-pager", "--no-optional-locks", "diff", "--stat"]
+action = "diff"
+fields = { no_optional_locks = true, no_pager = true, stat = "" }
+
+[[case]]
+argv = ["git", "-P", "log", "--oneline", "-n", "5"]
+action = "log"
+fields = { max_count = "5", no_pager = true, oneline = true }
+
+# Git refuses a global option after the subcommand ("unknown switch").
+[[case]]
+argv = ["git", "status", "-C", "."]
+action = "unmodeled"
+
+# `--exec-path=<dir>` makes git run git-* programs from <dir>; not declared.
+[[case]]
+argv = ["git", "--exec-path=/tmp/x", "status"]
+action = "unmodeled"
+
+# A required value takes the next word even when it is a subcommand name.
+[[case]]
+argv = ["git", "-C", "push", "status"]
+action = "status"
+fields = { change_directory = "push" }
+effects = ["other_repository", "run_program"]
+
+# Git accepts `-C` twice and joins the paths; the grammar declares it once.
+[[case]]
+argv = ["git", "-C", "a", "-C", "b", "status"]
+action = "unmodeled"
+
+# No subcommand, `--version`, `--help`, an unknown subcommand, and a configured alias.
+[[case]]
+argv = ["git"]
+action = "unmodeled"
+
+[[case]]
+argv = ["git", "--version"]
+action = "unmodeled"
+
+[[case]]
+argv = ["git", "--help"]
+action = "unmodeled"
+
+[[case]]
+argv = ["git", "frobnicate"]
+action = "unmodeled"
+
+[[case]]
+argv = ["git", "ci", "-m", "x"]
+action = "unmodeled"
+
+# `--` before the subcommand is not a command word.
+[[case]]
+argv = ["git", "--", "status"]
+action = "unmodeled"
+
+# Command words are case sensitive.
+[[case]]
+argv = ["git", "STATUS"]
+action = "unmodeled"
+
+# ---------------------------------------------------------------- status
+
+# git-status -h: `-s`, `-b` bundle; `-uno` attaches the optional mode.
+[[case]]
+argv = ["git", "status", "-sb", "-uno"]
+action = "status"
+fields = { branch = true, short = true, untracked_files = "no" }
+
+# `-u` takes its optional value only attached: `-u no` makes `no` a pathspec.
+[[case]]
+argv = ["git", "status", "-u", "no"]
+action = "status"
+fields = { pathspec = ["no"], untracked_files = "" }
+
+[[case]]
+argv = ["git", "status", "--porcelain=v2", "--", "src"]
+action = "status"
+fields = { pathspec = ["src"], porcelain = "v2" }
+
+# `--short=yes`: a flag takes no value.
+[[case]]
+argv = ["git", "status", "--short=yes"]
+action = "unmodeled"
+
+# A prefix of `--porcelain` is accepted by git and not here.
+[[case]]
+argv = ["git", "status", "--porc"]
+action = "unmodeled"
+
+[[case]]
+argv = ["git", "status", "-h"]
+action = "unmodeled"
+
+# ---------------------------------------------------------------- log, show, diff
+
+# git-log(1): `-n <number>` and `--max-count=<number>`, `-p -- <path>`.
+[[case]]
+argv = ["git", "log", "-n3", "-p", "main", "--", "src/"]
+action = "log"
+fields = { max_count = "3", patch = true, path = ["src/"], revision = ["main"] }
+
+[[case]]
+argv = ["git", "log", "--max-count=10", "--format=%H %s", "--author", "alice", "--author=bob"]
+action = "log"
+fields = { author = ["alice", "bob"], format = "%H %s", max_count = "10" }
+
+# `git log -5` (count as a number) cannot be spelled.
+[[case]]
+argv = ["git", "log", "-5"]
+action = "unmodeled"
+
+# git-log(1) `--output=<file>` writes the output to a file.
+[[case]]
+argv = ["git", "log", "--output=/tmp/log.txt"]
+action = "log"
+fields = { output = "/tmp/log.txt" }
+effects = ["outside_path", "write_file"]
+
+[[case]]
+argv = ["git", "log", "--output", "log.txt"]
+action = "log"
+fields = { output = "log.txt" }
+effects = ["write_file"]
+
+# git-log(1) `--ext-diff` lets an external diff helper run.
+[[case]]
+argv = ["git", "log", "-p", "--ext-diff"]
+action = "log"
+fields = { ext_diff = true, patch = true }
+effects = ["run_program"]
+
+[[case]]
+argv = ["git", "log", "--oneline", "--graph", "--all", "--decorate"]
+action = "log"
+fields = { all = true, decorate = "", graph = true, oneline = true }
+
+[[case]]
+argv = ["git", "log", "--since", "2 weeks ago", "--grep=fix", "-S", "needle"]
+action = "log"
+fields = { grep = ["fix"], pickaxe = "needle", since = "2 weeks ago" }
+
+# A non-repeated option given twice.
+[[case]]
+argv = ["git", "log", "-n", "1", "-n", "2"]
+action = "unmodeled"
+
+[[case]]
+argv = ["git", "log", "--follw"]
+action = "unmodeled"
+
+# git-show(1): `git show <rev>:<path>` prints a blob.
+[[case]]
+argv = ["git", "show", "HEAD~1:src/lib.rs"]
+action = "show"
+fields = { object = ["HEAD~1:src/lib.rs"] }
+
+[[case]]
+argv = ["git", "show", "--stat", "--oneline", "v1.0", "v2.0"]
+action = "show"
+fields = { object = ["v1.0", "v2.0"], oneline = true, stat = "" }
+
+[[case]]
+argv = ["git", "show", "-s", "--format=%an", "HEAD"]
+action = "show"
+fields = { format = "%an", no_patch = true, object = ["HEAD"] }
+
+[[case]]
+argv = ["git", "show", "--output=../out.patch", "HEAD"]
+action = "show"
+fields = { object = ["HEAD"], output = "../out.patch" }
+effects = ["outside_path", "write_file"]
+
+[[case]]
+argv = ["git", "show", "--bogus"]
+action = "unmodeled"
+
+# git-diff(1): `--cached` is a synonym of `--staged`.
+[[case]]
+argv = ["git", "diff", "--staged", "--name-only"]
+action = "diff"
+fields = { cached = true, name_only = true }
+
+[[case]]
+argv = ["git", "diff", "main...feature", "--", "README.md"]
+action = "diff"
+fields = { commit = ["main...feature"], path = ["README.md"] }
+
+# git-diff(1): with a path outside the working tree, git diff reads the files (no-index mode).
+[[case]]
+argv = ["git", "diff", "--no-index", "/etc/hosts", "notes.txt"]
+action = "diff"
+fields = { commit = ["/etc/hosts", "notes.txt"], no_index = true }
+effects = ["outside_path"]
+
+[[case]]
+argv = ["git", "diff", "../secret.txt", "a.txt"]
+action = "diff"
+fields = { commit = ["../secret.txt", "a.txt"] }
+effects = ["outside_path"]
+
+# git-diff -h: `-U[<n>]` takes only an attached value, so `-U 5` makes `5` a commit.
+[[case]]
+argv = ["git", "diff", "-U1"]
+action = "diff"
+fields = { unified = "1" }
+
+[[case]]
+argv = ["git", "diff", "-U", "5"]
+action = "diff"
+fields = { commit = ["5"], unified = "" }
+
+[[case]]
+argv = ["git", "diff", "--ext-diff", "HEAD"]
+action = "diff"
+fields = { commit = ["HEAD"], ext_diff = true }
+effects = ["run_program"]
+
+[[case]]
+argv = ["git", "diff", "--output=d.patch"]
+action = "diff"
+fields = { output = "d.patch" }
+effects = ["write_file"]
+
+# Short flags cluster: `-wb` is `-w -b`.
+[[case]]
+argv = ["git", "diff", "-wb", "HEAD~2"]
+action = "diff"
+fields = { commit = ["HEAD~2"], ignore_all_space = true, ignore_space_change = true }
+
+# After `--`, a word that looks like an option is a path.
+[[case]]
+argv = ["git", "diff", "--", "-weird"]
+action = "diff"
+fields = { path = ["-weird"] }
+
+[[case]]
+argv = ["git", "diff", "--word-diffs"]
+action = "unmodeled"
+
+# ---------------------------------------------------------------- blame, ls-files, rev-parse
+
+# git-blame(1): `git blame [<rev>] [--] <file>`.
+[[case]]
+argv = ["git", "blame", "-L", "10,20", "src/main.rs"]
+action = "blame"
+fields = { file = "src/main.rs", line_range = ["10,20"] }
+
+[[case]]
+argv = ["git", "blame", "-w", "-C", "-C", "HEAD~3", "--", "lib.rs"]
+action = "blame"
+fields = { file = "lib.rs", find_copies = [""], ignore_whitespace = true, rev = "HEAD~3" }
+
+[[case]]
+argv = ["git", "blame", "--porcelain", "a.c"]
+action = "blame"
+fields = { file = "a.c", porcelain = true }
+
+# A missing file operand, and `--contents`, which is not declared.
+[[case]]
+argv = ["git", "blame"]
+action = "unmodeled"
+
+[[case]]
+argv = ["git", "blame", "--contents", "/etc/passwd", "a.c"]
+action = "unmodeled"
+
+[[case]]
+argv = ["git", "ls-files", "-mo", "--exclude-standard"]
+action = "ls_files"
+fields = { exclude_standard = true, modified = true, others = true }
+
+[[case]]
+argv = ["git", "ls-files", "-z", "--", "*.rs"]
+action = "ls_files"
+fields = { file = ["*.rs"], null = true }
+
+[[case]]
+argv = ["git", "ls-files", "--exclude-from=.gitignore"]
+action = "unmodeled"
+
+# git-rev-parse(1): `--short[=length]` and `--abbrev-ref[=(strict|loose)]` take only an attached value.
+[[case]]
+argv = ["git", "rev-parse", "--abbrev-ref", "HEAD"]
+action = "rev_parse"
+fields = { abbrev_ref = "", arg = ["HEAD"] }
+
+[[case]]
+argv = ["git", "rev-parse", "--short=8", "HEAD"]
+action = "rev_parse"
+fields = { arg = ["HEAD"], short = "8" }
+
+[[case]]
+argv = ["git", "rev-parse", "--show-toplevel"]
+action = "rev_parse"
+fields = { show_toplevel = true }
+
+# rev-parse `--git-dir` is the query, not the global option.
+[[case]]
+argv = ["git", "rev-parse", "--git-dir"]
+action = "rev_parse"
+fields = { show_git_dir = true }
+
+[[case]]
+argv = ["git", "rev-parse", "--verify", "-q", "refs/heads/main"]
+action = "rev_parse"
+fields = { arg = ["refs/heads/main"], quiet = true, verify = true }
+
+[[case]]
+argv = ["git", "rev-parse", "--parseopt", "--", "x"]
+action = "unmodeled"
+
+# ---------------------------------------------------------------- add
+
+[[case]]
+argv = ["git", "add", "-A"]
+action = "add"
+fields = { all = true }
+
+[[case]]
+argv = ["git", "add", "src/a.rs", "-u", "src/b.rs"]
+action = "add"
+fields = { pathspec = ["src/a.rs", "src/b.rs"], update = true }
+
+[[case]]
+argv = ["git", "add", "--", "-n"]
+action = "add"
+fields = { pathspec = ["-n"] }
+
+[[case]]
+argv = ["git", "add", "-n", "."]
+action = "add"
+fields = { dry_run = true, pathspec = ["."] }
+
+[[case]]
+argv = ["git", "add", "--chmod=+x", "run.sh"]
+action = "add"
+fields = { chmod = "+x", pathspec = ["run.sh"] }
+
+# `--pathspec-from-file` is not declared.
+[[case]]
+argv = ["git", "add", "--pathspec-from-file=list.txt"]
+action = "unmodeled"
+
+[[case]]
+argv = ["git", "add", "--al"]
+action = "unmodeled"
+
+# ---------------------------------------------------------------- checkout, switch, restore
+
+# git-checkout(1): `-b <new-branch> [<start-point>]` creates a branch; git refuses paths with it.
+[[case]]
+argv = ["git", "checkout", "-b", "topic", "origin/main"]
+action = "checkout"
+fields = { create = "topic", target = "origin/main" }
+
+# git-checkout(1): `-B` resets an existing branch to the start point.
+[[case]]
+argv = ["git", "checkout", "-B", "topic", "origin/main"]
+action = "checkout"
+fields = { force_create = "topic", target = "origin/main" }
+effects = ["rewrite_history"]
+
+# `git checkout <x>` overwrites <x> when <x> is a path; the grammar cannot tell.
+[[case]]
+argv = ["git", "checkout", "main"]
+action = "checkout"
+fields = { target = "main" }
+effects = ["discard_changes"]
+
+[[case]]
+argv = ["git", "checkout", "--", "src/main.rs"]
+action = "checkout"
+fields = { pathspec = ["src/main.rs"] }
+effects = ["discard_changes"]
+
+[[case]]
+argv = ["git", "checkout", "HEAD~1", "--", "a.txt", "b.txt"]
+action = "checkout"
+fields = { pathspec = ["a.txt", "b.txt"], target = "HEAD~1" }
+effects = ["discard_changes"]
+
+[[case]]
+argv = ["git", "checkout", "--detach", "v1.0"]
+action = "checkout"
+fields = { detach = true, target = "v1.0" }
+
+[[case]]
+argv = ["git", "checkout", "-t", "origin/feature"]
+action = "checkout"
+fields = { target = "origin/feature", track = "" }
+effects = ["override_config"]
+
+# `-p` selects hunks to discard interactively.
+[[case]]
+argv = ["git", "checkout", "-p"]
+action = "checkout"
+fields = { patch = true }
+effects = ["discard_changes"]
+
+# A lone `-` is the previous branch.
+[[case]]
+argv = ["git", "checkout", "-"]
+action = "checkout"
+fields = { target = "-" }
+effects = ["discard_changes"]
+
+# `-f` throws away local changes; it is not declared.
+[[case]]
+argv = ["git", "checkout", "-f", "main"]
+action = "unmodeled"
+
+# `-U` alone means `-p` in git; not declared for checkout.
+[[case]]
+argv = ["git", "checkout", "-U3", "x"]
+action = "unmodeled"
+
+[[case]]
+argv = ["git", "switch", "-c", "feature"]
+action = "switch"
+fields = { create = "feature" }
+
+[[case]]
+argv = ["git", "switch", "--create=feature", "origin/main"]
+action = "switch"
+fields = { branch = "origin/main", create = "feature" }
+
+[[case]]
+argv = ["git", "switch", "main"]
+action = "switch"
+fields = { branch = "main" }
+
+# git-switch(1): `-f`, `--force`, `--discard-changes` throw away local changes.
+[[case]]
+argv = ["git", "switch", "--discard-changes", "main"]
+action = "switch"
+fields = { branch = "main", discard_changes = true }
+effects = ["discard_changes"]
+
+[[case]]
+argv = ["git", "switch", "-fq", "main"]
+action = "switch"
+fields = { branch = "main", discard_changes = true, quiet = true }
+effects = ["discard_changes"]
+
+# git-switch(1): `-C` resets an existing branch.
+[[case]]
+argv = ["git", "switch", "-C", "topic", "main"]
+action = "switch"
+fields = { branch = "main", force_create = "topic" }
+effects = ["rewrite_history"]
+
+[[case]]
+argv = ["git", "switch", "main", "extra"]
+action = "unmodeled"
+
+# git-restore(1): restores the working tree by default.
+[[case]]
+argv = ["git", "restore", "src/lib.rs"]
+action = "restore"
+fields = { pathspec = ["src/lib.rs"] }
+effects = ["discard_changes"]
+
+[[case]]
+argv = ["git", "restore", "--source=HEAD~2", "--", "a.txt"]
+action = "restore"
+fields = { pathspec = ["a.txt"], source = "HEAD~2" }
+effects = ["discard_changes"]
+
+# `--staged` alone touches only the index.
+[[case]]
+argv = ["git", "restore", "--staged", "a.txt"]
+action = "restore"
+fields = { pathspec = ["a.txt"], staged = true }
+
+[[case]]
+argv = ["git", "restore", "-S", "-s", "main", "a.txt"]
+action = "restore"
+fields = { pathspec = ["a.txt"], source = "main", staged = true }
+
+# `-W` together with `-S` writes the working tree; not declared.
+[[case]]
+argv = ["git", "restore", "-SW", "a.txt"]
+action = "unmodeled"
+
+# ---------------------------------------------------------------- reset
+
+# git-reset(1): `--hard` discards changes in the working tree.
+[[case]]
+argv = ["git", "reset", "--hard"]
+action = "reset"
+fields = { hard = true }
+effects = ["discard_changes"]
+
+[[case]]
+argv = ["git", "reset", "--hard", "HEAD"]
+action = "reset"
+fields = { commit = "HEAD", hard = true }
+effects = ["discard_changes"]
+
+[[case]]
+argv = ["git", "reset", "--hard", "origin/main"]
+action = "reset"
+fields = { commit = "origin/main", hard = true }
+effects = ["discard_changes", "rewrite_history"]
+
+# `--soft HEAD~1` moves the branch, so the last commit leaves it.
+[[case]]
+argv = ["git", "reset", "--soft", "HEAD~1"]
+action = "reset"
+fields = { commit = "HEAD~1", soft = true }
+effects = ["rewrite_history"]
+
+[[case]]
+argv = ["git", "reset", "@"]
+action = "reset"
+fields = { commit = "@" }
+
+# With a pathspec, reset updates only the index.
+[[case]]
+argv = ["git", "reset", "HEAD~1", "--", "src/lib.rs"]
+action = "reset"
+fields = { commit = "HEAD~1", pathspec = ["src/lib.rs"] }
+
+[[case]]
+argv = ["git", "reset", "--", "HEAD"]
+action = "reset"
+fields = { pathspec = ["HEAD"] }
+
+[[case]]
+argv = ["git", "reset", "-p", "HEAD~1"]
+action = "reset"
+fields = { commit = "HEAD~1", patch = true }
+
+[[case]]
+argv = ["git", "reset", "--merge", "ORIG_HEAD"]
+action = "reset"
+fields = { commit = "ORIG_HEAD", merge = true }
+effects = ["discard_changes", "rewrite_history"]
+
+[[case]]
+argv = ["git", "reset", "--keep", "HEAD"]
+action = "reset"
+fields = { commit = "HEAD", keep = true }
+effects = ["discard_changes"]
+
+[[case]]
+argv = ["git", "reset", "--har"]
+action = "unmodeled"
+
+# ---------------------------------------------------------------- clean, rm, mv
+
+# git-clean(1): `-f`, `-d`, `-x` remove untracked files, directories, and ignored files.
+[[case]]
+argv = ["git", "clean", "-fdx"]
+action = "clean"
+fields = { directories = true, force = true, ignored = true }
+effects = ["delete_files"]
+
+# `-n` shows what would be removed; it removes nothing.
+[[case]]
+argv = ["git", "clean", "-nfd"]
+action = "clean"
+fields = { directories = true, dry_run = true, force = true }
+
+[[case]]
+argv = ["git", "clean", "--dry-run", "-e", "*.log", "-e", "tmp/"]
+action = "clean"
+fields = { dry_run = true, exclude = ["*.log", "tmp/"] }
+
+[[case]]
+argv = ["git", "clean", "-ff", "--", "build"]
+action = "clean"
+fields = { force = true, pathspec = ["build"] }
+effects = ["delete_files"]
+
+[[case]]
+argv = ["git", "clean", "-fZ"]
+action = "unmodeled"
+
+# git-rm(1): removes files from the working tree and the index.
+[[case]]
+argv = ["git", "rm", "old.txt"]
+action = "rm"
+fields = { pathspec = ["old.txt"] }
+effects = ["delete_files"]
+
+[[case]]
+argv = ["git", "rm", "-rf", "build/"]
+action = "rm"
+fields = { force = true, pathspec = ["build/"], recursive = true }
+effects = ["delete_files", "discard_changes"]
+
+# `--cached` leaves the working tree alone; with `-f` it can drop staged content that matches
+# neither HEAD nor the working tree (builtin/rm.c), so `-f` keeps discard_changes.
+[[case]]
+argv = ["git", "rm", "--cached", "-r", "-f", "secrets/"]
+action = "rm"
+fields = { cached = true, force = true, pathspec = ["secrets/"], recursive = true }
+effects = ["discard_changes"]
+
+[[case]]
+argv = ["git", "rm", "-n", "a"]
+action = "rm"
+fields = { dry_run = true, pathspec = ["a"] }
+
+[[case]]
+argv = ["git", "rm"]
+action = "unmodeled"
+
+[[case]]
+argv = ["git", "mv", "a.txt", "b.txt"]
+action = "mv"
+fields = { destination = "b.txt", source = ["a.txt"] }
+
+[[case]]
+argv = ["git", "mv", "a.c", "b.c", "src/"]
+action = "mv"
+fields = { destination = "src/", source = ["a.c", "b.c"] }
+
+[[case]]
+argv = ["git", "mv", "-f", "new.txt", "old.txt"]
+action = "mv"
+fields = { destination = "old.txt", force = true, source = ["new.txt"] }
+effects = ["discard_changes"]
+
+[[case]]
+argv = ["git", "mv", "-nf", "new.txt", "old.txt"]
+action = "mv"
+fields = { destination = "old.txt", dry_run = true, force = true, source = ["new.txt"] }
+
+[[case]]
+argv = ["git", "mv", "only-one"]
+action = "unmodeled"
+
+# ---------------------------------------------------------------- stash
+
+# git-stash(1): `git stash` alone is `git stash push`.
+[[case]]
+argv = ["git", "stash"]
+action = "stash"
+
+[[case]]
+argv = ["git", "stash", "-u", "-m", "wip"]
+action = "stash"
+fields = { include_untracked = true, message = "wip" }
+
+[[case]]
+argv = ["git", "stash", "--", "src/a.rs"]
+action = "stash"
+fields = { pathspec = ["src/a.rs"] }
+
+# builtin/stash.c: without `push`, a non-option word before `--` is refused.
+[[case]]
+argv = ["git", "stash", "src/a.rs"]
+action = "unmodeled"
+
+[[case]]
+argv = ["git", "stash", "push", "-m", "wip", "src/a.rs"]
+action = "stash_push"
+fields = { message = "wip", pathspec = ["src/a.rs"] }
+
+[[case]]
+argv = ["git", "stash", "list"]
+action = "stash_list"
+
+[[case]]
+argv = ["git", "stash", "show", "-p", "stash@{1}"]
+action = "stash_show"
+fields = { patch = true, stash = "stash@{1}" }
+
+[[case]]
+argv = ["git", "stash", "pop"]
+action = "stash_pop"
+
+[[case]]
+argv = ["git", "stash", "apply", "--index", "stash@{0}"]
+action = "stash_apply"
+fields = { index = true, stash = "stash@{0}" }
+
+# `drop` and `clear` delete stashed changes.
+[[case]]
+argv = ["git", "stash", "drop", "stash@{2}"]
+action = "stash_drop"
+fields = { stash = "stash@{2}" }
+effects = ["discard_changes"]
+
+[[case]]
+argv = ["git", "stash", "clear"]
+action = "stash_clear"
+effects = ["discard_changes"]
+
+[[case]]
+argv = ["git", "stash", "branch", "rescue"]
+action = "stash_branch"
+fields = { branchname = "rescue" }
+
+[[case]]
+argv = ["git", "stash", "clear", "now"]
+action = "unmodeled"
+
+[[case]]
+argv = ["git", "stash", "store", "abc123"]
+action = "unmodeled"
+
+# ---------------------------------------------------------------- commit
+
+# git-commit(1): `-am` is `-a -m`, and `-m` takes the next word.
+[[case]]
+argv = ["git", "commit", "-am", "fix parser"]
+action = "commit"
+fields = { all = true, message = ["fix parser"] }
+
+[[case]]
+argv = ["git", "commit", "-mmsg"]
+action = "commit"
+fields = { message = ["msg"] }
+
+[[case]]
+argv = ["git", "commit", "-m", "title", "--message=body"]
+action = "commit"
+fields = { message = ["body", "title"] }
+
+# A required value takes the next word even when it looks like an option.
+[[case]]
+argv = ["git", "commit", "-m", "--amend"]
+action = "commit"
+fields = { message = ["--amend"] }
+
+# `--amend` replaces the last commit.
+[[case]]
+argv = ["git", "commit", "--amend", "--no-edit"]
+action = "commit"
+fields = { amend = true, no_edit = true }
+effects = ["rewrite_history"]
+
+# `-n` is `--no-verify` for commit: it skips pre-commit and commit-msg.
+[[case]]
+argv = ["git", "commit", "-n", "-m", "wip"]
+action = "commit"
+fields = { message = ["wip"], no_verify = true }
+effects = ["skip_hooks"]
+
+[[case]]
+argv = ["git", "commit", "--no-verify", "--no-post-rewrite", "--amend", "-m", "x"]
+action = "commit"
+fields = { amend = true, message = ["x"], no_post_rewrite = true, no_verify = true }
+effects = ["rewrite_history", "skip_hooks"]
+
+# `--dry-run` commits nothing and runs no hook.
+[[case]]
+argv = ["git", "commit", "--dry-run", "--amend", "-n"]
+action = "commit"
+fields = { amend = true, dry_run = true, no_verify = true }
+
+# builtin/commit.c: `--short` implies `--dry-run`.
+[[case]]
+argv = ["git", "commit", "--amend", "--short"]
+action = "commit"
+fields = { amend = true, short = true }
+
+# `-F <file>` reads the message from a file.
+[[case]]
+argv = ["git", "commit", "-F", "/etc/passwd"]
+action = "commit"
+fields = { file = "/etc/passwd" }
+effects = ["outside_path"]
+
+[[case]]
+argv = ["git", "commit", "-F", "-"]
+action = "commit"
+fields = { file = "-" }
+
+[[case]]
+argv = ["git", "commit", "--fixup=amend:HEAD~2", "-S"]
+action = "commit"
+fields = { fixup = "amend:HEAD~2", gpg_sign = "" }
+
+[[case]]
+argv = ["git", "commit", "-a", "--", "src/x.rs"]
+action = "commit"
+fields = { all = true, pathspec = ["src/x.rs"] }
+
+# A prefix of `--amend` that git accepts.
+[[case]]
+argv = ["git", "commit", "--amen"]
+action = "unmodeled"
+
+[[case]]
+argv = ["git", "commit", "-m"]
+action = "unmodeled"
+
+# `-m=x`: an attached value may not start with `=`.
+[[case]]
+argv = ["git", "commit", "-m=x"]
+action = "unmodeled"
+
+# `--verify` is not declared.
+[[case]]
+argv = ["git", "commit", "--verify", "-m", "x"]
+action = "unmodeled"
+
+# ---------------------------------------------------------------- merge, rebase, cherry-pick, revert
+
+[[case]]
+argv = ["git", "merge", "--no-ff", "-m", "Merge topic", "topic"]
+action = "merge"
+fields = { commit = ["topic"], message = ["Merge topic"], no_ff = true }
+
+[[case]]
+argv = ["git", "merge", "--ff-only", "origin/main"]
+action = "merge"
+fields = { commit = ["origin/main"], ff_only = true }
+
+# git-merge(1): `--abort` may not reconstruct uncommitted changes.
+[[case]]
+argv = ["git", "merge", "--abort"]
+action = "merge"
+fields = { abort = true }
+effects = ["discard_changes"]
+
+[[case]]
+argv = ["git", "merge", "-s", "ours", "-Xpatience", "old"]
+action = "merge"
+fields = { commit = ["old"], strategy = "ours", strategy_option = ["patience"] }
+effects = ["run_program"]
+
+[[case]]
+argv = ["git", "merge", "--no-verify", "topic"]
+action = "merge"
+fields = { commit = ["topic"], no_verify = true }
+effects = ["skip_hooks"]
+
+[[case]]
+argv = ["git", "merge", "--strat=ours", "x"]
+action = "unmodeled"
+
+[[case]]
+argv = ["git", "rebase", "origin/main"]
+action = "rebase"
+fields = { upstream = "origin/main" }
+effects = ["rewrite_history"]
+
+[[case]]
+argv = ["git", "rebase", "-i", "--autosquash", "HEAD~5"]
+action = "rebase"
+fields = { autosquash = true, interactive = true, upstream = "HEAD~5" }
+effects = ["rewrite_history"]
+
+# git-rebase(1): `--exec <cmd>` runs a shell command after each commit.
+[[case]]
+argv = ["git", "rebase", "-x", "make test", "--exec=cargo check", "main"]
+action = "rebase"
+fields = { exec = ["cargo check", "make test"], upstream = "main" }
+effects = ["rewrite_history", "run_program"]
+
+[[case]]
+argv = ["git", "rebase", "--onto", "main", "old-base", "topic"]
+action = "rebase"
+fields = { branch = "topic", onto = "main", upstream = "old-base" }
+effects = ["rewrite_history"]
+
+[[case]]
+argv = ["git", "rebase", "--continue"]
+action = "rebase"
+fields = { continue = true }
+effects = ["rewrite_history"]
+
+# `--abort` checks out the original branch again.
+[[case]]
+argv = ["git", "rebase", "--abort"]
+action = "rebase"
+fields = { abort = true }
+effects = ["discard_changes"]
+
+[[case]]
+argv = ["git", "rebase", "--quit"]
+action = "rebase"
+fields = { quit = true }
+
+[[case]]
+argv = ["git", "rebase", "--no-verify", "main"]
+action = "rebase"
+fields = { no_verify = true, upstream = "main" }
+effects = ["rewrite_history", "skip_hooks"]
+
+[[case]]
+argv = ["git", "rebase", "a", "b", "c"]
+action = "unmodeled"
+
+[[case]]
+argv = ["git", "cherry-pick", "abc123", "def456"]
+action = "cherry_pick"
+fields = { commit = ["abc123", "def456"] }
+
+[[case]]
+argv = ["git", "cherry-pick", "-x", "-n", "main~2..main"]
+action = "cherry_pick"
+fields = { append_origin = true, commit = ["main~2..main"], no_commit = true }
+
+[[case]]
+argv = ["git", "cherry-pick", "--abort"]
+action = "cherry_pick"
+fields = { abort = true }
+effects = ["discard_changes"]
+
+# For cherry-pick `-s` is `--signoff`, not a strategy.
+[[case]]
+argv = ["git", "cherry-pick", "-s", "abc"]
+action = "cherry_pick"
+fields = { commit = ["abc"], signoff = true }
+
+[[case]]
+argv = ["git", "cherry-pick", "--strategy=resolve", "abc"]
+action = "cherry_pick"
+fields = { commit = ["abc"], strategy = "resolve" }
+effects = ["run_program"]
+
+[[case]]
+argv = ["git", "revert", "--no-edit", "HEAD"]
+action = "revert"
+fields = { commit = ["HEAD"], no_edit = true }
+
+[[case]]
+argv = ["git", "revert", "-m", "1", "abc"]
+action = "revert"
+fields = { commit = ["abc"], mainline = "1" }
+
+[[case]]
+argv = ["git", "revert", "--abort"]
+action = "revert"
+fields = { abort = true }
+effects = ["discard_changes"]
+
+[[case]]
+argv = ["git", "revert", "-X"]
+action = "unmodeled"
+
+# ---------------------------------------------------------------- branch, tag
+
+[[case]]
+argv = ["git", "branch"]
+action = "branch"
+
+[[case]]
+argv = ["git", "branch", "-a", "-vv"]
+action = "branch"
+fields = { all = true, verbose = true }
+
+[[case]]
+argv = ["git", "branch", "--show-current"]
+action = "branch"
+fields = { show_current = true }
+
+[[case]]
+argv = ["git", "branch", "feature", "origin/main"]
+action = "branch"
+fields = { branchname = ["feature", "origin/main"] }
+
+# git-branch(1): `-d` deletes a merged branch, `-D` any branch.
+[[case]]
+argv = ["git", "branch", "-d", "old", "older"]
+action = "branch"
+fields = { branchname = ["old", "older"], delete = true }
+effects = ["delete_ref"]
+
+[[case]]
+argv = ["git", "branch", "-D", "topic"]
+action = "branch"
+fields = { branchname = ["topic"], force_delete = true }
+effects = ["delete_ref"]
+
+[[case]]
+argv = ["git", "branch", "--delete-merged", "feature/*", "--dry-run"]
+action = "branch"
+fields = { delete_merged = ["feature/*"], dry_run = true }
+
+[[case]]
+argv = ["git", "branch", "--delete-merged=feature/*"]
+action = "branch"
+fields = { delete_merged = ["feature/*"] }
+effects = ["delete_ref"]
+
+# `-f` moves an existing branch to a new start point.
+[[case]]
+argv = ["git", "branch", "-f", "main", "origin/main"]
+action = "branch"
+fields = { branchname = ["main", "origin/main"], force = true }
+effects = ["rewrite_history"]
+
+[[case]]
+argv = ["git", "branch", "-m", "old", "new"]
+action = "branch"
+fields = { branchname = ["new", "old"], move = true }
+
+[[case]]
+argv = ["git", "branch", "-M", "main"]
+action = "branch"
+fields = { branchname = ["main"], force_move = true }
+effects = ["rewrite_history"]
+
+[[case]]
+argv = ["git", "branch", "--merged", "main"]
+action = "branch"
+fields = { merged = "main" }
+
+[[case]]
+argv = ["git", "branch", "-u", "origin/main"]
+action = "branch"
+fields = { set_upstream_to = "origin/main" }
+effects = ["override_config"]
+
+# `--merged` with no value at the end of the line.
+[[case]]
+argv = ["git", "branch", "--merged"]
+action = "unmodeled"
+
+[[case]]
+argv = ["git", "branch", "--edit-description"]
+action = "unmodeled"
+
+[[case]]
+argv = ["git", "tag"]
+action = "tag"
+
+[[case]]
+argv = ["git", "tag", "-l", "v1.*", "-n3"]
+action = "tag"
+fields = { lines = "3", list = true, tagname = ["v1.*"] }
+
+[[case]]
+argv = ["git", "tag", "-a", "v1.0", "-m", "Release 1.0"]
+action = "tag"
+fields = { annotate = true, message = ["Release 1.0"], tagname = ["v1.0"] }
+
+[[case]]
+argv = ["git", "tag", "-d", "v0.9"]
+action = "tag"
+fields = { delete = true, tagname = ["v0.9"] }
+effects = ["delete_ref"]
+
+# `-f` replaces an existing tag.
+[[case]]
+argv = ["git", "tag", "-f", "v1.0", "HEAD"]
+action = "tag"
+fields = { force = true, tagname = ["HEAD", "v1.0"] }
+effects = ["rewrite_history"]
+
+[[case]]
+argv = ["git", "tag", "-F", "../notes.txt", "v2"]
+action = "tag"
+fields = { file = "../notes.txt", tagname = ["v2"] }
+effects = ["outside_path"]
+
+[[case]]
+argv = ["git", "tag", "--delete=v1"]
+action = "unmodeled"
+
+# ---------------------------------------------------------------- push
+
+[[case]]
+argv = ["git", "push"]
+action = "push"
+effects = ["network"]
+
+[[case]]
+argv = ["git", "push", "-u", "origin", "feature"]
+action = "push"
+fields = { refspec = ["feature"], repository = "origin", set_upstream = true }
+effects = ["network", "override_config"]
+
+# git-push(1): `-f`/`--force` replaces remote commits.
+[[case]]
+argv = ["git", "push", "-f", "origin", "main"]
+action = "push"
+fields = { force = true, refspec = ["main"], repository = "origin" }
+effects = ["force_push", "network"]
+
+[[case]]
+argv = ["git", "push", "origin", "main", "--force"]
+action = "push"
+fields = { force = true, refspec = ["main"], repository = "origin" }
+effects = ["force_push", "network"]
+
+[[case]]
+argv = ["git", "push", "-uf", "origin", "main"]
+action = "push"
+fields = { force = true, refspec = ["main"], repository = "origin", set_upstream = true }
+effects = ["force_push", "network", "override_config"]
+
+# `--force-with-lease[=<refname>[:<expect>]]` takes only an attached value.
+[[case]]
+argv = ["git", "push", "--force-with-lease", "origin", "main"]
+action = "push"
+fields = { force_with_lease = "", refspec = ["main"], repository = "origin" }
+effects = ["force_push", "network"]
+
+[[case]]
+argv = ["git", "push", "--force-with-lease=main:abc123", "origin", "main"]
+action = "push"
+fields = { force_with_lease = "main:abc123", refspec = ["main"], repository = "origin" }
+effects = ["force_push", "network"]
+
+# git-push(1): a `+` refspec forces that ref.
+[[case]]
+argv = ["git", "push", "origin", "+main"]
+action = "push"
+fields = { refspec = ["+main"], repository = "origin" }
+effects = ["force_push", "network"]
+
+# git-push(1): `:<dst>` deletes <dst> on the remote; `-d` deletes the named refs.
+[[case]]
+argv = ["git", "push", "origin", ":old-topic"]
+action = "push"
+fields = { refspec = [":old-topic"], repository = "origin" }
+effects = ["delete_remote_ref", "network"]
+
+[[case]]
+argv = ["git", "push", "origin", "--delete", "old-topic"]
+action = "push"
+fields = { delete = true, refspec = ["old-topic"], repository = "origin" }
+effects = ["delete_remote_ref", "network"]
+
+[[case]]
+argv = ["git", "push", "origin", "+:refs/heads/x"]
+action = "push"
+fields = { refspec = ["+:refs/heads/x"], repository = "origin" }
+effects = ["delete_remote_ref", "force_push", "network"]
+
+# git-push(1): `--mirror` force-updates and deletes remote refs; `--prune` deletes.
+[[case]]
+argv = ["git", "push", "--mirror", "backup"]
+action = "push"
+fields = { mirror = true, repository = "backup" }
+effects = ["delete_remote_ref", "force_push", "network"]
+
+[[case]]
+argv = ["git", "push", "--prune", "origin", "refs/heads/*:refs/heads/*"]
+action = "push"
+fields = { prune = true, refspec = ["refs/heads/*:refs/heads/*"], repository = "origin" }
+effects = ["delete_remote_ref", "network"]
+
+# `-n` sends nothing but still contacts the remote.
+[[case]]
+argv = ["git", "push", "-fn", "origin", "main"]
+action = "push"
+fields = { dry_run = true, force = true, refspec = ["main"], repository = "origin" }
+effects = ["network"]
+
+# `--no-verify` skips pre-push; transport.c runs pre-push in a dry run too.
+[[case]]
+argv = ["git", "push", "--no-verify", "-n", "origin"]
+action = "push"
+fields = { dry_run = true, no_verify = true, repository = "origin" }
+effects = ["network", "skip_hooks"]
+
+[[case]]
+argv = ["git", "push", "--receive-pack=/tmp/x", "../local.git", "main"]
+action = "push"
+fields = { receive_pack = "/tmp/x", refspec = ["main"], repository = "../local.git" }
+effects = ["network", "run_program"]
+
+# An `ext::` URL runs a command (when protocol.ext.allow permits it).
+[[case]]
+argv = ["git", "push", "ext::sh -c touch% /tmp/pwned", "main"]
+action = "push"
+fields = { refspec = ["main"], repository = "ext::sh -c touch% /tmp/pwned" }
+effects = ["network", "run_program"]
+
+[[case]]
+argv = ["git", "push", "-o", "ci.skip", "--tags", "origin"]
+action = "push"
+fields = { push_option = ["ci.skip"], repository = "origin", tags = true }
+effects = ["network"]
+
+# After `--`, `-f` is a refspec.
+[[case]]
+argv = ["git", "push", "origin", "--", "-f"]
+action = "push"
+fields = { refspec = ["-f"], repository = "origin" }
+effects = ["network"]
+
+# Git expands `--forc` to `--force`; this parser does not.
+[[case]]
+argv = ["git", "push", "--forc", "origin", "main"]
+action = "unmodeled"
+
+[[case]]
+argv = ["git", "push", "--dele", "origin", "x"]
+action = "unmodeled"
+
+[[case]]
+argv = ["git", "push", "--no-force", "origin"]
+action = "unmodeled"
+
+[[case]]
+argv = ["git", "push", "--dry-run=yes"]
+action = "unmodeled"
+
+[[case]]
+argv = ["git", "push", "--help"]
+action = "unmodeled"
+
+# ---------------------------------------------------------------- fetch, pull, clone
+
+[[case]]
+argv = ["git", "fetch"]
+action = "fetch"
+effects = ["network"]
+
+[[case]]
+argv = ["git", "fetch", "--prune", "origin"]
+action = "fetch"
+fields = { prune = true, repository = "origin" }
+effects = ["delete_ref", "network"]
+
+# For fetch, `-n` is `--no-tags`, not a dry run.
+[[case]]
+argv = ["git", "fetch", "-n", "origin"]
+action = "fetch"
+fields = { no_tags = true, repository = "origin" }
+effects = ["network"]
+
+# git-fetch(1): a `+<src>:<dst>` refspec and `-f` overwrite a local ref.
+[[case]]
+argv = ["git", "fetch", "origin", "+main:main"]
+action = "fetch"
+fields = { refspec = ["+main:main"], repository = "origin" }
+effects = ["force_fetch", "network"]
+
+[[case]]
+argv = ["git", "fetch", "-f", "origin", "main:local"]
+action = "fetch"
+fields = { force = true, refspec = ["main:local"], repository = "origin" }
+effects = ["force_fetch", "network"]
+
+# `-P` prunes local tags that the remote no longer has.
+[[case]]
+argv = ["git", "fetch", "-pP", "origin"]
+action = "fetch"
+fields = { prune = true, prune_tags = true, repository = "origin" }
+effects = ["delete_ref", "force_fetch", "network"]
+
+[[case]]
+argv = ["git", "fetch", "--dry-run", "-P", "origin", "+a:b"]
+action = "fetch"
+fields = { dry_run = true, prune_tags = true, refspec = ["+a:b"], repository = "origin" }
+effects = ["network"]
+
+[[case]]
+argv = ["git", "fetch", "--upload-pack", "/tmp/x", "origin"]
+action = "fetch"
+fields = { repository = "origin", upload_pack = "/tmp/x" }
+effects = ["network", "run_program"]
+
+[[case]]
+argv = ["git", "fetch", "--depth=1", "-j", "4", "--all"]
+action = "fetch"
+fields = { all = true, depth = "1", jobs = "4" }
+effects = ["network"]
+
+# `--multiple` makes every operand a remote; not declared.
+[[case]]
+argv = ["git", "fetch", "--multiple", "a", "b"]
+action = "unmodeled"
+
+[[case]]
+argv = ["git", "pull"]
+action = "pull"
+effects = ["network"]
+
+[[case]]
+argv = ["git", "pull", "--ff-only", "origin", "main"]
+action = "pull"
+fields = { ff_only = true, refspec = ["main"], repository = "origin" }
+effects = ["network"]
+
+# git-pull(1): `--rebase` rebases the local commits.
+[[case]]
+argv = ["git", "pull", "--rebase"]
+action = "pull"
+fields = { rebase = "" }
+effects = ["network", "rewrite_history"]
+
+[[case]]
+argv = ["git", "pull", "-r", "origin", "main"]
+action = "pull"
+fields = { rebase = "", refspec = ["main"], repository = "origin" }
+effects = ["network", "rewrite_history"]
+
+[[case]]
+argv = ["git", "pull", "--rebase=false", "origin"]
+action = "pull"
+fields = { rebase = "false", repository = "origin" }
+effects = ["network"]
+
+[[case]]
+argv = ["git", "pull", "--rebase=interactive"]
+action = "pull"
+fields = { rebase = "interactive" }
+effects = ["network", "rewrite_history"]
+
+# builtin/pull.c: `--dry-run` returns after the fetch.
+[[case]]
+argv = ["git", "pull", "--dry-run", "--rebase", "-f"]
+action = "pull"
+fields = { dry_run = true, force = true, rebase = "" }
+effects = ["network"]
+
+[[case]]
+argv = ["git", "pull", "-s", "evil", "origin"]
+action = "pull"
+fields = { repository = "origin", strategy = "evil" }
+effects = ["network", "run_program"]
+
+[[case]]
+argv = ["git", "pull", "--no-verify", "origin", "+main:local"]
+action = "pull"
+fields = { no_verify = true, refspec = ["+main:local"], repository = "origin" }
+effects = ["force_fetch", "network", "skip_hooks"]
+
+# For pull, `-n` is `--no-stat`.
+[[case]]
+argv = ["git", "pull", "-n"]
+action = "pull"
+fields = { no_stat = true }
+effects = ["network"]
+
+# `--rebase` given twice under two spellings.
+[[case]]
+argv = ["git", "pull", "-r", "--rebase=false"]
+action = "unmodeled"
+
+[[case]]
+argv = ["git", "clone", "https://github.com/git/git"]
+action = "clone"
+fields = { repository = "https://github.com/git/git" }
+effects = ["network"]
+
+[[case]]
+argv = ["git", "clone", "--depth", "1", "-b", "v2.56.1", "https://github.com/git/git", "git-src"]
+action = "clone"
+fields = { branch = "v2.56.1", depth = "1", directory = "git-src", repository = "https://github.com/git/git" }
+effects = ["network"]
+
+[[case]]
+argv = ["git", "clone", "--", "https://example.com/r.git", "/tmp/r"]
+action = "clone"
+fields = { directory = "/tmp/r", repository = "https://example.com/r.git" }
+effects = ["network", "outside_path"]
+
+# git-clone(1): `--template` installs hooks; `-c` sets configuration in the new repository.
+[[case]]
+argv = ["git", "clone", "--template=/tmp/tpl", "https://example.com/r.git"]
+action = "clone"
+fields = { repository = "https://example.com/r.git", template = "/tmp/tpl" }
+effects = ["network", "run_program"]
+
+[[case]]
+argv = ["git", "clone", "-c", "core.fsmonitor=/tmp/x", "https://example.com/r.git"]
+action = "clone"
+fields = { config_option = ["core.fsmonitor=/tmp/x"], repository = "https://example.com/r.git" }
+effects = ["network", "override_config", "run_program", "skip_hooks"]
+
+[[case]]
+argv = ["git", "clone", "--recursive", "https://example.com/r.git"]
+action = "clone"
+fields = { recurse_submodules = "", repository = "https://example.com/r.git" }
+effects = ["network"]
+
+[[case]]
+argv = ["git", "clone", "ext::sh -c id", "x"]
+action = "clone"
+fields = { directory = "x", repository = "ext::sh -c id" }
+effects = ["network", "run_program"]
+
+[[case]]
+argv = ["git", "clone"]
+action = "unmodeled"
+
+[[case]]
+argv = ["git", "clone", "a", "b", "c"]
+action = "unmodeled"
+
+# ---------------------------------------------------------------- remote
+
+[[case]]
+argv = ["git", "remote", "-v"]
+action = "remote"
+fields = { verbose = true }
+
+[[case]]
+argv = ["git", "remote", "add", "upstream", "https://github.com/git/git"]
+action = "remote_add"
+fields = { name = "upstream", url = "https://github.com/git/git" }
+effects = ["override_config"]
+
+# git-remote(1): `add -f` runs `git fetch <name>` right away.
+[[case]]
+argv = ["git", "remote", "add", "-f", "up", "https://example.com/r.git"]
+action = "remote_add"
+fields = { fetch = true, name = "up", url = "https://example.com/r.git" }
+effects = ["network", "override_config"]
+
+# git-remote(1): `rm` is another name for `remove`.
+[[case]]
+argv = ["git", "remote", "rm", "old"]
+action = "remote_remove"
+fields = { name = "old" }
+effects = ["delete_ref", "override_config"]
+
+[[case]]
+argv = ["git", "remote", "remove", "old"]
+action = "remote_remove"
+fields = { name = "old" }
+effects = ["delete_ref", "override_config"]
+
+[[case]]
+argv = ["git", "remote", "set-url", "--push", "origin", "git@example.com:r.git"]
+action = "remote_set_url"
+fields = { name = "origin", newurl = "git@example.com:r.git", push = true }
+effects = ["override_config"]
+
+[[case]]
+argv = ["git", "remote", "get-url", "origin"]
+action = "remote_get_url"
+fields = { name = "origin" }
+
+[[case]]
+argv = ["git", "remote", "rename", "origin", "upstream"]
+action = "remote_rename"
+fields = { new = "upstream", old = "origin" }
+effects = ["override_config"]
+
+# git-remote(1): `show <name>` queries the remote; `-n` uses cached information.
+[[case]]
+argv = ["git", "remote", "show", "origin"]
+action = "remote_show"
+fields = { name = ["origin"] }
+effects = ["network"]
+
+[[case]]
+argv = ["git", "remote", "show", "-n", "origin"]
+action = "remote_show"
+fields = { name = ["origin"], no_query = true }
+
+[[case]]
+argv = ["git", "remote", "prune", "--dry-run", "origin"]
+action = "remote_prune"
+fields = { dry_run = true, name = ["origin"] }
+effects = ["network"]
+
+[[case]]
+argv = ["git", "remote", "update", "-p"]
+action = "remote_update"
+fields = { prune = true }
+effects = ["delete_ref", "network"]
+
+# `-v` must come before the subcommand, and then the subcommand word is not adjacent.
+[[case]]
+argv = ["git", "remote", "-v", "show", "origin"]
+action = "unmodeled"
+
+[[case]]
+argv = ["git", "remote", "add", "only-name"]
+action = "unmodeled"
+
+[[case]]
+argv = ["git", "remote", "set-head", "origin", "-a"]
+action = "unmodeled"
+
+# ---------------------------------------------------------------- config
+
+[[case]]
+argv = ["git", "config", "list", "--show-origin"]
+action = "config_list"
+fields = { show_origin = true }
+
+[[case]]
+argv = ["git", "config", "get", "user.email"]
+action = "config_get"
+fields = { name = "user.email" }
+
+[[case]]
+argv = ["git", "config", "get", "--global", "--all", "remote.origin.fetch"]
+action = "config_get"
+fields = { all = true, global = true, name = "remote.origin.fetch" }
+
+[[case]]
+argv = ["git", "config", "set", "--global", "user.name", "Ada Lovelace"]
+action = "config_set"
+fields = { global = true, name = "user.name", value = "Ada Lovelace" }
+effects = ["override_config", "run_program", "skip_hooks"]
+
+[[case]]
+argv = ["git", "config", "set", "-f", "/home/u/.bashrc", "x.y", "z"]
+action = "config_set"
+fields = { file = "/home/u/.bashrc", name = "x.y", value = "z" }
+effects = ["outside_path", "override_config", "run_program", "skip_hooks"]
+
+[[case]]
+argv = ["git", "config", "unset", "core.pager"]
+action = "config_unset"
+fields = { name = "core.pager" }
+effects = ["override_config", "run_program", "skip_hooks"]
+
+# Git reads `set user.name --global` as the value "--global"; here the value is missing.
+[[case]]
+argv = ["git", "config", "set", "user.name", "--global"]
+action = "unmodeled"
+
+# `config edit` has no action of its own, so the older form reads `edit` as a name. Git opens an
+# editor on the configuration file, which is a write, and the operand adds override_config.
+[[case]]
+argv = ["git", "config", "edit"]
+action = "config"
+fields = { name = "edit" }
+effects = ["override_config", "run_program", "skip_hooks"]
+
+# The older form: `--list` and `--get <name>` read.
+[[case]]
+argv = ["git", "config", "--list"]
+action = "config"
+fields = { list = true }
+
+[[case]]
+argv = ["git", "config", "-l", "--global"]
+action = "config"
+fields = { global = true, list = true }
+
+[[case]]
+argv = ["git", "config", "--get", "remote.origin.url"]
+action = "config"
+fields = { get = "remote.origin.url" }
+
+[[case]]
+argv = ["git", "config", "--global", "--get-regexp", "^alias\\."]
+action = "config"
+fields = { get_regexp = "^alias\\.", global = true }
+
+# `git config <name> <value>` writes.
+[[case]]
+argv = ["git", "config", "user.email", "a@example.com"]
+action = "config"
+fields = { name = "user.email", value = "a@example.com" }
+effects = ["override_config", "run_program", "skip_hooks"]
+
+[[case]]
+argv = ["git", "config", "--global", "core.sshCommand", "ssh -i key"]
+action = "config"
+fields = { global = true, name = "core.sshCommand", value = "ssh -i key" }
+effects = ["override_config", "run_program", "skip_hooks"]
+
+# In git, `config user.name --global` writes "--global" as the value (options stop at the first
+# operand). Any operand adds override_config, so this is never read as a read.
+[[case]]
+argv = ["git", "config", "user.name", "--global"]
+action = "config"
+fields = { global = true, name = "user.name" }
+effects = ["override_config", "run_program", "skip_hooks"]
+
+[[case]]
+argv = ["git", "config", "--unset", "core.pager"]
+action = "config"
+fields = { unset = "core.pager" }
+effects = ["override_config", "run_program", "skip_hooks"]
+
+[[case]]
+argv = ["git", "config", "--edit"]
+action = "unmodeled"
+
+[[case]]
+argv = ["git", "config", "--add", "x.y", "z"]
+action = "unmodeled"
+
+# ---------------------------------------------------------------- init, worktree
+
+[[case]]
+argv = ["git", "init"]
+action = "init"
+
+[[case]]
+argv = ["git", "init", "-b", "main", "proj"]
+action = "init"
+fields = { directory = "proj", initial_branch = "main" }
+
+[[case]]
+argv = ["git", "init", "--template=../tpl", "/srv/new"]
+action = "init"
+fields = { directory = "/srv/new", template = "../tpl" }
+effects = ["outside_path", "run_program"]
+
+[[case]]
+argv = ["git", "init", "--bare", "x.git"]
+action = "init"
+fields = { bare_option = true, directory = "x.git" }
+
+[[case]]
+argv = ["git", "worktree", "list", "--porcelain"]
+action = "worktree_list"
+fields = { porcelain = true }
+
+[[case]]
+argv = ["git", "worktree", "add", "../wt-feature", "-b", "feature"]
+action = "worktree_add"
+fields = { create = "feature", path = "../wt-feature" }
+effects = ["outside_path"]
+
+[[case]]
+argv = ["git", "worktree", "add", "wt", "origin/main"]
+action = "worktree_add"
+fields = { commit_ish = "origin/main", path = "wt" }
+
+[[case]]
+argv = ["git", "worktree", "add", "-B", "main", "wt"]
+action = "worktree_add"
+fields = { force_create = "main", path = "wt" }
+effects = ["rewrite_history"]
+
+[[case]]
+argv = ["git", "worktree", "remove", "wt"]
+action = "worktree_remove"
+fields = { worktree = "wt" }
+effects = ["delete_files"]
+
+[[case]]
+argv = ["git", "worktree", "remove", "--force", "../wt"]
+action = "worktree_remove"
+fields = { force = true, worktree = "../wt" }
+effects = ["delete_files", "discard_changes", "outside_path"]
+
+[[case]]
+argv = ["git", "worktree", "prune", "-n"]
+action = "worktree_prune"
+fields = { dry_run = true }
+
+[[case]]
+argv = ["git", "worktree", "move", "a", "b"]
+action = "unmodeled"
+
+[[case]]
+argv = ["git", "worktree", "add"]
+action = "unmodeled"
+
+# ---------------------------------------------------------------- more spellings
+
+# A dry run also removes `delete_remote_ref` from `-d`.
+[[case]]
+argv = ["git", "push", "-n", "-d", "origin", "old"]
+action = "push"
+fields = { delete = true, dry_run = true, refspec = ["old"], repository = "origin" }
+effects = ["network"]
+
+# git-checkout(1): `--orphan` starts an unborn branch; git refuses paths with it.
+[[case]]
+argv = ["git", "checkout", "--orphan", "gh-pages"]
+action = "checkout"
+fields = { orphan = "gh-pages" }
+
+# git-checkout(1) 2.56: `-m` on a branch switch stashes the conflicting changes and reapplies them.
+[[case]]
+argv = ["git", "checkout", "-m", "-b", "topic"]
+action = "checkout"
+fields = { create = "topic", merge = true }
+
+[[case]]
+argv = ["git", "switch", "-m", "main"]
+action = "switch"
+fields = { branch = "main", merge = true }
+
+# builtin/stash.c: `git stash -p <path>` is accepted by git (`-p` lets `push` be assumed), but this
+# usage takes paths only after `--`.
+[[case]]
+argv = ["git", "stash", "-p", "src"]
+action = "unmodeled"
+
+# Older `config`: `--get <name> <value-pattern>` reads in git; here the second word is an operand,
+# which adds override_config.
+[[case]]
+argv = ["git", "config", "--get", "remote.origin.url", "github"]
+action = "config"
+fields = { get = "remote.origin.url", name = "github" }
+effects = ["override_config", "run_program", "skip_hooks"]
+
+# revision.c reads `--format` only with `=`; a bare `--format` gets the empty value here, and
+# the next word is a revision. Git refuses the line.
+[[case]]
+argv = ["git", "log", "--format", "oneline"]
+action = "log"
+fields = { format = "", revision = ["oneline"] }
+
+# git(1): `--attr-source <tree-ish>` and `--namespace=<name>` change no outcome here.
+[[case]]
+argv = ["git", "--attr-source", "HEAD", "--namespace=ns", "ls-files"]
+action = "ls_files"
+fields = { attr_source = "HEAD", namespace = "ns" }
+
+# Global `-c` and `clone -c` are two fields.
+[[case]]
+argv = ["git", "-c", "http.sslVerify=false", "clone", "-c", "a.b=c", "https://example.com/r.git"]
+action = "clone"
+fields = { config = ["http.sslVerify=false"], config_option = ["a.b=c"], repository = "https://example.com/r.git" }
+effects = ["network", "override_config", "run_program", "skip_hooks"]
+
+# A value that looks like an option, for a required value.
+[[case]]
+argv = ["git", "rebase", "--onto", "--root", "main"]
+action = "rebase"
+fields = { onto = "--root", upstream = "main" }
+effects = ["rewrite_history"]
+
+# `pull --dry-run` also removes `skip_hooks`: git returns before the merge runs any hook.
+[[case]]
+argv = ["git", "pull", "--dry-run", "--no-verify"]
+action = "pull"
+fields = { dry_run = true, no_verify = true }
+effects = ["network"]
+
+# `fetch --all` with `-p`; `--refmap` is not declared.
+[[case]]
+argv = ["git", "fetch", "--refmap=+refs/heads/*:refs/x/*", "origin"]
+action = "unmodeled"
+
+[[case]]
+argv = ["git", "branch", "-r", "-d", "origin/old"]
+action = "branch"
+fields = { branchname = ["origin/old"], delete = true, remotes = true }
+effects = ["delete_ref"]
+
+# --- independent verifier cases ---
+# Written by the verifier from git 2.56.1 docs and source (git.c, parse-options.c, builtin/*.c),
+# not from the grammar's output. A case whose expectation disagrees with the grammar is a finding
+# in VERIFY.md, and the comment says so.
+
+# push: options after the operands are still read (parse_options permutes, push.c flags 0).
+[[case]]
+argv = ["git", "push", "origin", "main", "--force"]
+action = "push"
+fields = { repository = "origin", refspec = ["main"], force = true }
+effects = ["network", "force_push"]
+
+# push: --force-with-lease is PARSE_OPT_OPTARG, so the next word is the repository.
+[[case]]
+argv = ["git", "push", "--force-with-lease", "origin", "main"]
+action = "push"
+fields = { force_with_lease = "", repository = "origin", refspec = ["main"] }
+effects = ["network", "force_push"]
+
+# push: a stuck lease value.
+[[case]]
+argv = ["git", "push", "--force-with-lease=main:abc123", "--force-if-includes", "origin", "main"]
+action = "push"
+fields = { force_with_lease = "main:abc123", force_if_includes = true, repository = "origin", refspec = ["main"] }
+effects = ["network", "force_push"]
+
+# push: `--` ends options; `+main` after it is still a forcing refspec.
+[[case]]
+argv = ["git", "push", "origin", "--", "+main"]
+action = "push"
+fields = { repository = "origin", refspec = ["+main"] }
+effects = ["network", "force_push"]
+
+# push: a cluster with -n makes the whole push a dry run (TRANSPORT_PUSH_DRY_RUN).
+[[case]]
+argv = ["git", "push", "-nf", "origin", "main"]
+action = "push"
+fields = { dry_run = true, force = true, repository = "origin", refspec = ["main"] }
+effects = ["network"]
+
+# push: delete through a refspec with an empty source.
+[[case]]
+argv = ["git", "push", "origin", ":refs/tags/v1"]
+action = "push"
+fields = { repository = "origin", refspec = [":refs/tags/v1"] }
+effects = ["network", "delete_remote_ref"]
+
+# push: --prune with a glob refspec deletes remote branches.
+[[case]]
+argv = ["git", "push", "--prune", "origin", "refs/heads/*:refs/heads/*"]
+action = "push"
+fields = { prune = true, repository = "origin", refspec = ["refs/heads/*:refs/heads/*"] }
+effects = ["network", "delete_remote_ref"]
+
+# push: an abbreviation git accepts (--forc = --force) is unmodeled.
+[[case]]
+argv = ["git", "push", "--forc", "origin", "main"]
+action = "unmodeled"
+
+# push: --no-force-with-lease is a negation the grammar does not declare.
+[[case]]
+argv = ["git", "push", "--no-force-with-lease", "origin"]
+action = "unmodeled"
+
+# git.c: -C after the subcommand is not a global option, and push has no -C.
+[[case]]
+argv = ["git", "push", "-C", "/tmp", "origin"]
+action = "unmodeled"
+
+# git.c handle_options: --no-pager is read only before the command.
+[[case]]
+argv = ["git", "log", "--no-pager"]
+action = "unmodeled"
+
+# git.c: --git-dir=<path> before the command.
+[[case]]
+argv = ["git", "--git-dir=../x/.git", "log", "--oneline"]
+action = "log"
+fields = { git_dir = "../x/.git", oneline = true }
+effects = ["other_repository", "run_program"]
+
+# git.c run_argv: an alias is only tried after the builtins; a non-builtin name is unmodeled.
+[[case]]
+argv = ["git", "-c", "alias.st=!rm -rf .", "st"]
+action = "unmodeled"
+
+# reset --hard to an older commit rewrites and discards.
+[[case]]
+argv = ["git", "reset", "--hard", "HEAD~1"]
+action = "reset"
+fields = { hard = true, commit = "HEAD~1" }
+effects = ["rewrite_history", "discard_changes"]
+
+# reset --hard @ does not move HEAD.
+[[case]]
+argv = ["git", "reset", "--hard", "@"]
+action = "reset"
+fields = { hard = true, commit = "@" }
+effects = ["discard_changes"]
+
+# reset <commit> -- with no path still moves HEAD.
+[[case]]
+argv = ["git", "reset", "HEAD~2", "--"]
+action = "reset"
+fields = { commit = "HEAD~2" }
+effects = ["rewrite_history"]
+
+# reset <commit> -- <path> updates only the index.
+[[case]]
+argv = ["git", "reset", "-q", "HEAD~1", "--", "src/a.c"]
+action = "reset"
+fields = { quiet = true, commit = "HEAD~1", pathspec = ["src/a.c"] }
+effects = []
+
+# clean -ffdx: -f twice also removes nested repositories (clean.c force > 1).
+[[case]]
+argv = ["git", "clean", "-ffdx"]
+action = "clean"
+fields = { force = true, directories = true, ignored = true }
+effects = ["delete_files"]
+
+# clean -n wins over -f (clean.c: dry_run guards each unlink).
+[[case]]
+argv = ["git", "clean", "-nfdx"]
+action = "clean"
+fields = { dry_run = true, force = true, directories = true, ignored = true }
+effects = []
+
+# checkout -b with a start point refuses paths, so no discard.
+[[case]]
+argv = ["git", "checkout", "-b", "feature", "origin/main"]
+action = "checkout"
+fields = { create = "feature", target = "origin/main" }
+effects = []
+
+# checkout -- . overwrites every modified file.
+[[case]]
+argv = ["git", "checkout", "--", "."]
+action = "checkout"
+fields = { pathspec = ["."] }
+effects = ["discard_changes"]
+
+# checkout -f is left out on purpose.
+[[case]]
+argv = ["git", "checkout", "-f", "main"]
+action = "unmodeled"
+
+# switch -C resets an existing branch.
+[[case]]
+argv = ["git", "switch", "-C", "main", "origin/main"]
+action = "switch"
+fields = { force_create = "main", branch = "origin/main" }
+effects = ["rewrite_history"]
+
+# restore -S -W writes the work tree; -W is not declared.
+[[case]]
+argv = ["git", "restore", "-SW", "file.txt"]
+action = "unmodeled"
+
+# restore --source overwrites the work tree file.
+[[case]]
+argv = ["git", "restore", "--source=HEAD~1", "file.txt"]
+action = "restore"
+fields = { source = "HEAD~1", pathspec = ["file.txt"] }
+effects = ["discard_changes"]
+
+# stash: a non-option word before `--` makes git refuse (stash.c push_stash).
+[[case]]
+argv = ["git", "stash", "file.txt"]
+action = "unmodeled"
+
+# stash drop loses the entry.
+[[case]]
+argv = ["git", "stash", "drop", "stash@{1}"]
+action = "stash_drop"
+fields = { stash = "stash@{1}" }
+effects = ["discard_changes"]
+
+# stash export/import are 2.51+ subcommands that write refs; not declared.
+[[case]]
+argv = ["git", "stash", "import", "refs/x"]
+action = "unmodeled"
+
+# rebase -x with a stuck value (OPT_STRING_LIST).
+[[case]]
+argv = ["git", "rebase", "-xmake", "--exec=npm test", "origin/main"]
+action = "rebase"
+fields = { exec = ["make", "npm test"], upstream = "origin/main" }
+effects = ["rewrite_history", "run_program"]
+
+# rebase --stat is the negation of --no-stat (parse-options).
+[[case]]
+argv = ["git", "rebase", "--stat", "main"]
+action = "rebase"
+fields = { stat = true, upstream = "main" }
+effects = ["rewrite_history"]
+
+# commit -nm: -n is --no-verify in commit.
+[[case]]
+argv = ["git", "commit", "-nm", "wip"]
+action = "commit"
+fields = { no_verify = true, message = ["wip"] }
+effects = ["skip_hooks"]
+
+# commit --amend --dry-run makes no commit (commit.c returns before prepare_to_commit).
+[[case]]
+argv = ["git", "commit", "--amend", "--dry-run"]
+action = "commit"
+fields = { amend = true, dry_run = true }
+effects = []
+
+# commit -m takes the next word even when it looks like an option.
+[[case]]
+argv = ["git", "commit", "-m", "--amend"]
+action = "commit"
+fields = { message = ["--amend"] }
+effects = []
+
+# commit --amen is an abbreviation git accepts; unmodeled.
+[[case]]
+argv = ["git", "commit", "--amen", "--no-edit"]
+action = "unmodeled"
+
+# old config form: git stops at the first operand, so `--global` is the value written.
+[[case]]
+argv = ["git", "config", "core.hooksPath", "--global"]
+action = "config"
+fields = { name = "core.hooksPath", global = true }
+effects = ["override_config", "run_program", "skip_hooks"]
+
+# old config form: --get with a value pattern is a read; the grammar holds the pattern as <name>.
+[[case]]
+argv = ["git", "config", "--get", "core.pager"]
+action = "config"
+fields = { get = "core.pager" }
+effects = []
+
+# config set of a key that names a program: git runs core.fsmonitor on later commands.
+# VERIFIER: git runs this program later, like `-c core.fsmonitor=...`, which adds run_program.
+# AUTHOR (fix F3): a config write now carries the same effects as global `-c`, skip_hooks included.
+[[case]]
+argv = ["git", "config", "set", "--local", "core.fsmonitor", "./x.sh"]
+action = "config_set"
+fields = { local = true, name = "core.fsmonitor", value = "./x.sh" }
+effects = ["override_config", "run_program", "skip_hooks"]
+
+# config get reads.
+[[case]]
+argv = ["git", "config", "get", "--global", "user.email"]
+action = "config_get"
+fields = { global = true, name = "user.email" }
+effects = []
+
+# fetch --prune deletes remote-tracking refs that the remote no longer has.
+# VERIFIER: delete_ref is "Deletes a local branch, remote-tracking branch, or tag".
+[[case]]
+argv = ["git", "fetch", "--prune", "origin"]
+action = "fetch"
+fields = { prune = true, repository = "origin" }
+effects = ["network", "delete_ref"]
+
+# fetch --prune with a tag refspec deletes every local tag that the remote lacks (git-fetch(1),
+# PRUNING). VERIFIER: local tags are lost.
+[[case]]
+argv = ["git", "fetch", "-p", "origin", "refs/tags/*:refs/tags/*"]
+action = "fetch"
+fields = { prune = true, repository = "origin", refspec = ["refs/tags/*:refs/tags/*"] }
+effects = ["network", "delete_ref"]
+
+# remote prune deletes stale remote-tracking refs.
+[[case]]
+argv = ["git", "remote", "prune", "origin"]
+action = "remote_prune"
+fields = { name = ["origin"] }
+effects = ["network", "delete_ref"]
+
+# fetch with a forcing refspec to a local branch.
+[[case]]
+argv = ["git", "fetch", "origin", "+main:main"]
+action = "fetch"
+fields = { repository = "origin", refspec = ["+main:main"] }
+effects = ["network", "force_fetch"]
+
+# branch --delete-merged with --dry-run deletes nothing (branch.c).
+[[case]]
+argv = ["git", "branch", "--delete-merged", "origin/*", "--dry-run"]
+action = "branch"
+fields = { delete_merged = ["origin/*"], dry_run = true }
+effects = []
+
+# branch -f moves an existing branch.
+[[case]]
+argv = ["git", "branch", "-f", "main", "HEAD~3"]
+action = "branch"
+fields = { force = true, branchname = ["main", "HEAD~3"] }
+effects = ["rewrite_history"]
+
+# tag -fa cluster: -f replaces an existing tag.
+[[case]]
+argv = ["git", "tag", "-fam", "msg", "v1.0"]
+action = "tag"
+fields = { force = true, annotate = true, message = ["msg"], tagname = ["v1.0"] }
+effects = ["rewrite_history"]
+
+# global -p before the command.
+[[case]]
+argv = ["git", "-p", "log", "-n", "3"]
+action = "log"
+fields = { paginate = true, max_count = "3" }
+effects = []
+
+# pull -r is PARSE_OPT_OPTARG: `origin` is the repository.
+[[case]]
+argv = ["git", "pull", "-r", "origin", "main"]
+action = "pull"
+fields = { rebase = "", repository = "origin", refspec = ["main"] }
+effects = ["network", "rewrite_history"]
+
+# pull --rebase=false merges.
+[[case]]
+argv = ["git", "pull", "--rebase=false", "origin"]
+action = "pull"
+fields = { rebase = "false", repository = "origin" }
+effects = ["network"]
+
+# worktree remove -f of a sibling directory.
+[[case]]
+argv = ["git", "worktree", "remove", "-f", "../wt"]
+action = "worktree_remove"
+fields = { force = true, worktree = "../wt" }
+effects = ["delete_files", "discard_changes", "outside_path"]
+
+# push --delete.
+[[case]]
+argv = ["git", "push", "--delete", "origin", "feature"]
+action = "push"
+fields = { delete = true, repository = "origin", refspec = ["feature"] }
+effects = ["network", "delete_remote_ref"]
+
+# --end-of-options is git's other spelling of `--`; it is not declared.
+[[case]]
+argv = ["git", "checkout", "--end-of-options", "main"]
+action = "unmodeled"
+
+# ---------------------------------------------------------------- fixes after verification
+
+# F1: `--dry-run` prunes nothing, so it removes the `delete_ref` that `--prune` adds.
+[[case]]
+argv = ["git", "fetch", "--dry-run", "--prune", "origin"]
+action = "fetch"
+fields = { dry_run = true, prune = true, repository = "origin" }
+effects = ["network"]
+
+[[case]]
+argv = ["git", "pull", "-p"]
+action = "pull"
+fields = { prune = true }
+effects = ["delete_ref", "network"]
+
+# F2: `remote prune -n` reports and deletes nothing.
+[[case]]
+argv = ["git", "remote", "prune", "-n", "origin"]
+action = "remote_prune"
+fields = { dry_run = true, name = ["origin"] }
+effects = ["network"]
+
+# F9: an `ext::` URL stored as a remote runs a command on a later fetch or push.
+[[case]]
+argv = ["git", "remote", "add", "evil", "ext::sh -c id"]
+action = "remote_add"
+fields = { name = "evil", url = "ext::sh -c id" }
+effects = ["override_config", "run_program"]
+
+[[case]]
+argv = ["git", "remote", "set-url", "origin", "ext::sh -c id"]
+action = "remote_set_url"
+fields = { name = "origin", newurl = "ext::sh -c id" }
+effects = ["override_config", "run_program"]
+
+# F7: `--skip` resets the working tree of the commit in progress.
+[[case]]
+argv = ["git", "rebase", "--skip"]
+action = "rebase"
+fields = { skip = true }
+effects = ["discard_changes", "rewrite_history"]
+
+[[case]]
+argv = ["git", "cherry-pick", "--skip"]
+action = "cherry_pick"
+fields = { skip = true }
+effects = ["discard_changes"]
+
+# F4: `switch -t` and `branch --unset-upstream` write branch.<name>.remote/merge.
+[[case]]
+argv = ["git", "switch", "-c", "x", "-t", "origin/x"]
+action = "switch"
+fields = { branch = "origin/x", create = "x", track = "" }
+effects = ["override_config"]
+
+[[case]]
+argv = ["git", "branch", "--unset-upstream"]
+action = "branch"
+fields = { unset_upstream = true }
+effects = ["override_config"]
+
+# --- independent verifier cases, round 2 ---
+# Checked against git 2.56.1 source: fetch.c prune_refs (`if (!dry_run)`), pull.c (passes
+# `--dry-run` to fetch, returns after run_fetch), remote.c prune_remote and update.
+
+# fetch --dry-run guards the prune deletion (prune_refs).
+[[case]]
+argv = ["git", "fetch", "--dry-run", "--prune", "origin", "refs/tags/*:refs/tags/*"]
+action = "fetch"
+fields = { dry_run = true, prune = true, repository = "origin", refspec = ["refs/tags/*:refs/tags/*"] }
+effects = ["network"]
+
+# pull --dry-run exists and is passed to fetch, so -p deletes nothing.
+[[case]]
+argv = ["git", "pull", "--dry-run", "-p", "origin"]
+action = "pull"
+fields = { dry_run = true, prune = true, repository = "origin" }
+effects = ["network"]
+
+# pull -p without a dry run deletes stale refs.
+[[case]]
+argv = ["git", "pull", "--prune", "--rebase", "origin", "main"]
+action = "pull"
+fields = { prune = true, rebase = "", repository = "origin", refspec = ["main"] }
+effects = ["network", "delete_ref", "rewrite_history"]
+
+# fetch -p in a cluster with -t.
+[[case]]
+argv = ["git", "fetch", "-tp", "origin"]
+action = "fetch"
+fields = { tags = true, prune = true, repository = "origin" }
+effects = ["network", "delete_ref"]
+
+# remote prune --dry-run deletes nothing (prune_remote).
+[[case]]
+argv = ["git", "remote", "prune", "--dry-run", "origin", "upstream"]
+action = "remote_prune"
+fields = { dry_run = true, name = ["origin", "upstream"] }
+effects = ["network"]
+
+# remote update -p runs `fetch --prune --multiple`; remote update has no dry run.
+[[case]]
+argv = ["git", "remote", "update", "-p", "origin"]
+action = "remote_update"
+fields = { prune = true, remote = ["origin"] }
+effects = ["network", "delete_ref"]
+
+# remote update -n is not an option of remote update.
+[[case]]
+argv = ["git", "remote", "update", "-n", "-p"]
+action = "unmodeled"
+
+# remote add with an ext:: URL stores a command for a later fetch.
+[[case]]
+argv = ["git", "remote", "add", "x", "ext::sh -c id"]
+action = "remote_add"
+fields = { name = "x", url = "ext::sh -c id" }
+effects = ["override_config", "run_program"]
+
+# config get stays a read.
+[[case]]
+argv = ["git", "config", "get", "core.hooksPath"]
+action = "config_get"
+fields = { name = "core.hooksPath" }
+effects = []
+
+# config --list stays a read.
+[[case]]
+argv = ["git", "config", "--list", "--show-origin"]
+action = "config"
+fields = { list = true, show_origin = true }
+effects = []
+
+# config unset of core.hooksPath turns the hooks back on, but it is still a write.
+[[case]]
+argv = ["git", "config", "--unset-all", "core.hooksPath"]
+action = "config"
+fields = { unset_all = "core.hooksPath" }
+effects = ["override_config", "run_program", "skip_hooks"]
+
+# --work-tree alone now adds run_program.
+[[case]]
+argv = ["git", "--work-tree=/tmp/wt", "checkout", "--", "a.txt"]
+action = "checkout"
+fields = { work_tree = "/tmp/wt", pathspec = ["a.txt"] }
+effects = ["other_repository", "run_program", "discard_changes"]
+
+# rm --cached without -f keeps staged content safe (git refuses), so no effect.
+[[case]]
+argv = ["git", "rm", "--cached", "a.txt"]
+action = "rm"
+fields = { cached = true, pathspec = ["a.txt"] }
+effects = []
+
+# rm -n -f --cached is a dry run.
+[[case]]
+argv = ["git", "rm", "-nf", "--cached", "a.txt"]
+action = "rm"
+fields = { dry_run = true, force = true, cached = true, pathspec = ["a.txt"] }
+effects = []
+
+# cherry-pick --skip resets the commit in progress.
+[[case]]
+argv = ["git", "cherry-pick", "--skip"]
+action = "cherry_pick"
+fields = { skip = true }
+effects = ["discard_changes"]
+
+# branch --unset-upstream writes branch config.
+[[case]]
+argv = ["git", "branch", "--unset-upstream", "topic"]
+action = "branch"
+fields = { unset_upstream = true, branchname = ["topic"] }
+effects = ["override_config"]
+
+# push -n -u: git writes no upstream on a dry run (transport.c set_upstreams, `if (!pretend)`).
+# The grammar keeps override_config, which over-reports and is safe.
+[[case]]
+argv = ["git", "push", "-n", "-u", "origin", "main"]
+action = "push"
+fields = { dry_run = true, set_upstream = true, repository = "origin", refspec = ["main"] }
+effects = ["network", "override_config"]

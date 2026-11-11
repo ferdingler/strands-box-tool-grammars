@@ -1,0 +1,1301 @@
+# Tool grammar for git, the Git version control system.
+#
+# CLI project : Git, https://git-scm.com, source git.kernel.org/pub/scm/git/git.git
+# Executable  : git (native binary)
+# Checked     : git 2.56.1 (tag v2.56.1, commit 03b41523c576), against its `-h` output, its man
+#               pages, and its source (git.c, builtin/*.c, revision.c, diff.c).
+#
+# What this grammar cannot see:
+# - Environment variables: GIT_DIR, GIT_WORK_TREE, GIT_CONFIG_PARAMETERS, GIT_CONFIG_COUNT/KEY/VALUE,
+#   GIT_SSH_COMMAND, GIT_EXTERNAL_DIFF, GIT_EDITOR, GIT_PAGER, GIT_EXEC_PATH, and the rest. Each can
+#   change the repository, the configuration, or the programs git runs.
+# - Configuration files (system, global, repository, worktree, and includes). Configuration can
+#   name programs that git runs on its own: core.pager, core.editor, core.sshCommand,
+#   core.fsmonitor, core.hooksPath, diff.external, textconv and filter drivers, credential
+#   helpers, gpg.program, and merge or diff tools. It can also change what a command does:
+#   pull.rebase, push.default, remote.<name>.mirror, clean.requireForce.
+# - Hooks in the repository (pre-commit, pre-push, post-checkout, ...). Git runs them as child
+#   processes, and they are not decided here. `skip_hooks` marks only a command line that skips them.
+# - Git aliases (alias.* in configuration) and external `git-<name>` commands on PATH. Neither has
+#   a spelling here, so each is `unmodeled`.
+# - Repository state: whether a word is a branch or a path (`git checkout <x>`), what a refspec
+#   that the configuration holds does, and which files are untracked.
+# - Editors and pagers that git starts for a command line that asks for one (`-e`, `-i`, `-p`).
+#
+# Every long option is matched by its full spelling. Git also accepts a unique prefix of a long
+# option (`--amen` for `--amend`) and `--no-<option>` for most options; this grammar declares only
+# the negations listed, so any other spelling is `unmodeled`.
+
+format  = 1
+version = 1
+name    = "git"
+program = "git"
+
+[effects]
+network           = "Contacts another repository: a URL, or a path to another local repository"
+force_push        = "Can replace commits on a remote ref, so the remote loses them"
+delete_remote_ref = "Deletes a branch or tag on the remote"
+force_fetch       = "Can replace commits on a local ref with what the remote has"
+rewrite_history   = "Replaces commits on a local branch, or moves an existing branch or tag so commits leave it"
+delete_ref        = "Deletes a local branch, remote-tracking branch, or tag"
+discard_changes   = "Can overwrite or delete uncommitted changes in the working tree, or drop stashed changes"
+delete_files      = "Deletes files from the working tree"
+skip_hooks        = "Skips hooks that the repository configures"
+override_config   = "Sets git configuration, for this command or in a configuration file; configuration can name programs git runs"
+run_program       = "Makes git run, now or in a later command, a program that the command line names or installs"
+other_repository  = "Points git at a repository or work tree that the command line names (-C, --git-dir, --work-tree)"
+write_file        = "Writes the output to a file that the command line names"
+outside_path      = "Names a file or directory by an absolute path or by a path that contains `..`"
+
+# Options that git.c reads before the subcommand. Git refuses them after the subcommand, so none
+# is `anywhere`. Left out on purpose, so each makes the line `unmodeled`: `-v`/`--version`,
+# `-h`/`--help`, `--exec-path`, `--html-path`, `--man-path`, `--info-path`, `--list-cmds`, and the
+# internal `--shallow-file`.
+[global]
+options.change_directory    = { flag = ["-C"], value = "required", adds = ["other_repository", "run_program"] }
+options.config              = { flag = ["-c"], value = "required", repeated = true, adds = ["override_config", "run_program", "skip_hooks"] }
+options.config_env          = { flag = ["--config-env"], value = "required", repeated = true, adds = ["override_config", "run_program", "skip_hooks"] }
+options.git_dir             = { flag = ["--git-dir"], value = "required", adds = ["other_repository", "run_program"] }
+options.work_tree           = { flag = ["--work-tree"], value = "required", adds = ["other_repository", "run_program"] }
+options.namespace           = { flag = ["--namespace"], value = "required" }
+options.attr_source         = { flag = ["--attr-source"], value = "required" }
+options.bare                = { flag = ["--bare"] }
+options.paginate            = { flag = ["-p", "--paginate"] }
+options.no_pager            = { flag = ["-P", "--no-pager"] }
+options.no_replace_objects  = { flag = ["--no-replace-objects"] }
+options.no_lazy_fetch       = { flag = ["--no-lazy-fetch"] }
+options.no_optional_locks   = { flag = ["--no-optional-locks"] }
+options.no_advice           = { flag = ["--no-advice"] }
+options.literal_pathspecs   = { flag = ["--literal-pathspecs"] }
+options.no_literal_pathspecs = { flag = ["--no-literal-pathspecs"] }
+options.glob_pathspecs      = { flag = ["--glob-pathspecs"] }
+options.noglob_pathspecs    = { flag = ["--noglob-pathspecs"] }
+options.icase_pathspecs     = { flag = ["--icase-pathspecs"] }
+
+# ================================================================ examine
+
+[shell.status]
+usage = "git [global options] status [options] [--] [<pathspec>...]"
+options.verbose           = { flag = ["-v", "--verbose"] }
+options.short             = { flag = ["-s", "--short"] }
+options.branch            = { flag = ["-b", "--branch"] }
+options.show_stash        = { flag = ["--show-stash"] }
+options.ahead_behind      = { flag = ["--ahead-behind"] }
+options.no_ahead_behind   = { flag = ["--no-ahead-behind"] }
+options.porcelain         = { flag = ["--porcelain"], value = "optional" }
+options.long              = { flag = ["--long"] }
+options.null              = { flag = ["-z", "--null"] }
+options.untracked_files   = { flag = ["-u", "--untracked-files"], value = "optional" }
+options.ignored           = { flag = ["--ignored"], value = "optional" }
+options.ignore_submodules = { flag = ["--ignore-submodules"], value = "optional" }
+options.column            = { flag = ["--column"], value = "optional" }
+options.no_column         = { flag = ["--no-column"] }
+options.renames           = { flag = ["--renames"] }
+options.no_renames        = { flag = ["--no-renames"] }
+options.find_renames      = { flag = ["-M", "--find-renames"], value = "optional" }
+
+# `git log -<n>` (a count as a bare number) cannot be spelled, so it is `unmodeled`; use `-n <n>`.
+# `--format` and `--pretty=` take only an attached value in git, so `value = "optional"`.
+# Without `--`, git decides whether each word is a revision or a path; this grammar calls every
+# word before `--` a revision.
+[shell.log]
+usage = "git [global options] log [options] [<revision>...] [--] [<path>...]"
+options.max_count        = { flag = ["-n", "--max-count"], value = "required" }
+options.skip             = { flag = ["--skip"], value = "required" }
+options.since            = { flag = ["--since", "--after"], value = "required" }
+options.until            = { flag = ["--until", "--before"], value = "required" }
+options.author           = { flag = ["--author"], value = "required", repeated = true }
+options.committer        = { flag = ["--committer"], value = "required", repeated = true }
+options.grep             = { flag = ["--grep"], value = "required", repeated = true }
+options.all_match        = { flag = ["--all-match"] }
+options.invert_grep      = { flag = ["--invert-grep"] }
+options.regexp_ignore_case = { flag = ["-i", "--regexp-ignore-case"] }
+options.extended_regexp  = { flag = ["-E", "--extended-regexp"] }
+options.fixed_strings    = { flag = ["-F", "--fixed-strings"] }
+options.merges           = { flag = ["--merges"] }
+options.no_merges        = { flag = ["--no-merges"] }
+options.first_parent     = { flag = ["--first-parent"] }
+options.all              = { flag = ["--all"] }
+options.branches         = { flag = ["--branches"], value = "optional" }
+options.tags             = { flag = ["--tags"], value = "optional" }
+options.remotes          = { flag = ["--remotes"], value = "optional" }
+options.reverse          = { flag = ["--reverse"] }
+options.walk_reflogs     = { flag = ["-g", "--walk-reflogs"] }
+options.topo_order       = { flag = ["--topo-order"] }
+options.date_order       = { flag = ["--date-order"] }
+options.left_right       = { flag = ["--left-right"] }
+options.cherry_pick      = { flag = ["--cherry-pick"] }
+options.boundary         = { flag = ["--boundary"] }
+options.full_history     = { flag = ["--full-history"] }
+options.simplify_by_decoration = { flag = ["--simplify-by-decoration"] }
+options.oneline          = { flag = ["--oneline"] }
+options.graph            = { flag = ["--graph"] }
+options.decorate         = { flag = ["--decorate"], value = "optional" }
+options.no_decorate      = { flag = ["--no-decorate"] }
+options.source           = { flag = ["--source"] }
+options.format           = { flag = ["--format"], value = "optional" }
+options.pretty           = { flag = ["--pretty"], value = "optional" }
+options.abbrev_commit    = { flag = ["--abbrev-commit"] }
+options.no_abbrev_commit = { flag = ["--no-abbrev-commit"] }
+options.date             = { flag = ["--date"], value = "required" }
+options.relative_date    = { flag = ["--relative-date"] }
+options.show_signature   = { flag = ["--show-signature"] }
+options.mailmap          = { flag = ["--mailmap", "--use-mailmap"] }
+options.follow           = { flag = ["--follow"] }
+options.line_range       = { flag = ["-L"], value = "required", repeated = true }
+options.patch            = { flag = ["-p", "-u", "--patch"] }
+options.no_patch         = { flag = ["-s", "--no-patch"] }
+options.unified          = { flag = ["-U", "--unified"], value = "optional" }
+options.stat             = { flag = ["--stat"], value = "optional" }
+options.shortstat        = { flag = ["--shortstat"] }
+options.numstat          = { flag = ["--numstat"] }
+options.name_only        = { flag = ["--name-only"] }
+options.name_status      = { flag = ["--name-status"] }
+options.raw              = { flag = ["--raw"] }
+options.full_diff        = { flag = ["--full-diff"] }
+options.find_renames     = { flag = ["-M", "--find-renames"], value = "optional" }
+options.diff_filter      = { flag = ["--diff-filter"], value = "required" }
+options.pickaxe          = { flag = ["-S"], value = "required" }
+options.pickaxe_regex    = { flag = ["-G"], value = "required" }
+options.ignore_all_space = { flag = ["-w", "--ignore-all-space"] }
+options.ignore_space_change = { flag = ["-b", "--ignore-space-change"] }
+options.word_diff        = { flag = ["--word-diff"], value = "optional" }
+options.color            = { flag = ["--color"], value = "optional" }
+options.no_color         = { flag = ["--no-color"] }
+options.ext_diff         = { flag = ["--ext-diff"], adds = ["run_program"] }
+options.no_ext_diff      = { flag = ["--no-ext-diff"] }
+options.textconv         = { flag = ["--textconv"], adds = ["run_program"] }
+options.no_textconv      = { flag = ["--no-textconv"] }
+options.output           = { flag = ["--output"], value = "required", adds = ["write_file"], when = [{ like = ["/*", "..", "../*", "*/..", "*/../*"], adds = ["outside_path"] }] }
+options.null             = { flag = ["-z"] }
+operands.revision = {}
+operands.path     = {}
+
+[shell.show]
+usage = "git [global options] show [options] [<object>...] [--] [<path>...]"
+options.oneline          = { flag = ["--oneline"] }
+options.format           = { flag = ["--format"], value = "optional" }
+options.pretty           = { flag = ["--pretty"], value = "optional" }
+options.abbrev_commit    = { flag = ["--abbrev-commit"] }
+options.no_abbrev_commit = { flag = ["--no-abbrev-commit"] }
+options.date             = { flag = ["--date"], value = "required" }
+options.decorate         = { flag = ["--decorate"], value = "optional" }
+options.no_decorate      = { flag = ["--no-decorate"] }
+options.show_signature   = { flag = ["--show-signature"] }
+options.mailmap          = { flag = ["--mailmap", "--use-mailmap"] }
+options.quiet            = { flag = ["-q", "--quiet"] }
+options.patch            = { flag = ["-p", "-u", "--patch"] }
+options.no_patch         = { flag = ["-s", "--no-patch"] }
+options.unified          = { flag = ["-U", "--unified"], value = "optional" }
+options.stat             = { flag = ["--stat"], value = "optional" }
+options.shortstat        = { flag = ["--shortstat"] }
+options.numstat          = { flag = ["--numstat"] }
+options.name_only        = { flag = ["--name-only"] }
+options.name_status      = { flag = ["--name-status"] }
+options.raw              = { flag = ["--raw"] }
+options.find_renames     = { flag = ["-M", "--find-renames"], value = "optional" }
+options.diff_filter      = { flag = ["--diff-filter"], value = "required" }
+options.ignore_all_space = { flag = ["-w", "--ignore-all-space"] }
+options.ignore_space_change = { flag = ["-b", "--ignore-space-change"] }
+options.word_diff        = { flag = ["--word-diff"], value = "optional" }
+options.color            = { flag = ["--color"], value = "optional" }
+options.no_color         = { flag = ["--no-color"] }
+options.ext_diff         = { flag = ["--ext-diff"], adds = ["run_program"] }
+options.no_ext_diff      = { flag = ["--no-ext-diff"] }
+options.textconv         = { flag = ["--textconv"], adds = ["run_program"] }
+options.no_textconv      = { flag = ["--no-textconv"] }
+options.output           = { flag = ["--output"], value = "required", adds = ["write_file"], when = [{ like = ["/*", "..", "../*", "*/..", "*/../*"], adds = ["outside_path"] }] }
+options.null             = { flag = ["-z"] }
+operands.object = {}
+operands.path   = {}
+
+# With two paths and at least one outside the working tree, or when run outside a repository,
+# `git diff` reads the files themselves (the `--no-index` mode) even without `--no-index`. A path
+# that is absolute or contains `..` adds `outside_path`.
+[shell.diff]
+usage = "git [global options] diff [options] [<commit>...] [--] [<path>...]"
+options.cached           = { flag = ["--cached", "--staged"] }
+options.merge_base       = { flag = ["--merge-base"] }
+options.no_index         = { flag = ["--no-index"] }
+options.patch            = { flag = ["-p", "-u", "--patch"] }
+options.no_patch         = { flag = ["-s", "--no-patch"] }
+options.unified          = { flag = ["-U", "--unified"], value = "optional" }
+options.function_context = { flag = ["-W", "--function-context"] }
+options.raw              = { flag = ["--raw"] }
+options.stat             = { flag = ["--stat"], value = "optional" }
+options.numstat          = { flag = ["--numstat"] }
+options.shortstat        = { flag = ["--shortstat"] }
+options.dirstat          = { flag = ["-X", "--dirstat"], value = "optional" }
+options.summary          = { flag = ["--summary"] }
+options.name_only        = { flag = ["--name-only"] }
+options.name_status      = { flag = ["--name-status"] }
+options.check            = { flag = ["--check"] }
+options.binary           = { flag = ["--binary"] }
+options.full_index       = { flag = ["--full-index"] }
+options.exit_code        = { flag = ["--exit-code"] }
+options.quiet            = { flag = ["--quiet"] }
+options.reverse          = { flag = ["-R"] }
+options.text             = { flag = ["-a", "--text"] }
+options.find_renames     = { flag = ["-M", "--find-renames"], value = "optional" }
+options.find_copies      = { flag = ["-C", "--find-copies"], value = "optional" }
+options.no_renames       = { flag = ["--no-renames"] }
+options.diff_filter      = { flag = ["--diff-filter"], value = "required" }
+options.diff_algorithm   = { flag = ["--diff-algorithm"], value = "required" }
+options.minimal          = { flag = ["--minimal"] }
+options.patience         = { flag = ["--patience"] }
+options.histogram        = { flag = ["--histogram"] }
+options.ignore_all_space = { flag = ["-w", "--ignore-all-space"] }
+options.ignore_space_change = { flag = ["-b", "--ignore-space-change"] }
+options.ignore_space_at_eol = { flag = ["--ignore-space-at-eol"] }
+options.ignore_cr_at_eol = { flag = ["--ignore-cr-at-eol"] }
+options.ignore_blank_lines = { flag = ["--ignore-blank-lines"] }
+options.word_diff        = { flag = ["--word-diff"], value = "optional" }
+options.color_words      = { flag = ["--color-words"], value = "optional" }
+options.color            = { flag = ["--color"], value = "optional" }
+options.no_color         = { flag = ["--no-color"] }
+options.color_moved      = { flag = ["--color-moved"], value = "optional" }
+options.relative         = { flag = ["--relative"], value = "optional" }
+options.no_relative      = { flag = ["--no-relative"] }
+options.no_prefix        = { flag = ["--no-prefix"] }
+options.src_prefix       = { flag = ["--src-prefix"], value = "required" }
+options.dst_prefix       = { flag = ["--dst-prefix"], value = "required" }
+options.ignore_submodules = { flag = ["--ignore-submodules"], value = "optional" }
+options.submodule        = { flag = ["--submodule"], value = "optional" }
+options.pickaxe          = { flag = ["-S"], value = "required" }
+options.pickaxe_regex    = { flag = ["-G"], value = "required" }
+options.ext_diff         = { flag = ["--ext-diff"], adds = ["run_program"] }
+options.no_ext_diff      = { flag = ["--no-ext-diff"] }
+options.textconv         = { flag = ["--textconv"], adds = ["run_program"] }
+options.no_textconv      = { flag = ["--no-textconv"] }
+options.output           = { flag = ["--output"], value = "required", adds = ["write_file"], when = [{ like = ["/*", "..", "../*", "*/..", "*/../*"], adds = ["outside_path"] }] }
+options.null             = { flag = ["-z"] }
+operands.commit = { when = [{ like = ["/*", "..", "../*", "*/..", "*/../*"], adds = ["outside_path"] }] }
+operands.path   = { when = [{ like = ["/*", "..", "../*", "*/..", "*/../*"], adds = ["outside_path"] }] }
+
+# `-C` and `-M` take only an attached score, and git accepts `-C` up to three times.
+# `--contents` and `-S <revs-file>` read a named file, and are left out.
+[shell.blame]
+usage = "git [global options] blame [options] [<rev>] [--] <file>"
+options.incremental      = { flag = ["--incremental"] }
+options.blank_boundary   = { flag = ["-b"] }
+options.root             = { flag = ["--root"] }
+options.show_stats       = { flag = ["--show-stats"] }
+options.progress         = { flag = ["--progress"] }
+options.show_name        = { flag = ["-f", "--show-name"] }
+options.show_number      = { flag = ["-n", "--show-number"] }
+options.porcelain        = { flag = ["-p", "--porcelain"] }
+options.line_porcelain   = { flag = ["--line-porcelain"] }
+options.annotate_format  = { flag = ["-c"] }
+options.raw_timestamp    = { flag = ["-t"] }
+options.long_hash        = { flag = ["-l"] }
+options.suppress         = { flag = ["-s"] }
+options.show_email       = { flag = ["-e", "--show-email"] }
+options.ignore_whitespace = { flag = ["-w"] }
+options.diff_algorithm   = { flag = ["--diff-algorithm"], value = "required" }
+options.ignore_rev       = { flag = ["--ignore-rev"], value = "required", repeated = true }
+options.color_lines      = { flag = ["--color-lines"] }
+options.color_by_age     = { flag = ["--color-by-age"] }
+options.find_copies      = { flag = ["-C"], value = "optional", repeated = true }
+options.find_moves       = { flag = ["-M"], value = "optional", repeated = true }
+options.line_range       = { flag = ["-L"], value = "required", repeated = true }
+options.abbrev           = { flag = ["--abbrev"], value = "optional" }
+operands.rev  = {}
+operands.file = {}
+
+[shell.ls_files]
+usage = "git [global options] ls-files [options] [--] [<file>...]"
+options.null             = { flag = ["-z"] }
+options.tags             = { flag = ["-t"] }
+options.cached           = { flag = ["-c", "--cached"] }
+options.deleted          = { flag = ["-d", "--deleted"] }
+options.modified         = { flag = ["-m", "--modified"] }
+options.others           = { flag = ["-o", "--others"] }
+options.ignored          = { flag = ["-i", "--ignored"] }
+options.stage            = { flag = ["-s", "--stage"] }
+options.killed           = { flag = ["-k", "--killed"] }
+options.unmerged         = { flag = ["-u", "--unmerged"] }
+options.directory        = { flag = ["--directory"] }
+options.no_empty_directory = { flag = ["--no-empty-directory"] }
+options.eol              = { flag = ["--eol"] }
+options.exclude          = { flag = ["-x", "--exclude"], value = "required", repeated = true }
+options.exclude_standard = { flag = ["--exclude-standard"] }
+options.full_name        = { flag = ["--full-name"] }
+options.recurse_submodules = { flag = ["--recurse-submodules"] }
+options.error_unmatch    = { flag = ["--error-unmatch"] }
+options.with_tree        = { flag = ["--with-tree"], value = "required" }
+options.abbrev           = { flag = ["--abbrev"], value = "optional" }
+options.deduplicate      = { flag = ["--deduplicate"] }
+options.sparse           = { flag = ["--sparse"] }
+options.format           = { flag = ["--format"], value = "required" }
+operands.file = {}
+
+# rev-parse reads its options in order and prints each result. `--parseopt`, `--sq-quote`,
+# `--local-env-vars`, and every option not listed here are left out. `--git-dir` here is the
+# rev-parse query, so its key is `show_git_dir` (the global option `--git-dir` holds `git_dir`).
+[shell.rev_parse]
+usage = "git [global options] rev-parse [options] [<arg>...] [--] [<path>...]"
+options.verify            = { flag = ["--verify"] }
+options.quiet             = { flag = ["-q", "--quiet"] }
+options.short             = { flag = ["--short"], value = "optional" }
+options.abbrev_ref        = { flag = ["--abbrev-ref"], value = "optional" }
+options.symbolic          = { flag = ["--symbolic"] }
+options.symbolic_full_name = { flag = ["--symbolic-full-name"] }
+options.revs_only         = { flag = ["--revs-only"] }
+options.no_revs           = { flag = ["--no-revs"] }
+options.default           = { flag = ["--default"], value = "required" }
+options.all               = { flag = ["--all"] }
+options.branches          = { flag = ["--branches"], value = "optional" }
+options.tags              = { flag = ["--tags"], value = "optional" }
+options.remotes           = { flag = ["--remotes"], value = "optional" }
+options.show_toplevel     = { flag = ["--show-toplevel"] }
+options.show_prefix       = { flag = ["--show-prefix"] }
+options.show_cdup         = { flag = ["--show-cdup"] }
+options.show_git_dir      = { flag = ["--git-dir"] }
+options.absolute_git_dir  = { flag = ["--absolute-git-dir"] }
+options.git_common_dir    = { flag = ["--git-common-dir"] }
+options.git_path          = { flag = ["--git-path"], value = "required" }
+options.is_inside_git_dir = { flag = ["--is-inside-git-dir"] }
+options.is_inside_work_tree = { flag = ["--is-inside-work-tree"] }
+options.is_bare_repository = { flag = ["--is-bare-repository"] }
+options.is_shallow_repository = { flag = ["--is-shallow-repository"] }
+options.show_superproject_working_tree = { flag = ["--show-superproject-working-tree"] }
+options.show_object_format = { flag = ["--show-object-format"], value = "optional" }
+options.path_format       = { flag = ["--path-format"], value = "optional" }
+operands.arg  = {}
+operands.path = {}
+
+# ================================================================ change the working tree and index
+
+[shell.add]
+usage = "git [global options] add [options] [--] [<pathspec>...]"
+options.dry_run          = { flag = ["-n", "--dry-run"] }
+options.verbose          = { flag = ["-v", "--verbose"] }
+options.interactive      = { flag = ["-i", "--interactive"] }
+options.patch            = { flag = ["-p", "--patch"] }
+options.edit             = { flag = ["-e", "--edit"] }
+options.force            = { flag = ["-f", "--force"] }
+options.update           = { flag = ["-u", "--update"] }
+options.renormalize      = { flag = ["--renormalize"] }
+options.intent_to_add    = { flag = ["-N", "--intent-to-add"] }
+options.all              = { flag = ["-A", "--all", "--no-ignore-removal"] }
+options.no_all           = { flag = ["--no-all", "--ignore-removal"] }
+options.refresh          = { flag = ["--refresh"] }
+options.ignore_errors    = { flag = ["--ignore-errors"] }
+options.ignore_missing   = { flag = ["--ignore-missing"] }
+options.sparse           = { flag = ["--sparse"] }
+options.chmod            = { flag = ["--chmod"], value = "required" }
+operands.pathspec = {}
+
+# `git checkout <x>` switches to a branch when <x> names one, and otherwise overwrites the path
+# <x> in the working tree. The grammar cannot tell which, so any <target> or <pathspec> adds
+# `discard_changes`. Git refuses to update paths together with `-b`, `-B`, `--orphan`,
+# `--detach`, or `--track` (builtin/checkout.c, checkout_paths), so each of those removes it.
+# Left out on purpose: `-f` (throws away local changes even when switching), `-U` (alone it means
+# `-p`), and `--pathspec-from-file`.
+[shell.checkout]
+usage = "git [global options] checkout [options] [<target>] [--] [<pathspec>...]"
+options.create            = { flag = ["-b"], value = "required", removes = ["discard_changes"] }
+options.force_create      = { flag = ["-B"], value = "required", adds = ["rewrite_history"], removes = ["discard_changes"] }
+options.orphan            = { flag = ["--orphan"], value = "required", removes = ["discard_changes"] }
+options.detach            = { flag = ["-d", "--detach"], removes = ["discard_changes"] }
+options.track             = { flag = ["-t", "--track"], value = "optional", adds = ["override_config"], removes = ["discard_changes"] }
+options.no_track          = { flag = ["--no-track"] }
+options.create_reflog     = { flag = ["-l"] }
+options.guess             = { flag = ["--guess"] }
+options.no_guess          = { flag = ["--no-guess"] }
+options.merge             = { flag = ["-m", "--merge"] }
+options.conflict          = { flag = ["--conflict"], value = "required" }
+options.ours              = { flag = ["-2", "--ours"] }
+options.theirs            = { flag = ["-3", "--theirs"] }
+options.patch             = { flag = ["-p", "--patch"], adds = ["discard_changes"] }
+options.overlay           = { flag = ["--overlay"] }
+options.no_overlay        = { flag = ["--no-overlay"] }
+options.overwrite_ignore  = { flag = ["--overwrite-ignore"] }
+options.no_overwrite_ignore = { flag = ["--no-overwrite-ignore"] }
+options.ignore_other_worktrees = { flag = ["--ignore-other-worktrees"] }
+options.ignore_skip_worktree_bits = { flag = ["--ignore-skip-worktree-bits"] }
+options.recurse_submodules = { flag = ["--recurse-submodules"], value = "optional" }
+options.no_recurse_submodules = { flag = ["--no-recurse-submodules"] }
+options.quiet             = { flag = ["-q", "--quiet"] }
+options.progress          = { flag = ["--progress"] }
+options.no_progress       = { flag = ["--no-progress"] }
+operands.target   = { adds = ["discard_changes"] }
+operands.pathspec = { adds = ["discard_changes"] }
+
+# With `-c` or `--orphan`, <branch> is the start point. `-m` stashes conflicting local changes and
+# reapplies them (git-switch(1), 2.56), so it adds no effect.
+[shell.switch]
+usage = "git [global options] switch [options] [<branch>]"
+options.create            = { flag = ["-c", "--create"], value = "required" }
+options.force_create      = { flag = ["-C", "--force-create"], value = "required", adds = ["rewrite_history"] }
+options.orphan            = { flag = ["--orphan"], value = "required" }
+options.detach            = { flag = ["-d", "--detach"] }
+options.discard_changes   = { flag = ["-f", "--force", "--discard-changes"], adds = ["discard_changes"] }
+options.merge             = { flag = ["-m", "--merge"] }
+options.conflict          = { flag = ["--conflict"], value = "required" }
+options.track             = { flag = ["-t", "--track"], value = "optional", adds = ["override_config"] }
+options.no_track          = { flag = ["--no-track"] }
+options.guess             = { flag = ["--guess"] }
+options.no_guess          = { flag = ["--no-guess"] }
+options.overwrite_ignore  = { flag = ["--overwrite-ignore"] }
+options.no_overwrite_ignore = { flag = ["--no-overwrite-ignore"] }
+options.ignore_other_worktrees = { flag = ["--ignore-other-worktrees"] }
+options.recurse_submodules = { flag = ["--recurse-submodules"], value = "optional" }
+options.no_recurse_submodules = { flag = ["--no-recurse-submodules"] }
+options.quiet             = { flag = ["-q", "--quiet"] }
+options.progress          = { flag = ["--progress"] }
+options.no_progress       = { flag = ["--no-progress"] }
+operands.branch = {}
+
+# `git restore` writes the working tree unless only `--staged` is given, so `-S` removes
+# `discard_changes`. `-W`/`--worktree` is left out so that `-S` alone can mean "index only";
+# `-U` (alone it means `-p`) and `--pathspec-from-file` are left out too.
+[shell.restore]
+usage = "git [global options] restore [options] [--] [<pathspec>...]"
+adds  = ["discard_changes"]
+options.source            = { flag = ["-s", "--source"], value = "required" }
+options.staged            = { flag = ["-S", "--staged"], removes = ["discard_changes"] }
+options.ignore_unmerged   = { flag = ["--ignore-unmerged"] }
+options.overlay           = { flag = ["--overlay"] }
+options.no_overlay        = { flag = ["--no-overlay"] }
+options.merge             = { flag = ["-m", "--merge"] }
+options.conflict          = { flag = ["--conflict"], value = "required" }
+options.ours              = { flag = ["-2", "--ours"] }
+options.theirs            = { flag = ["-3", "--theirs"] }
+options.patch             = { flag = ["-p", "--patch"] }
+options.ignore_skip_worktree_bits = { flag = ["--ignore-skip-worktree-bits"] }
+options.recurse_submodules = { flag = ["--recurse-submodules"], value = "optional" }
+options.no_recurse_submodules = { flag = ["--no-recurse-submodules"] }
+options.quiet             = { flag = ["-q", "--quiet"] }
+options.progress          = { flag = ["--progress"] }
+options.no_progress       = { flag = ["--no-progress"] }
+operands.pathspec = {}
+
+# A <commit> moves the current branch (`rewrite_history`), unless it is `HEAD` or `@`. With a
+# <pathspec> or `-p`, git updates only the index and never moves HEAD, so both remove
+# `rewrite_history`; git refuses `--hard`, `--soft`, `--merge`, and `--keep` with paths.
+# Without `--`, git decides whether the one word is a commit or a path; this grammar calls it
+# <commit>. `-U` and `--pathspec-from-file` are left out.
+[shell.reset]
+usage = "git [global options] reset [options] [<commit>] [--] [<pathspec>...]"
+options.soft               = { flag = ["--soft"] }
+options.mixed              = { flag = ["--mixed"] }
+options.hard               = { flag = ["--hard"], adds = ["discard_changes"] }
+options.merge              = { flag = ["--merge"], adds = ["discard_changes"] }
+options.keep               = { flag = ["--keep"], adds = ["discard_changes"] }
+options.patch              = { flag = ["-p", "--patch"], removes = ["rewrite_history"] }
+options.intent_to_add      = { flag = ["-N", "--intent-to-add"] }
+options.refresh            = { flag = ["--refresh"] }
+options.no_refresh         = { flag = ["--no-refresh"] }
+options.recurse_submodules = { flag = ["--recurse-submodules"], value = "optional" }
+options.quiet              = { flag = ["-q", "--quiet"] }
+operands.commit   = { adds = ["rewrite_history"], when = [{ like = ["HEAD", "@"], removes = ["rewrite_history"] }] }
+operands.pathspec = { removes = ["rewrite_history"] }
+
+# `clean` deletes untracked files when `-f` or `-i` is given, or when clean.requireForce is false,
+# which the grammar cannot see. So the action always adds `delete_files`, and `-n` removes it (a
+# dry run deletes nothing, even with `-i`: builtin/clean.c).
+[shell.clean]
+usage = "git [global options] clean [options] [--] [<pathspec>...]"
+adds  = ["delete_files"]
+options.dry_run      = { flag = ["-n", "--dry-run"], removes = ["delete_files"] }
+options.force        = { flag = ["-f", "--force"] }
+options.interactive  = { flag = ["-i", "--interactive"] }
+options.directories  = { flag = ["-d"] }
+options.ignored      = { flag = ["-x"] }
+options.only_ignored = { flag = ["-X"] }
+options.exclude      = { flag = ["-e", "--exclude"], value = "required", repeated = true }
+options.quiet        = { flag = ["-q", "--quiet"] }
+operands.pathspec = {}
+
+# `rm` deletes tracked files from the working tree. `-f` also deletes files with uncommitted
+# changes. `--cached` and `-n` leave the working tree alone.
+[shell.rm]
+usage = "git [global options] rm [options] [--] <pathspec>..."
+adds  = ["delete_files"]
+options.force          = { flag = ["-f", "--force"], adds = ["discard_changes"] }
+options.cached         = { flag = ["--cached"], removes = ["delete_files"] }
+options.dry_run        = { flag = ["-n", "--dry-run"], removes = ["delete_files", "discard_changes"] }
+options.recursive      = { flag = ["-r"] }
+options.quiet          = { flag = ["-q", "--quiet"] }
+options.ignore_unmatch = { flag = ["--ignore-unmatch"] }
+options.sparse         = { flag = ["--sparse"] }
+operands.pathspec = {}
+
+# `-f` renames over an existing file, whose content is then lost.
+[shell.mv]
+usage = "git [global options] mv [options] <source>... <destination>"
+options.force       = { flag = ["-f", "--force"], adds = ["discard_changes"] }
+options.dry_run     = { flag = ["-n", "--dry-run"], removes = ["discard_changes"] }
+options.skip_errors = { flag = ["-k"] }
+options.verbose     = { flag = ["-v", "--verbose"] }
+options.sparse      = { flag = ["--sparse"] }
+operands.source      = {}
+operands.destination = {}
+
+# `git stash` with no subcommand is `git stash push`, but git then refuses a non-option word
+# before `--` (builtin/stash.c, push_stash), so this usage takes pathspecs only after `--`.
+[shell.stash]
+usage = "git [global options] stash [options] [-- <pathspec>...]"
+options.patch             = { flag = ["-p", "--patch"] }
+options.staged            = { flag = ["-S", "--staged"] }
+options.keep_index        = { flag = ["-k", "--keep-index"] }
+options.no_keep_index     = { flag = ["--no-keep-index"] }
+options.include_untracked = { flag = ["-u", "--include-untracked"] }
+options.all               = { flag = ["-a", "--all"] }
+options.message           = { flag = ["-m", "--message"], value = "required" }
+options.quiet             = { flag = ["-q", "--quiet"] }
+operands.pathspec = {}
+
+[shell.stash_push]
+usage = "git [global options] stash push [options] [--] [<pathspec>...]"
+options.patch             = { flag = ["-p", "--patch"] }
+options.staged            = { flag = ["-S", "--staged"] }
+options.keep_index        = { flag = ["-k", "--keep-index"] }
+options.no_keep_index     = { flag = ["--no-keep-index"] }
+options.include_untracked = { flag = ["-u", "--include-untracked"] }
+options.all               = { flag = ["-a", "--all"] }
+options.message           = { flag = ["-m", "--message"], value = "required" }
+options.quiet             = { flag = ["-q", "--quiet"] }
+operands.pathspec = {}
+
+[shell.stash_list]
+usage = "git [global options] stash list [options]"
+options.oneline   = { flag = ["--oneline"] }
+options.format    = { flag = ["--format"], value = "optional" }
+options.pretty    = { flag = ["--pretty"], value = "optional" }
+options.date      = { flag = ["--date"], value = "required" }
+options.max_count = { flag = ["-n", "--max-count"], value = "required" }
+options.stat      = { flag = ["--stat"], value = "optional" }
+options.patch     = { flag = ["-p", "--patch"] }
+
+[shell.stash_show]
+usage = "git [global options] stash show [options] [<stash>]"
+options.include_untracked = { flag = ["-u", "--include-untracked"] }
+options.only_untracked    = { flag = ["--only-untracked"] }
+options.patch             = { flag = ["-p", "--patch"] }
+options.stat              = { flag = ["--stat"], value = "optional" }
+options.name_only         = { flag = ["--name-only"] }
+options.name_status       = { flag = ["--name-status"] }
+options.numstat           = { flag = ["--numstat"] }
+operands.stash = {}
+
+[shell.stash_apply]
+usage = "git [global options] stash apply [options] [<stash>]"
+options.index = { flag = ["--index"] }
+options.quiet = { flag = ["-q", "--quiet"] }
+operands.stash = {}
+
+[shell.stash_pop]
+usage = "git [global options] stash pop [options] [<stash>]"
+options.index = { flag = ["--index"] }
+options.quiet = { flag = ["-q", "--quiet"] }
+operands.stash = {}
+
+[shell.stash_drop]
+usage = "git [global options] stash drop [options] [<stash>]"
+adds  = ["discard_changes"]
+options.quiet = { flag = ["-q", "--quiet"] }
+operands.stash = {}
+
+[shell.stash_clear]
+usage = "git [global options] stash clear"
+adds  = ["discard_changes"]
+
+[shell.stash_branch]
+usage = "git [global options] stash branch <branchname> [<stash>]"
+operands.branchname = {}
+operands.stash      = {}
+
+# ================================================================ commits and history
+
+# `--short`, `--porcelain`, and `--long` imply `--dry-run` (builtin/commit.c), and a dry run
+# makes no commit and runs no hook.
+[shell.commit]
+usage = "git [global options] commit [options] [--] [<pathspec>...]"
+options.message             = { flag = ["-m", "--message"], value = "required", repeated = true }
+options.file                = { flag = ["-F", "--file"], value = "required", when = [{ like = ["/*", "..", "../*", "*/..", "*/../*"], adds = ["outside_path"] }] }
+options.template            = { flag = ["-t", "--template"], value = "required", when = [{ like = ["/*", "..", "../*", "*/..", "*/../*"], adds = ["outside_path"] }] }
+options.reuse_message       = { flag = ["-C", "--reuse-message"], value = "required" }
+options.reedit_message      = { flag = ["-c", "--reedit-message"], value = "required" }
+options.fixup               = { flag = ["--fixup"], value = "required" }
+options.squash              = { flag = ["--squash"], value = "required" }
+options.amend               = { flag = ["--amend"], adds = ["rewrite_history"] }
+options.no_verify           = { flag = ["-n", "--no-verify"], adds = ["skip_hooks"] }
+options.no_post_rewrite     = { flag = ["--no-post-rewrite"], adds = ["skip_hooks"] }
+options.dry_run             = { flag = ["--dry-run"], removes = ["rewrite_history", "skip_hooks"] }
+options.short               = { flag = ["--short"], removes = ["rewrite_history", "skip_hooks"] }
+options.porcelain           = { flag = ["--porcelain"], removes = ["rewrite_history", "skip_hooks"] }
+options.long                = { flag = ["--long"], removes = ["rewrite_history", "skip_hooks"] }
+options.branch              = { flag = ["--branch"] }
+options.null                = { flag = ["-z", "--null"] }
+options.allow_empty         = { flag = ["--allow-empty"] }
+options.allow_empty_message = { flag = ["--allow-empty-message"] }
+options.edit                = { flag = ["-e", "--edit"] }
+options.no_edit             = { flag = ["--no-edit"] }
+options.signoff             = { flag = ["-s", "--signoff"] }
+options.gpg_sign            = { flag = ["-S", "--gpg-sign"], value = "optional" }
+options.no_gpg_sign         = { flag = ["--no-gpg-sign"] }
+options.author              = { flag = ["--author"], value = "required" }
+options.date                = { flag = ["--date"], value = "required" }
+options.reset_author        = { flag = ["--reset-author"] }
+options.trailer             = { flag = ["--trailer"], value = "required", repeated = true }
+options.cleanup             = { flag = ["--cleanup"], value = "required" }
+options.status              = { flag = ["--status"] }
+options.no_status           = { flag = ["--no-status"] }
+options.all                 = { flag = ["-a", "--all"] }
+options.include             = { flag = ["-i", "--include"] }
+options.interactive         = { flag = ["--interactive"] }
+options.patch               = { flag = ["-p", "--patch"] }
+options.only                = { flag = ["-o", "--only"] }
+options.untracked_files     = { flag = ["-u", "--untracked-files"], value = "optional" }
+options.quiet               = { flag = ["-q", "--quiet"] }
+options.verbose             = { flag = ["-v", "--verbose"] }
+operands.pathspec = {}
+
+# A `-s` strategy that is not built in runs `git-merge-<strategy>` from PATH, so `-s` adds
+# `run_program` for every value.
+[shell.merge]
+usage = "git [global options] merge [options] [<commit>...]"
+options.message          = { flag = ["-m", "--message"], value = "required", repeated = true }
+options.file             = { flag = ["-F", "--file"], value = "required", when = [{ like = ["/*", "..", "../*", "*/..", "*/../*"], adds = ["outside_path"] }] }
+options.no_stat          = { flag = ["-n", "--no-stat"] }
+options.stat             = { flag = ["--stat", "--summary"] }
+options.compact_summary  = { flag = ["--compact-summary"] }
+options.log              = { flag = ["--log"], value = "optional" }
+options.no_log           = { flag = ["--no-log"] }
+options.squash           = { flag = ["--squash"] }
+options.commit_option    = { flag = ["--commit"] }
+options.no_commit        = { flag = ["--no-commit"] }
+options.edit             = { flag = ["-e", "--edit"] }
+options.no_edit          = { flag = ["--no-edit"] }
+options.cleanup          = { flag = ["--cleanup"], value = "required" }
+options.ff               = { flag = ["--ff"] }
+options.no_ff            = { flag = ["--no-ff"] }
+options.ff_only          = { flag = ["--ff-only"] }
+options.rerere_autoupdate = { flag = ["--rerere-autoupdate"] }
+options.no_rerere_autoupdate = { flag = ["--no-rerere-autoupdate"] }
+options.verify_signatures = { flag = ["--verify-signatures"] }
+options.strategy         = { flag = ["-s", "--strategy"], value = "required", adds = ["run_program"] }
+options.strategy_option  = { flag = ["-X", "--strategy-option"], value = "required", repeated = true }
+options.into_name        = { flag = ["--into-name"], value = "required" }
+options.verbose          = { flag = ["-v", "--verbose"] }
+options.quiet            = { flag = ["-q", "--quiet"] }
+options.abort            = { flag = ["--abort"], adds = ["discard_changes"] }
+options.quit             = { flag = ["--quit"] }
+options.continue         = { flag = ["--continue"] }
+options.allow_unrelated_histories = { flag = ["--allow-unrelated-histories"] }
+options.progress         = { flag = ["--progress"] }
+options.gpg_sign         = { flag = ["-S", "--gpg-sign"], value = "optional" }
+options.no_gpg_sign      = { flag = ["--no-gpg-sign"] }
+options.autostash        = { flag = ["--autostash"] }
+options.no_autostash     = { flag = ["--no-autostash"] }
+options.overwrite_ignore = { flag = ["--overwrite-ignore"] }
+options.signoff          = { flag = ["--signoff"] }
+options.no_verify        = { flag = ["--no-verify"], adds = ["skip_hooks"] }
+operands.commit = {}
+
+# Every rebase replaces commits, except `--abort`, `--quit`, and `--show-current-patch`.
+# `--abort` resets the working tree to the original branch.
+[shell.rebase]
+usage = "git [global options] rebase [options] [<upstream> [<branch>]]"
+adds  = ["rewrite_history"]
+options.interactive      = { flag = ["-i", "--interactive"] }
+options.onto             = { flag = ["--onto"], value = "required" }
+options.keep_base        = { flag = ["--keep-base"] }
+options.root             = { flag = ["--root"] }
+options.continue         = { flag = ["--continue"] }
+options.skip             = { flag = ["--skip"], adds = ["discard_changes"] }
+options.abort            = { flag = ["--abort"], adds = ["discard_changes"], removes = ["rewrite_history"] }
+options.quit             = { flag = ["--quit"], removes = ["rewrite_history"] }
+options.edit_todo        = { flag = ["--edit-todo"] }
+options.show_current_patch = { flag = ["--show-current-patch"], removes = ["rewrite_history"] }
+options.no_verify        = { flag = ["--no-verify"], adds = ["skip_hooks"] }
+options.quiet            = { flag = ["-q", "--quiet"] }
+options.verbose          = { flag = ["-v", "--verbose"] }
+options.stat             = { flag = ["--stat"] }
+options.no_stat          = { flag = ["-n", "--no-stat"] }
+options.trailer          = { flag = ["--trailer"], value = "required", repeated = true }
+options.signoff          = { flag = ["--signoff"] }
+options.committer_date_is_author_date = { flag = ["--committer-date-is-author-date"] }
+options.reset_author_date = { flag = ["--reset-author-date", "--ignore-date"] }
+options.ignore_whitespace = { flag = ["--ignore-whitespace"] }
+options.whitespace       = { flag = ["--whitespace"], value = "required" }
+options.force_rebase     = { flag = ["-f", "--force-rebase", "--no-ff"] }
+options.apply            = { flag = ["--apply"] }
+options.merge            = { flag = ["-m", "--merge"] }
+options.empty            = { flag = ["--empty"], value = "required" }
+options.autosquash       = { flag = ["--autosquash"] }
+options.no_autosquash    = { flag = ["--no-autosquash"] }
+options.update_refs      = { flag = ["--update-refs"] }
+options.no_update_refs   = { flag = ["--no-update-refs"] }
+options.gpg_sign         = { flag = ["-S", "--gpg-sign"], value = "optional" }
+options.no_gpg_sign      = { flag = ["--no-gpg-sign"] }
+options.autostash        = { flag = ["--autostash"] }
+options.no_autostash     = { flag = ["--no-autostash"] }
+options.exec             = { flag = ["-x", "--exec"], value = "required", repeated = true, adds = ["run_program"] }
+options.rebase_merges    = { flag = ["-r", "--rebase-merges"], value = "optional" }
+options.no_rebase_merges = { flag = ["--no-rebase-merges"] }
+options.fork_point       = { flag = ["--fork-point"] }
+options.no_fork_point    = { flag = ["--no-fork-point"] }
+options.strategy         = { flag = ["-s", "--strategy"], value = "required", adds = ["run_program"] }
+options.strategy_option  = { flag = ["-X", "--strategy-option"], value = "required", repeated = true }
+options.reschedule_failed_exec = { flag = ["--reschedule-failed-exec"] }
+options.reapply_cherry_picks = { flag = ["--reapply-cherry-picks"] }
+operands.upstream = {}
+operands.branch   = {}
+
+# cherry-pick spells the strategy `--strategy` only, because `-s` is `--signoff`.
+[shell.cherry_pick]
+usage = "git [global options] cherry-pick [options] [<commit>...]"
+options.continue         = { flag = ["--continue"] }
+options.skip             = { flag = ["--skip"], adds = ["discard_changes"] }
+options.abort            = { flag = ["--abort"], adds = ["discard_changes"] }
+options.quit             = { flag = ["--quit"] }
+options.edit             = { flag = ["-e", "--edit"] }
+options.no_edit          = { flag = ["--no-edit"] }
+options.cleanup          = { flag = ["--cleanup"], value = "required" }
+options.append_origin    = { flag = ["-x"] }
+options.mainline         = { flag = ["-m", "--mainline"], value = "required" }
+options.no_commit        = { flag = ["-n", "--no-commit"] }
+options.commit_option    = { flag = ["--commit"] }
+options.signoff          = { flag = ["-s", "--signoff"] }
+options.gpg_sign         = { flag = ["-S", "--gpg-sign"], value = "optional" }
+options.no_gpg_sign      = { flag = ["--no-gpg-sign"] }
+options.ff               = { flag = ["--ff"] }
+options.allow_empty      = { flag = ["--allow-empty"] }
+options.allow_empty_message = { flag = ["--allow-empty-message"] }
+options.keep_redundant_commits = { flag = ["--keep-redundant-commits"] }
+options.empty            = { flag = ["--empty"], value = "required" }
+options.rerere_autoupdate = { flag = ["--rerere-autoupdate"] }
+options.no_rerere_autoupdate = { flag = ["--no-rerere-autoupdate"] }
+options.strategy         = { flag = ["--strategy"], value = "required", adds = ["run_program"] }
+options.strategy_option  = { flag = ["-X", "--strategy-option"], value = "required", repeated = true }
+operands.commit = {}
+
+[shell.revert]
+usage = "git [global options] revert [options] [<commit>...]"
+options.continue         = { flag = ["--continue"] }
+options.skip             = { flag = ["--skip"], adds = ["discard_changes"] }
+options.abort            = { flag = ["--abort"], adds = ["discard_changes"] }
+options.quit             = { flag = ["--quit"] }
+options.edit             = { flag = ["-e", "--edit"] }
+options.no_edit          = { flag = ["--no-edit"] }
+options.cleanup          = { flag = ["--cleanup"], value = "required" }
+options.mainline         = { flag = ["-m", "--mainline"], value = "required" }
+options.no_commit        = { flag = ["-n", "--no-commit"] }
+options.commit_option    = { flag = ["--commit"] }
+options.signoff          = { flag = ["-s", "--signoff"] }
+options.gpg_sign         = { flag = ["-S", "--gpg-sign"], value = "optional" }
+options.no_gpg_sign      = { flag = ["--no-gpg-sign"] }
+options.reference        = { flag = ["--reference"] }
+options.rerere_autoupdate = { flag = ["--rerere-autoupdate"] }
+options.no_rerere_autoupdate = { flag = ["--no-rerere-autoupdate"] }
+options.strategy         = { flag = ["--strategy"], value = "required", adds = ["run_program"] }
+options.strategy_option  = { flag = ["-X", "--strategy-option"], value = "required", repeated = true }
+operands.commit = {}
+
+# ================================================================ branches and tags
+
+# One action holds every branch mode, so <branchname> collects each name or pattern, whatever its
+# role (a new branch, a start point, a branch to delete, a list pattern). `--merged`,
+# `--no-merged`, `--contains`, and `--no-contains` take a value here; git also accepts them as the
+# last word with no value, and that spelling is `unmodeled`. `--edit-description` is left out.
+[shell.branch]
+usage = "git [global options] branch [options] [<branchname>...]"
+options.delete           = { flag = ["-d", "--delete"], adds = ["delete_ref"] }
+options.force_delete     = { flag = ["-D"], adds = ["delete_ref"] }
+options.delete_merged    = { flag = ["--delete-merged"], value = "required", repeated = true, adds = ["delete_ref"] }
+options.dry_run          = { flag = ["--dry-run"], removes = ["delete_ref"] }
+options.move             = { flag = ["-m", "--move"] }
+options.force_move       = { flag = ["-M"], adds = ["rewrite_history"] }
+options.copy             = { flag = ["-c", "--copy"] }
+options.force_copy       = { flag = ["-C"], adds = ["rewrite_history"] }
+options.force            = { flag = ["-f", "--force"], adds = ["rewrite_history"] }
+options.list             = { flag = ["-l", "--list"] }
+options.all              = { flag = ["-a", "--all"] }
+options.remotes          = { flag = ["-r", "--remotes"] }
+options.verbose          = { flag = ["-v", "--verbose"] }
+options.quiet            = { flag = ["-q", "--quiet"] }
+options.show_current     = { flag = ["--show-current"] }
+options.track            = { flag = ["-t", "--track"], value = "optional", adds = ["override_config"] }
+options.no_track         = { flag = ["--no-track"] }
+options.set_upstream_to  = { flag = ["-u", "--set-upstream-to"], value = "required", adds = ["override_config"] }
+options.unset_upstream   = { flag = ["--unset-upstream"], adds = ["override_config"] }
+options.create_reflog    = { flag = ["--create-reflog"] }
+options.recurse_submodules = { flag = ["--recurse-submodules"] }
+options.contains         = { flag = ["--contains"], value = "required" }
+options.no_contains      = { flag = ["--no-contains"], value = "required" }
+options.merged           = { flag = ["--merged"], value = "required" }
+options.no_merged        = { flag = ["--no-merged"], value = "required" }
+options.forked           = { flag = ["--forked"], value = "required", repeated = true }
+options.points_at        = { flag = ["--points-at"], value = "required" }
+options.sort             = { flag = ["--sort"], value = "required", repeated = true }
+options.format           = { flag = ["--format"], value = "required" }
+options.color            = { flag = ["--color"], value = "optional" }
+options.no_color         = { flag = ["--no-color"] }
+options.column           = { flag = ["--column"], value = "optional" }
+options.no_column        = { flag = ["--no-column"] }
+options.abbrev           = { flag = ["--abbrev"], value = "optional" }
+options.no_abbrev        = { flag = ["--no-abbrev"] }
+options.omit_empty       = { flag = ["--omit-empty"] }
+options.ignore_case      = { flag = ["-i", "--ignore-case"] }
+operands.branchname = {}
+
+# One action holds every tag mode, so <tagname> collects each name, commit, or pattern.
+# `-n` takes only an attached count (`-n3`).
+[shell.tag]
+usage = "git [global options] tag [options] [<tagname>...]"
+options.delete        = { flag = ["-d", "--delete"], adds = ["delete_ref"] }
+options.force         = { flag = ["-f", "--force"], adds = ["rewrite_history"] }
+options.list          = { flag = ["-l", "--list"] }
+options.lines         = { flag = ["-n"], value = "optional" }
+options.verify        = { flag = ["-v", "--verify"] }
+options.annotate      = { flag = ["-a", "--annotate"] }
+options.message       = { flag = ["-m", "--message"], value = "required", repeated = true }
+options.file          = { flag = ["-F", "--file"], value = "required", when = [{ like = ["/*", "..", "../*", "*/..", "*/../*"], adds = ["outside_path"] }] }
+options.trailer       = { flag = ["--trailer"], value = "required", repeated = true }
+options.edit          = { flag = ["-e", "--edit"] }
+options.sign          = { flag = ["-s", "--sign"] }
+options.local_user    = { flag = ["-u", "--local-user"], value = "required" }
+options.cleanup       = { flag = ["--cleanup"], value = "required" }
+options.create_reflog = { flag = ["--create-reflog"] }
+options.contains      = { flag = ["--contains"], value = "required" }
+options.no_contains   = { flag = ["--no-contains"], value = "required" }
+options.merged        = { flag = ["--merged"], value = "required" }
+options.no_merged     = { flag = ["--no-merged"], value = "required" }
+options.points_at     = { flag = ["--points-at"], value = "required" }
+options.sort          = { flag = ["--sort"], value = "required", repeated = true }
+options.format        = { flag = ["--format"], value = "required" }
+options.color         = { flag = ["--color"], value = "optional" }
+options.column        = { flag = ["--column"], value = "optional" }
+options.no_column     = { flag = ["--no-column"] }
+options.omit_empty    = { flag = ["--omit-empty"] }
+options.ignore_case   = { flag = ["-i", "--ignore-case"] }
+operands.tagname = {}
+
+# ================================================================ remotes
+
+# `git push` contacts the remote even with `--dry-run`, and runs the pre-push hook then too, so a
+# dry run keeps `network` and `skip_hooks`. A refspec that starts with `+` forces; one that
+# starts with `:` or `+:` deletes. An `ext::` URL runs a shell command when
+# protocol.ext.allow permits it.
+[shell.push]
+usage = "git [global options] push [options] [<repository> [<refspec>...]]"
+adds  = ["network"]
+options.force              = { flag = ["-f", "--force"], adds = ["force_push"] }
+options.force_with_lease   = { flag = ["--force-with-lease"], value = "optional", adds = ["force_push"] }
+options.force_if_includes  = { flag = ["--force-if-includes"] }
+options.mirror             = { flag = ["--mirror"], adds = ["force_push", "delete_remote_ref"] }
+options.delete             = { flag = ["-d", "--delete"], adds = ["delete_remote_ref"] }
+options.prune              = { flag = ["--prune"], adds = ["delete_remote_ref"] }
+options.dry_run            = { flag = ["-n", "--dry-run"], removes = ["force_push", "delete_remote_ref"] }
+options.no_verify          = { flag = ["--no-verify"], adds = ["skip_hooks"] }
+options.set_upstream       = { flag = ["-u", "--set-upstream"], adds = ["override_config"] }
+options.all                = { flag = ["--all", "--branches"] }
+options.tags               = { flag = ["--tags"] }
+options.follow_tags        = { flag = ["--follow-tags"] }
+options.atomic             = { flag = ["--atomic"] }
+options.repo               = { flag = ["--repo"], value = "required", when = [{ like = "ext::*", adds = ["run_program"] }] }
+options.push_option        = { flag = ["-o", "--push-option"], value = "required", repeated = true }
+options.receive_pack       = { flag = ["--receive-pack", "--exec"], value = "required", adds = ["run_program"] }
+options.recurse_submodules = { flag = ["--recurse-submodules"], value = "required" }
+options.signed             = { flag = ["--signed"], value = "optional" }
+options.porcelain          = { flag = ["--porcelain"] }
+options.progress           = { flag = ["--progress"] }
+options.thin               = { flag = ["--thin"] }
+options.no_thin            = { flag = ["--no-thin"] }
+options.quiet              = { flag = ["-q", "--quiet"] }
+options.verbose            = { flag = ["-v", "--verbose"] }
+options.ipv4               = { flag = ["-4", "--ipv4"] }
+options.ipv6               = { flag = ["-6", "--ipv6"] }
+operands.repository = { when = [{ like = "ext::*", adds = ["run_program"] }] }
+operands.refspec    = { like = "+*", adds = ["force_push"], when = [{ like = [":*", "+:*"], adds = ["delete_remote_ref"] }] }
+
+# `-n` is `--no-tags` here, not a dry run. `--multiple` (every operand a remote), `--stdin`, and
+# `--refmap` are left out. A refspec `+<src>:<dst>` force-updates the local ref <dst>.
+[shell.fetch]
+usage = "git [global options] fetch [options] [<repository> [<refspec>...]]"
+adds  = ["network"]
+options.all                = { flag = ["--all"] }
+options.append             = { flag = ["-a", "--append"] }
+options.atomic             = { flag = ["--atomic"] }
+options.upload_pack        = { flag = ["--upload-pack"], value = "required", adds = ["run_program"] }
+options.force              = { flag = ["-f", "--force"], adds = ["force_fetch"] }
+options.tags               = { flag = ["-t", "--tags"] }
+options.no_tags            = { flag = ["-n", "--no-tags"] }
+options.jobs               = { flag = ["-j", "--jobs"], value = "required" }
+options.prefetch           = { flag = ["--prefetch"] }
+options.prune              = { flag = ["-p", "--prune"], adds = ["delete_ref"] }
+options.prune_tags         = { flag = ["-P", "--prune-tags"], adds = ["delete_ref", "force_fetch"] }
+options.recurse_submodules = { flag = ["--recurse-submodules"], value = "optional" }
+options.no_recurse_submodules = { flag = ["--no-recurse-submodules"] }
+options.dry_run            = { flag = ["--dry-run"], removes = ["force_fetch", "delete_ref"] }
+options.porcelain          = { flag = ["--porcelain"] }
+options.write_fetch_head   = { flag = ["--write-fetch-head"] }
+options.no_write_fetch_head = { flag = ["--no-write-fetch-head"] }
+options.keep               = { flag = ["-k", "--keep"] }
+options.update_head_ok     = { flag = ["-u", "--update-head-ok"] }
+options.progress           = { flag = ["--progress"] }
+options.depth              = { flag = ["--depth"], value = "required" }
+options.shallow_since      = { flag = ["--shallow-since"], value = "required" }
+options.shallow_exclude    = { flag = ["--shallow-exclude"], value = "required", repeated = true }
+options.deepen             = { flag = ["--deepen"], value = "required" }
+options.unshallow          = { flag = ["--unshallow"] }
+options.refetch            = { flag = ["--refetch"] }
+options.update_shallow     = { flag = ["--update-shallow"] }
+options.server_option      = { flag = ["-o", "--server-option"], value = "required", repeated = true }
+options.filter             = { flag = ["--filter"], value = "required" }
+options.set_upstream       = { flag = ["--set-upstream"], adds = ["override_config"] }
+options.show_forced_updates = { flag = ["--show-forced-updates"] }
+options.no_show_forced_updates = { flag = ["--no-show-forced-updates"] }
+options.quiet              = { flag = ["-q", "--quiet"] }
+options.verbose            = { flag = ["-v", "--verbose"] }
+options.ipv4               = { flag = ["-4", "--ipv4"] }
+options.ipv6               = { flag = ["-6", "--ipv6"] }
+operands.repository = { when = [{ like = "ext::*", adds = ["run_program"] }] }
+operands.refspec    = { like = "+*:*", adds = ["force_fetch"] }
+
+# A pull fetches and then merges, or rebases with `--rebase` (which `--rebase=false` turns off; git
+# also reads `pull.rebase` from configuration, which the grammar cannot see). `-n` is `--no-stat`.
+# `--dry-run` stops after the fetch (builtin/pull.c), so it removes what the merge would do.
+# `--edit` has no short form here. `-j` takes only an attached count.
+[shell.pull]
+usage = "git [global options] pull [options] [<repository> [<refspec>...]]"
+adds  = ["network"]
+options.rebase           = { flag = ["-r", "--rebase"], value = "optional", adds = ["rewrite_history"], when = [{ like = ["false", "no", "off", "0"], removes = ["rewrite_history"] }] }
+options.no_rebase        = { flag = ["--no-rebase"] }
+options.no_stat          = { flag = ["-n", "--no-stat"] }
+options.stat             = { flag = ["--stat"] }
+options.compact_summary  = { flag = ["--compact-summary"] }
+options.log              = { flag = ["--log"], value = "optional" }
+options.no_log           = { flag = ["--no-log"] }
+options.signoff          = { flag = ["--signoff"], value = "optional" }
+options.squash           = { flag = ["--squash"] }
+options.commit_option    = { flag = ["--commit"] }
+options.no_commit        = { flag = ["--no-commit"] }
+options.edit             = { flag = ["--edit"] }
+options.no_edit          = { flag = ["--no-edit"] }
+options.cleanup          = { flag = ["--cleanup"], value = "required" }
+options.ff               = { flag = ["--ff"] }
+options.no_ff            = { flag = ["--no-ff"] }
+options.ff_only          = { flag = ["--ff-only"] }
+options.no_verify        = { flag = ["--no-verify"], adds = ["skip_hooks"] }
+options.verify_signatures = { flag = ["--verify-signatures"] }
+options.autostash        = { flag = ["--autostash"] }
+options.no_autostash     = { flag = ["--no-autostash"] }
+options.strategy         = { flag = ["-s", "--strategy"], value = "required", adds = ["run_program"] }
+options.strategy_option  = { flag = ["-X", "--strategy-option"], value = "required", repeated = true }
+options.gpg_sign         = { flag = ["-S", "--gpg-sign"], value = "optional" }
+options.allow_unrelated_histories = { flag = ["--allow-unrelated-histories"] }
+options.all              = { flag = ["--all"] }
+options.append           = { flag = ["-a", "--append"] }
+options.upload_pack      = { flag = ["--upload-pack"], value = "required", adds = ["run_program"] }
+options.force            = { flag = ["-f", "--force"], adds = ["force_fetch"] }
+options.tags             = { flag = ["-t", "--tags"] }
+options.no_tags          = { flag = ["--no-tags"] }
+options.prune            = { flag = ["-p", "--prune"], adds = ["delete_ref"] }
+options.jobs             = { flag = ["-j", "--jobs"], value = "optional" }
+options.dry_run          = { flag = ["--dry-run"], removes = ["rewrite_history", "force_fetch", "skip_hooks", "delete_ref"] }
+options.keep             = { flag = ["-k", "--keep"] }
+options.depth            = { flag = ["--depth"], value = "required" }
+options.shallow_since    = { flag = ["--shallow-since"], value = "required" }
+options.shallow_exclude  = { flag = ["--shallow-exclude"], value = "required", repeated = true }
+options.deepen           = { flag = ["--deepen"], value = "required" }
+options.unshallow        = { flag = ["--unshallow"] }
+options.server_option    = { flag = ["-o", "--server-option"], value = "required", repeated = true }
+options.set_upstream     = { flag = ["--set-upstream"], adds = ["override_config"] }
+options.recurse_submodules = { flag = ["--recurse-submodules"], value = "optional" }
+options.no_recurse_submodules = { flag = ["--no-recurse-submodules"] }
+options.progress         = { flag = ["--progress"] }
+options.quiet            = { flag = ["-q", "--quiet"] }
+options.verbose          = { flag = ["-v", "--verbose"] }
+options.ipv4             = { flag = ["-4", "--ipv4"] }
+options.ipv6             = { flag = ["-6", "--ipv6"] }
+operands.repository = { when = [{ like = "ext::*", adds = ["run_program"] }] }
+operands.refspec    = { like = "+*:*", adds = ["force_fetch"] }
+
+# `--template` copies hooks into the new repository, and the clone runs its post-checkout hook.
+# `-c`/`--config` writes configuration into the new repository before the checkout; its key is
+# `config_option` because the global `-c` holds `config`. Likewise `--bare` is `bare_option`.
+[shell.clone]
+usage = "git [global options] clone [options] [--] <repository> [<directory>]"
+adds  = ["network"]
+options.verbose          = { flag = ["-v", "--verbose"] }
+options.quiet            = { flag = ["-q", "--quiet"] }
+options.progress         = { flag = ["--progress"] }
+options.reject_shallow   = { flag = ["--reject-shallow"] }
+options.no_checkout      = { flag = ["-n", "--no-checkout"] }
+options.bare_option      = { flag = ["--bare"] }
+options.mirror           = { flag = ["--mirror"] }
+options.local            = { flag = ["-l", "--local"] }
+options.no_local         = { flag = ["--no-local"] }
+options.no_hardlinks     = { flag = ["--no-hardlinks"] }
+options.shared           = { flag = ["-s", "--shared"] }
+options.recurse_submodules = { flag = ["--recurse-submodules", "--recursive"], value = "optional" }
+options.jobs             = { flag = ["-j", "--jobs"], value = "required" }
+options.template         = { flag = ["--template"], value = "required", adds = ["run_program"] }
+options.reference        = { flag = ["--reference"], value = "required", repeated = true }
+options.reference_if_able = { flag = ["--reference-if-able"], value = "required", repeated = true }
+options.dissociate       = { flag = ["--dissociate"] }
+options.origin           = { flag = ["-o", "--origin"], value = "required" }
+options.branch           = { flag = ["-b", "--branch"], value = "required" }
+options.revision         = { flag = ["--revision"], value = "required" }
+options.upload_pack      = { flag = ["-u", "--upload-pack"], value = "required", adds = ["run_program"] }
+options.depth            = { flag = ["--depth"], value = "required" }
+options.shallow_since    = { flag = ["--shallow-since"], value = "required" }
+options.shallow_exclude  = { flag = ["--shallow-exclude"], value = "required", repeated = true }
+options.single_branch    = { flag = ["--single-branch"] }
+options.no_single_branch = { flag = ["--no-single-branch"] }
+options.tags             = { flag = ["--tags"] }
+options.no_tags          = { flag = ["--no-tags"] }
+options.shallow_submodules = { flag = ["--shallow-submodules"] }
+options.separate_git_dir = { flag = ["--separate-git-dir"], value = "required", when = [{ like = ["/*", "..", "../*", "*/..", "*/../*"], adds = ["outside_path"] }] }
+options.ref_format       = { flag = ["--ref-format"], value = "required" }
+options.config_option    = { flag = ["-c", "--config"], value = "required", repeated = true, adds = ["override_config", "run_program", "skip_hooks"] }
+options.server_option    = { flag = ["--server-option"], value = "required", repeated = true }
+options.ipv4             = { flag = ["-4", "--ipv4"] }
+options.ipv6             = { flag = ["-6", "--ipv6"] }
+options.filter           = { flag = ["--filter"], value = "required" }
+options.also_filter_submodules = { flag = ["--also-filter-submodules"] }
+options.remote_submodules = { flag = ["--remote-submodules"] }
+options.sparse           = { flag = ["--sparse"] }
+options.bundle_uri       = { flag = ["--bundle-uri"], value = "required" }
+operands.repository = { when = [{ like = "ext::*", adds = ["run_program"] }] }
+operands.directory  = { when = [{ like = ["/*", "..", "../*", "*/..", "*/../*"], adds = ["outside_path"] }] }
+
+# `git remote` alone lists the remotes. `-v` must come before a subcommand, so
+# `git remote -v show` is `unmodeled`.
+[shell.remote]
+usage = "git [global options] remote [options]"
+options.verbose = { flag = ["-v", "--verbose"] }
+
+# The subcommands that change a remote write the repository configuration.
+[shell.remote_add]
+usage = "git [global options] remote add [options] <name> <url>"
+adds  = ["override_config"]
+options.track   = { flag = ["-t"], value = "required", repeated = true }
+options.master  = { flag = ["-m"], value = "required" }
+options.fetch   = { flag = ["-f"], adds = ["network"] }
+options.tags    = { flag = ["--tags"] }
+options.no_tags = { flag = ["--no-tags"] }
+options.mirror  = { flag = ["--mirror"], value = "optional" }
+operands.name = {}
+operands.url  = { when = [{ like = "ext::*", adds = ["run_program"] }] }
+
+[shell.remote_remove]
+usage   = "git [global options] remote remove <name>"
+aliases = ["remote rm"]
+adds    = ["override_config", "delete_ref"]
+operands.name = {}
+
+[shell.remote_rename]
+usage = "git [global options] remote rename [options] <old> <new>"
+adds  = ["override_config"]
+options.progress    = { flag = ["--progress"] }
+options.no_progress = { flag = ["--no-progress"] }
+operands.old = {}
+operands.new = {}
+
+[shell.remote_set_url]
+usage = "git [global options] remote set-url [options] <name> <newurl> [<oldurl>]"
+adds  = ["override_config"]
+options.push   = { flag = ["--push"] }
+options.add    = { flag = ["--add"] }
+options.delete = { flag = ["--delete"] }
+operands.name   = {}
+operands.newurl = { when = [{ like = "ext::*", adds = ["run_program"] }] }
+operands.oldurl = {}
+
+[shell.remote_get_url]
+usage = "git [global options] remote get-url [options] <name>"
+options.push = { flag = ["--push"] }
+options.all  = { flag = ["--all"] }
+operands.name = {}
+
+# `remote show <name>` queries the remote unless `-n` is given; with no name it lists remotes.
+[shell.remote_show]
+usage = "git [global options] remote show [options] [<name>...]"
+options.no_query = { flag = ["-n"], removes = ["network"] }
+operands.name = { adds = ["network"] }
+
+[shell.remote_prune]
+usage = "git [global options] remote prune [options] <name>..."
+adds  = ["network", "delete_ref"]
+options.dry_run = { flag = ["-n", "--dry-run"], removes = ["delete_ref"] }
+operands.name = {}
+
+[shell.remote_update]
+usage = "git [global options] remote update [options] [<remote>...]"
+adds  = ["network"]
+options.prune = { flag = ["-p", "--prune"], adds = ["delete_ref"] }
+operands.remote = {}
+
+# ================================================================ configuration
+
+# The subcommands (git 2.46 and later). Each stops reading options at its first operand
+# (PARSE_OPT_STOP_AT_NON_OPTION), so a later word that looks like an option is an operand in git.
+[shell.config_list]
+usage = "git [global options] config list [options]"
+options.global       = { flag = ["--global"] }
+options.system       = { flag = ["--system"] }
+options.local        = { flag = ["--local"] }
+options.worktree     = { flag = ["--worktree"] }
+options.file         = { flag = ["-f", "--file"], value = "required", when = [{ like = ["/*", "..", "../*", "*/..", "*/../*"], adds = ["outside_path"] }] }
+options.blob         = { flag = ["--blob"], value = "required" }
+options.null         = { flag = ["-z", "--null"] }
+options.name_only    = { flag = ["--name-only"] }
+options.show_origin  = { flag = ["--show-origin"] }
+options.show_scope   = { flag = ["--show-scope"] }
+options.show_names   = { flag = ["--show-names"] }
+options.type         = { flag = ["-t", "--type"], value = "required" }
+options.includes     = { flag = ["--includes"] }
+options.no_includes  = { flag = ["--no-includes"] }
+
+[shell.config_get]
+usage = "git [global options] config get [options] <name>"
+options.global       = { flag = ["--global"] }
+options.system       = { flag = ["--system"] }
+options.local        = { flag = ["--local"] }
+options.worktree     = { flag = ["--worktree"] }
+options.file         = { flag = ["-f", "--file"], value = "required", when = [{ like = ["/*", "..", "../*", "*/..", "*/../*"], adds = ["outside_path"] }] }
+options.blob         = { flag = ["--blob"], value = "required" }
+options.all          = { flag = ["--all"] }
+options.regexp       = { flag = ["--regexp"] }
+options.value        = { flag = ["--value"], value = "required" }
+options.fixed_value  = { flag = ["--fixed-value"] }
+options.url          = { flag = ["--url"], value = "required" }
+options.null         = { flag = ["-z", "--null"] }
+options.name_only    = { flag = ["--name-only"] }
+options.show_origin  = { flag = ["--show-origin"] }
+options.show_scope   = { flag = ["--show-scope"] }
+options.show_names   = { flag = ["--show-names"] }
+options.type         = { flag = ["-t", "--type"], value = "required" }
+options.includes     = { flag = ["--includes"] }
+options.no_includes  = { flag = ["--no-includes"] }
+options.default      = { flag = ["--default"], value = "required" }
+operands.name = {}
+
+[shell.config_set]
+usage = "git [global options] config set [options] <name> <value>"
+adds  = ["override_config", "run_program", "skip_hooks"]
+options.global       = { flag = ["--global"] }
+options.system       = { flag = ["--system"] }
+options.local        = { flag = ["--local"] }
+options.worktree     = { flag = ["--worktree"] }
+options.file         = { flag = ["-f", "--file"], value = "required", when = [{ like = ["/*", "..", "../*", "*/..", "*/../*"], adds = ["outside_path"] }] }
+options.type         = { flag = ["-t", "--type"], value = "required" }
+options.all          = { flag = ["--all"] }
+options.value_pattern = { flag = ["--value"], value = "required" }
+options.fixed_value  = { flag = ["--fixed-value"] }
+options.comment      = { flag = ["--comment"], value = "required" }
+options.append       = { flag = ["--append"] }
+operands.name  = {}
+operands.value = {}
+
+[shell.config_unset]
+usage = "git [global options] config unset [options] <name>"
+adds  = ["override_config", "run_program", "skip_hooks"]
+options.global       = { flag = ["--global"] }
+options.system       = { flag = ["--system"] }
+options.local        = { flag = ["--local"] }
+options.worktree     = { flag = ["--worktree"] }
+options.file         = { flag = ["-f", "--file"], value = "required", when = [{ like = ["/*", "..", "../*", "*/..", "*/../*"], adds = ["outside_path"] }] }
+options.all          = { flag = ["--all"] }
+options.value        = { flag = ["--value"], value = "required" }
+options.fixed_value  = { flag = ["--fixed-value"] }
+operands.name = {}
+
+# The older form. Git stops reading options at the first operand, so in `git config <name> --x`
+# the word `--x` is a value that git writes. Here every operand adds `override_config`, whatever
+# follows, so a write is never read as a read. `--get`, `--get-all`, `--get-regexp`, `--unset`,
+# and `--unset-all` are modes in git that take the name as the next word; here each holds that
+# name as its value. `-e`/`--edit`, `--add`, `--replace-all`, the section modes, and the color
+# modes are left out.
+[shell.config]
+usage = "git [global options] config [options] [<name>] [<value>]"
+options.list         = { flag = ["-l", "--list"] }
+options.get          = { flag = ["--get"], value = "required" }
+options.get_all      = { flag = ["--get-all"], value = "required" }
+options.get_regexp   = { flag = ["--get-regexp"], value = "required" }
+options.unset        = { flag = ["--unset"], value = "required", adds = ["override_config", "run_program", "skip_hooks"] }
+options.unset_all    = { flag = ["--unset-all"], value = "required", adds = ["override_config", "run_program", "skip_hooks"] }
+options.global       = { flag = ["--global"] }
+options.system       = { flag = ["--system"] }
+options.local        = { flag = ["--local"] }
+options.worktree     = { flag = ["--worktree"] }
+options.file         = { flag = ["-f", "--file"], value = "required", when = [{ like = ["/*", "..", "../*", "*/..", "*/../*"], adds = ["outside_path"] }] }
+options.blob         = { flag = ["--blob"], value = "required" }
+options.null         = { flag = ["-z", "--null"] }
+options.name_only    = { flag = ["--name-only"] }
+options.show_origin  = { flag = ["--show-origin"] }
+options.show_scope   = { flag = ["--show-scope"] }
+options.type         = { flag = ["-t", "--type"], value = "required" }
+options.bool         = { flag = ["--bool"] }
+options.int          = { flag = ["--int"] }
+options.bool_or_int  = { flag = ["--bool-or-int"] }
+options.path         = { flag = ["--path"] }
+options.includes     = { flag = ["--includes"] }
+options.no_includes  = { flag = ["--no-includes"] }
+options.default      = { flag = ["--default"], value = "required" }
+operands.name  = { adds = ["override_config", "run_program", "skip_hooks"] }
+operands.value = { adds = ["override_config", "run_program", "skip_hooks"] }
+
+# ================================================================ repositories and worktrees
+
+# `--template` copies hooks that later git commands in the new repository run.
+[shell.init]
+usage = "git [global options] init [options] [<directory>]"
+options.quiet            = { flag = ["-q", "--quiet"] }
+options.bare_option      = { flag = ["--bare"] }
+options.template         = { flag = ["--template"], value = "required", adds = ["run_program"] }
+options.shared           = { flag = ["--shared"], value = "optional" }
+options.separate_git_dir = { flag = ["--separate-git-dir"], value = "required", when = [{ like = ["/*", "..", "../*", "*/..", "*/../*"], adds = ["outside_path"] }] }
+options.initial_branch   = { flag = ["-b", "--initial-branch"], value = "required" }
+options.object_format    = { flag = ["--object-format"], value = "required" }
+options.ref_format       = { flag = ["--ref-format"], value = "required" }
+operands.directory = { when = [{ like = ["/*", "..", "../*", "*/..", "*/../*"], adds = ["outside_path"] }] }
+
+[shell.worktree_list]
+usage = "git [global options] worktree list [options]"
+options.porcelain = { flag = ["--porcelain"] }
+options.null      = { flag = ["-z"] }
+options.verbose   = { flag = ["-v", "--verbose"] }
+options.expire    = { flag = ["--expire"], value = "required" }
+
+# A new worktree is a directory that git creates and checks out, often beside the repository
+# (`../wt`), which adds `outside_path`. `-B` resets an existing branch.
+[shell.worktree_add]
+usage = "git [global options] worktree add [options] <path> [<commit_ish>]"
+options.force          = { flag = ["-f", "--force"] }
+options.create         = { flag = ["-b"], value = "required" }
+options.force_create   = { flag = ["-B"], value = "required", adds = ["rewrite_history"] }
+options.orphan         = { flag = ["--orphan"] }
+options.detach         = { flag = ["-d", "--detach"] }
+options.checkout       = { flag = ["--checkout"] }
+options.no_checkout    = { flag = ["--no-checkout"] }
+options.lock           = { flag = ["--lock"] }
+options.reason         = { flag = ["--reason"], value = "required" }
+options.quiet          = { flag = ["-q", "--quiet"] }
+options.track          = { flag = ["--track"], adds = ["override_config"] }
+options.no_track       = { flag = ["--no-track"] }
+options.guess_remote   = { flag = ["--guess-remote"] }
+options.no_guess_remote = { flag = ["--no-guess-remote"] }
+options.relative_paths = { flag = ["--relative-paths"] }
+options.no_relative_paths = { flag = ["--no-relative-paths"] }
+operands.path       = { when = [{ like = ["/*", "..", "../*", "*/..", "*/../*"], adds = ["outside_path"] }] }
+operands.commit_ish = {}
+
+# `worktree remove` deletes the linked worktree's files. Git refuses a worktree with changes or
+# untracked files unless `-f` is given.
+[shell.worktree_remove]
+usage = "git [global options] worktree remove [options] <worktree>"
+adds  = ["delete_files"]
+options.force = { flag = ["-f", "--force"], adds = ["discard_changes"] }
+operands.worktree = { when = [{ like = ["/*", "..", "../*", "*/..", "*/../*"], adds = ["outside_path"] }] }
+
+[shell.worktree_prune]
+usage = "git [global options] worktree prune [options]"
+options.dry_run = { flag = ["-n", "--dry-run"] }
+options.verbose = { flag = ["-v", "--verbose"] }
+options.expire  = { flag = ["--expire"], value = "required" }

@@ -1,0 +1,110 @@
+# End-to-end cases for git.grammar.toml. The harness runs each argv through the Shell of a real box,
+# where `git` is a stub that prints its arguments and exits 0.
+#
+# The policy permits every modeled git command, and forbids the effects that lose work or bypass
+# review: a force push, skipped hooks, discarded changes, and deleted files.
+
+policy = '''
+@id("git_actions")
+permit (principal, action in Tool::git::Action::"*", resource);
+
+@id("no_force_push")
+@description("Force pushes are not allowed.")
+forbid (principal, action == Tool::git::Action::"push", resource)
+when { context.input.effects.contains(Tool::git::Effect::"force_push") };
+
+@id("no_skip_hooks")
+@description("Skipping repository hooks is not allowed.")
+forbid (principal, action in Tool::git::Action::"*", resource)
+when { context.input.effects.contains(Tool::git::Effect::"skip_hooks") };
+
+@id("no_delete_files")
+@description("Deleting files from the working tree is not allowed.")
+forbid (principal, action in Tool::git::Action::"*", resource)
+when { context.input.effects.contains(Tool::git::Effect::"delete_files") };
+'''
+
+# A read runs the program
+[[case]]
+argv = ["git", "status", "-sb"]
+exit = 0
+stdout = "stub-argv: [status] [-sb]"
+
+# A force push is refused, and the program does not run
+[[case]]
+argv = ["git", "push", "-f", "origin", "main"]
+exit = 126
+stderr = "[policy: no_force_push]: Force pushes are not allowed."
+
+# A `+` refspec is a force push too
+[[case]]
+argv = ["git", "push", "origin", "+main"]
+exit = 126
+stderr = "[policy: no_force_push]"
+
+# `--dry-run` removes `force_push`, so the forbid does not apply
+[[case]]
+argv = ["git", "push", "-fn", "origin", "main"]
+exit = 0
+stdout = "stub-argv: [push] [-fn] [origin] [main]"
+
+# `commit -n` is `--no-verify`, which skips the hooks
+[[case]]
+argv = ["git", "commit", "-n", "-m", "wip"]
+exit = 126
+stderr = "[policy: no_skip_hooks]"
+
+# `clean -n` deletes nothing, so it runs; `clean -fdx` is refused
+[[case]]
+argv = ["git", "clean", "-n", "-d"]
+exit = 0
+stdout = "stub-argv: [clean] [-n] [-d]"
+
+[[case]]
+argv = ["git", "clean", "-fdx"]
+exit = 126
+stderr = "[policy: no_delete_files]"
+
+# A prefix of `--force` that git expands is `unmodeled`, and nothing permits it
+[[case]]
+argv = ["git", "push", "--forc", "origin", "main"]
+exit = 126
+stderr = "[default-deny]: No permit policy matched this request."
+
+# The README rules load and decide: a push to another remote is refused, and `-C` is refused
+[[case]]
+argv = ["git", "push", "backup", "main"]
+exit = 126
+stderr = "[policy: push_to_origin_only]"
+policy = '''
+@id("git_actions")
+permit (principal, action in Tool::git::Action::"*", resource);
+
+@id("push_to_origin_only")
+forbid (principal, action == Tool::git::Action::"push", resource)
+unless { context.input has repository && context.input.repository == "origin" };
+
+@id("keep_hooks_and_work")
+forbid (principal, action in Tool::git::Action::"*", resource)
+when { context.input.effects.containsAny([Tool::git::Effect::"skip_hooks",
+                                           Tool::git::Effect::"discard_changes"]) };
+
+@id("stay_here")
+forbid (principal, action in Tool::git::Action::"*", resource)
+when { context.input.effects.containsAny([Tool::git::Effect::"other_repository",
+                                           Tool::git::Effect::"outside_path"]) };
+'''
+
+[[case]]
+argv = ["git", "-C", "/tmp", "status"]
+exit = 126
+stderr = "[policy: stay_here]"
+policy = '''
+@id("git_actions")
+permit (principal, action in Tool::git::Action::"*", resource);
+
+@id("stay_here")
+forbid (principal, action in Tool::git::Action::"*", resource)
+when { context.input.effects.containsAny([Tool::git::Effect::"other_repository",
+                                           Tool::git::Effect::"outside_path"]) };
+'''
