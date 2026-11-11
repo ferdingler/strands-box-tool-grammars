@@ -1,0 +1,1365 @@
+# Golden cases for stripe.grammar.toml (Stripe CLI 1.55.10).
+#
+# Each expectation was written from the CLI's documented behaviour first: `stripe <command> --help`
+# at 1.55.10, and the source at tag v1.55.10 (github.com/stripe/stripe-cli). A comment names the
+# help page or the source file that each group pins. "help" below means `stripe <words> --help`.
+
+# ------------------------------------------------------------------------------------------------
+# Root persistent flags (pkg/cmd/root.go; "Global flags" in every help page). Cobra accepts them
+# before, between, and after the command words.
+# ------------------------------------------------------------------------------------------------
+
+# `--api-key` before the words replaces the session key. A test key is not live mode.
+[[case]]
+argv = ["stripe", "--api-key", "sk_test_123", "customers", "list"]
+action = "customers_list"
+fields = { api_key = "sk_test_123" }
+effects = ["api_key_override", "network"]
+
+# A live key after the words, as `--x=v`: an explicit key decides the mode
+# (config/profile.go::GetAPIKey returns it before it reads `--live`).
+[[case]]
+argv = ["stripe", "customers", "list", "--api-key=sk_live_abc"]
+action = "customers_list"
+fields = { api_key = "sk_live_abc" }
+effects = ["api_key_override", "live_mode", "network"]
+
+# A restricted live key between the command words
+[[case]]
+argv = ["stripe", "customers", "--api-key", "rk_live_abc", "list"]
+action = "customers_list"
+fields = { api_key = "rk_live_abc" }
+effects = ["api_key_override", "live_mode", "network"]
+
+# `-p` (`--project-name`) selects another profile, with a separate and an attached value
+[[case]]
+argv = ["stripe", "-p", "shop", "customers", "list"]
+action = "customers_list"
+fields = { project_name = "shop" }
+effects = ["network", "select_project"]
+
+[[case]]
+argv = ["stripe", "customers", "list", "-pshop"]
+action = "customers_list"
+fields = { project_name = "shop" }
+effects = ["network", "select_project"]
+
+[[case]]
+argv = ["stripe", "customers", "list", "--project-name=shop"]
+action = "customers_list"
+fields = { project_name = "shop" }
+effects = ["network", "select_project"]
+
+# `--config` loads another config file, with other keys
+[[case]]
+argv = ["stripe", "--config", "/tmp/other.toml", "balance", "retrieve"]
+action = "balance_retrieve"
+fields = { config = "/tmp/other.toml" }
+effects = ["network", "override_config"]
+
+# The other global flags add no effect
+[[case]]
+argv = ["stripe", "--color", "off", "balance", "retrieve", "--log-level", "debug", "--device-name", "ci"]
+action = "balance_retrieve"
+fields = { color = "off", device_name = "ci", log_level = "debug" }
+effects = ["network"]
+
+# A global option given twice is unmodeled
+[[case]]
+argv = ["stripe", "--api-key", "sk_test_1", "customers", "list", "--api-key", "sk_live_2"]
+action = "unmodeled"
+
+# The hidden `--api-base` (root.go, requests/base.go) is not modeled
+[[case]]
+argv = ["stripe", "--api-base", "http://localhost:12111", "customers", "list"]
+action = "unmodeled"
+
+# `--map` prints the command tree instead of running the command; not modeled
+[[case]]
+argv = ["stripe", "customers", "list", "--map"]
+action = "unmodeled"
+
+# Help and the root version flag are not modeled; `-v` on the root is `--version`
+[[case]]
+argv = ["stripe", "--help"]
+action = "unmodeled"
+
+[[case]]
+argv = ["stripe", "-v"]
+action = "unmodeled"
+
+[[case]]
+argv = ["stripe", "customers", "list", "-h"]
+action = "unmodeled"
+
+[[case]]
+argv = ["stripe"]
+action = "unmodeled"
+
+# A prefix of a global long flag is not that flag
+[[case]]
+argv = ["stripe", "--api", "sk_test_1", "customers", "list"]
+action = "unmodeled"
+
+# ------------------------------------------------------------------------------------------------
+# listen (help: stripe listen; pkg/cmd/listen.go)
+# ------------------------------------------------------------------------------------------------
+
+[[case]]
+argv = ["stripe", "listen"]
+action = "listen"
+effects = ["network"]
+
+# `--forward-to` and `-f` forward events to a URL
+[[case]]
+argv = ["stripe", "listen", "--forward-to", "localhost:3000/webhook"]
+action = "listen"
+fields = { forward_to = "localhost:3000/webhook" }
+effects = ["forward_events", "network"]
+
+[[case]]
+argv = ["stripe", "listen", "-f", "https://example.com/hook", "-c", "localhost:3001/connect"]
+action = "listen"
+fields = { forward_connect_to = "localhost:3001/connect", forward_to = "https://example.com/hook" }
+effects = ["forward_events", "network"]
+
+# `--events` is a string slice: each word is one value, and the flag repeats
+[[case]]
+argv = ["stripe", "listen", "-e", "charge.captured,customer.created", "--events=invoice.paid"]
+action = "listen"
+fields = { events = ["charge.captured,customer.created", "invoice.paid"] }
+effects = ["network"]
+
+# `--live` receives live events
+[[case]]
+argv = ["stripe", "listen", "--live", "--format", "JSON", "--events-from", "@accounts"]
+action = "listen"
+fields = { live = true, format = "JSON", events_from = "@accounts" }
+effects = ["live_mode", "network"]
+
+# A short cluster: `-la` is `--latest` and `--use-configured-webhooks`
+[[case]]
+argv = ["stripe", "listen", "-la"]
+action = "listen"
+fields = { latest = true, use_configured_webhooks = true }
+effects = ["forward_events", "network"]
+
+# The old flag name that the CLI still maps to `--use-configured-webhooks`
+[[case]]
+argv = ["stripe", "listen", "--load-from-webhooks-api", "-f", "localhost:4242"]
+action = "listen"
+fields = { forward_to = "localhost:4242", use_configured_webhooks = true }
+effects = ["forward_events", "network"]
+
+# `--skip-verify` turns off TLS checks for forwarding
+[[case]]
+argv = ["stripe", "listen", "-f", "https://localhost:8443", "--skip-verify", "-s", "-H", "X-A: 1", "--headers", "X-B: 2"]
+action = "listen"
+fields = { forward_to = "https://localhost:8443", headers = ["X-A: 1", "X-B: 2"], skip_update = true, skip_verify = true }
+effects = ["forward_events", "insecure_tls", "network"]
+
+[[case]]
+argv = ["stripe", "listen", "--print-secret", "--all-snapshot", "--all-thin", "--connect-headers", "K:V"]
+action = "listen"
+fields = { all_snapshot = true, all_thin = true, connect_headers = ["K:V"], print_secret = true }
+effects = ["credentials", "network"]
+
+# A deprecated flag, a prefix, and an operand (listen takes none) are unmodeled
+[[case]]
+argv = ["stripe", "listen", "--forward-thin-to", "localhost:3000"]
+action = "unmodeled"
+
+[[case]]
+argv = ["stripe", "listen", "--forward", "localhost:3000"]
+action = "unmodeled"
+
+[[case]]
+argv = ["stripe", "listen", "now"]
+action = "unmodeled"
+
+# ------------------------------------------------------------------------------------------------
+# trigger (help: stripe trigger; pkg/cmd/trigger.go) and fixtures (pkg/cmd/fixtures.go)
+# ------------------------------------------------------------------------------------------------
+
+# A trigger creates the objects behind the event, payments included
+[[case]]
+argv = ["stripe", "trigger", "payment_intent.created"]
+action = "trigger"
+fields = { event = "payment_intent.created" }
+effects = ["move_money", "network", "write_data"]
+
+# `--override` is a string array; `--stripe-account` acts on a connected account
+[[case]]
+argv = ["stripe", "trigger", "--override", "customer:email=a@example.com", "charge.succeeded", "--override", "charge:amount=500", "--stripe-account", "acct_1"]
+action = "trigger"
+fields = { event = "charge.succeeded", override = ["charge:amount=500", "customer:email=a@example.com"], stripe_account = "acct_1" }
+effects = ["connected_account", "move_money", "network", "write_data"]
+
+[[case]]
+argv = ["stripe", "trigger", "customer.created", "--add=customer:name=Jo", "--remove", "customer:email", "--skip", "x", "--api-version", "2024-06-20"]
+action = "trigger"
+fields = { add = ["customer:name=Jo"], api_version = "2024-06-20", event = "customer.created", remove = ["customer:email"], skip = ["x"] }
+effects = ["move_money", "network", "write_data"]
+
+# A live key on a trigger is still live: the explicit key wins over the test-mode request
+[[case]]
+argv = ["stripe", "--api-key", "sk_live_x", "trigger", "refund.created"]
+action = "trigger"
+fields = { api_key = "sk_live_x", event = "refund.created" }
+effects = ["api_key_override", "live_mode", "move_money", "network", "write_data"]
+
+# `--raw` (an inline fixture) and `--edit` (opens an editor) are not modeled
+[[case]]
+argv = ["stripe", "trigger", "charge.succeeded", "--raw", "{}"]
+action = "unmodeled"
+
+[[case]]
+argv = ["stripe", "trigger", "charge.succeeded", "--edit"]
+action = "unmodeled"
+
+# trigger has no `--live` flag; with no event it only prints help
+[[case]]
+argv = ["stripe", "trigger", "--live", "charge.succeeded"]
+action = "unmodeled"
+
+[[case]]
+argv = ["stripe", "trigger"]
+action = "unmodeled"
+
+[[case]]
+argv = ["stripe", "trigger", "a.b", "c.d"]
+action = "unmodeled"
+
+# A fixture file can send any request, and can update `.env`
+[[case]]
+argv = ["stripe", "fixtures", "seed.json", "--override", "customer:name=Jo"]
+action = "fixtures"
+fields = { file = "seed.json", override = ["customer:name=Jo"] }
+effects = ["delete_data", "move_money", "network", "raw_request", "write_data", "write_files"]
+
+# fixtures takes exactly one file (validators.ExactArgs(1))
+[[case]]
+argv = ["stripe", "fixtures"]
+action = "unmodeled"
+
+[[case]]
+argv = ["stripe", "fixtures", "a.json", "b.json"]
+action = "unmodeled"
+
+[[case]]
+argv = ["stripe", "fixtures", "a.json", "--edit"]
+action = "unmodeled"
+
+# ------------------------------------------------------------------------------------------------
+# logs tail (help: stripe logs tail; pkg/cmd/logs/tail.go)
+# ------------------------------------------------------------------------------------------------
+
+[[case]]
+argv = ["stripe", "logs", "tail"]
+action = "logs_tail"
+effects = ["network"]
+
+[[case]]
+argv = ["stripe", "logs", "tail", "--filter-http-method", "POST", "--filter-status-code-type=4XX", "--filter-http-method", "DELETE", "--format", "JSON"]
+action = "logs_tail"
+fields = { filter_http_method = ["DELETE", "POST"], filter_status_code_type = ["4XX"], format = "JSON" }
+effects = ["network"]
+
+# `logs` alone is a group; `logs tail` has no `--live` and no operand
+[[case]]
+argv = ["stripe", "logs"]
+action = "unmodeled"
+
+[[case]]
+argv = ["stripe", "logs", "tail", "--live"]
+action = "unmodeled"
+
+[[case]]
+argv = ["stripe", "logs", "tail", "x"]
+action = "unmodeled"
+
+# ------------------------------------------------------------------------------------------------
+# get, post, delete (help: stripe get/post/delete; requests/base.go)
+# ------------------------------------------------------------------------------------------------
+
+# An object ID or a path
+[[case]]
+argv = ["stripe", "get", "cus_G6GQwbr1dWXt9O"]
+action = "get"
+fields = { path = "cus_G6GQwbr1dWXt9O" }
+effects = ["network", "raw_request"]
+
+# The help example; `-l50` is an attached short value
+[[case]]
+argv = ["stripe", "get", "/v1/charges", "--limit", "50"]
+action = "get"
+fields = { limit = "50", path = "/v1/charges" }
+effects = ["network", "raw_request"]
+
+[[case]]
+argv = ["stripe", "get", "-l50", "-a", "ch_1", "/v1/charges"]
+action = "get"
+fields = { limit = "50", path = "/v1/charges", starting_after = "ch_1" }
+effects = ["network", "raw_request"]
+
+[[case]]
+argv = ["stripe", "get", "--live", "ch_1", "-e", "customer", "--stripe-account", "acct_1"]
+action = "get"
+fields = { expand = ["customer"], live = true, path = "ch_1", stripe_account = "acct_1" }
+effects = ["connected_account", "live_mode", "network", "raw_request"]
+
+# `--` ends the options, so a path that starts with `-` is the operand
+[[case]]
+argv = ["stripe", "get", "--", "-odd"]
+action = "get"
+fields = { path = "-odd" }
+effects = ["network", "raw_request"]
+
+[[case]]
+argv = ["stripe", "get", "a", "b"]
+action = "unmodeled"
+
+[[case]]
+argv = ["stripe", "get"]
+action = "unmodeled"
+
+# post can reach every write endpoint
+[[case]]
+argv = ["stripe", "post", "/v1/refunds", "-d", "charge=ch_1", "-d", "amount=100"]
+action = "post"
+fields = { data = ["amount=100", "charge=ch_1"], path = "/v1/refunds" }
+effects = ["move_money", "network", "raw_request", "write_data"]
+
+# `--dry-run` prints the request and sends nothing
+[[case]]
+argv = ["stripe", "post", "/v1/customers", "--dry-run"]
+action = "post"
+fields = { dry_run = true, path = "/v1/customers" }
+effects = ["network", "raw_request"]
+
+# A required value takes the next word even when it looks like a flag: no live mode here
+[[case]]
+argv = ["stripe", "post", "/v1/customers", "-d", "--live"]
+action = "post"
+fields = { data = ["--live"], path = "/v1/customers" }
+effects = ["move_money", "network", "raw_request", "write_data"]
+
+# `-H` can set any header, the account and the authorization included; not modeled
+[[case]]
+argv = ["stripe", "post", "-H", "Stripe-Account: acct_1", "/v1/customers"]
+action = "unmodeled"
+
+# post and delete have no pagination flags (they are GET-only in requests/base.go)
+[[case]]
+argv = ["stripe", "post", "/v1/customers", "--limit", "3"]
+action = "unmodeled"
+
+[[case]]
+argv = ["stripe", "delete", "/v1/customers/cus_1"]
+action = "delete"
+fields = { path = "/v1/customers/cus_1" }
+effects = ["delete_data", "move_money", "network", "raw_request"]
+
+# `-c` skips the "Enter 'yes' to confirm" prompt
+[[case]]
+argv = ["stripe", "delete", "-c", "/v1/customers/cus_1"]
+action = "delete"
+fields = { confirm = true, path = "/v1/customers/cus_1" }
+effects = ["delete_data", "move_money", "network", "raw_request", "skip_prompt"]
+
+[[case]]
+argv = ["stripe", "delete", "/v1/products/prod_1", "--confirm", "--dry-run"]
+action = "delete"
+fields = { confirm = true, dry_run = true, path = "/v1/products/prod_1" }
+effects = ["network", "raw_request", "skip_prompt"]
+
+# A bool flag does not take `=value` in this grammar
+[[case]]
+argv = ["stripe", "delete", "/v1/products/prod_1", "--dry-run=true"]
+action = "unmodeled"
+
+# ------------------------------------------------------------------------------------------------
+# Resource commands (help: stripe <resource> <operation>; resource/operation.go). Request
+# parameters use the dotted-hyphen spelling the help prints.
+# ------------------------------------------------------------------------------------------------
+
+# customers
+[[case]]
+argv = ["stripe", "customers", "create", "--email", "jo@example.com", "--name=Jo"]
+action = "customers_create"
+fields = { email = "jo@example.com", name = "Jo" }
+effects = ["network", "write_data"]
+
+[[case]]
+argv = ["stripe", "customers", "create", "--address.city", "Paris", "--address.postal-code", "75001", "--preferred-locales", "fr", "--preferred-locales", "en"]
+action = "customers_create"
+fields = { address_city = "Paris", address_postal_code = "75001", preferred_locales = ["en", "fr"] }
+effects = ["network", "write_data"]
+
+# The bracket spelling that the CLI maps to `--address.city` is not modeled
+[[case]]
+argv = ["stripe", "customers", "create", "--address[city]=Paris"]
+action = "unmodeled"
+
+# A boolean request parameter: bare or `=value`
+[[case]]
+argv = ["stripe", "customers", "create", "--validate"]
+action = "customers_create"
+fields = { validate = "" }
+effects = ["network", "write_data"]
+
+[[case]]
+argv = ["stripe", "customers", "create", "--validate=false"]
+action = "customers_create"
+fields = { validate = "false" }
+effects = ["network", "write_data"]
+
+# The CLI rewrites `--validate true` to `--validate=true` (resource/boolean_args.go); this grammar
+# reads `true` as an operand that create does not take, so the line is unmodeled
+[[case]]
+argv = ["stripe", "customers", "create", "--validate", "true"]
+action = "unmodeled"
+
+# A required value that looks like a flag is still the value
+[[case]]
+argv = ["stripe", "customers", "create", "--description", "--live"]
+action = "customers_create"
+fields = { description = "--live" }
+effects = ["network", "write_data"]
+
+# An undeclared or abbreviated parameter
+[[case]]
+argv = ["stripe", "customers", "create", "--emai", "x"]
+action = "unmodeled"
+
+[[case]]
+argv = ["stripe", "customers", "create", "--metadata", "x"]
+action = "unmodeled"
+
+# list has its own integer `--limit`, so it has no `-l` short form
+[[case]]
+argv = ["stripe", "customers", "list", "--limit", "3", "--email", "jo@example.com"]
+action = "customers_list"
+fields = { email = "jo@example.com", limit = "3" }
+effects = ["network"]
+
+[[case]]
+argv = ["stripe", "customers", "list", "-l", "3"]
+action = "unmodeled"
+
+# retrieve is a GET with no own `limit`, so requests/base.go adds `-l`/`--limit`
+[[case]]
+argv = ["stripe", "customers", "retrieve", "cus_1", "-l", "3", "--live", "-e", "subscriptions", "-e", "sources"]
+action = "customers_retrieve"
+fields = { customer = "cus_1", expand = ["sources", "subscriptions"], limit = "3", live = true }
+effects = ["live_mode", "network"]
+
+# `--` before the ID
+[[case]]
+argv = ["stripe", "customers", "retrieve", "--", "cus_1"]
+action = "customers_retrieve"
+fields = { customer = "cus_1" }
+effects = ["network"]
+
+[[case]]
+argv = ["stripe", "customers", "search", "--query", "email:'jo@example.com'"]
+action = "customers_search"
+fields = { query = "email:'jo@example.com'" }
+effects = ["network"]
+
+# Options before the operand, and the account headers
+[[case]]
+argv = ["stripe", "customers", "update", "--name", "Jo", "cus_1", "--stripe-account", "acct_1"]
+action = "customers_update"
+fields = { customer = "cus_1", name = "Jo", stripe_account = "acct_1" }
+effects = ["connected_account", "network", "write_data"]
+
+[[case]]
+argv = ["stripe", "customers", "update", "cus_1", "--stripe-context", "ctx_1", "-i", "key-1"]
+action = "customers_update"
+fields = { customer = "cus_1", idempotency = "key-1", stripe_context = "ctx_1" }
+effects = ["connected_account", "network", "write_data"]
+
+[[case]]
+argv = ["stripe", "customers", "delete", "cus_1"]
+action = "customers_delete"
+fields = { customer = "cus_1" }
+effects = ["delete_data", "network"]
+
+# A cluster: `-sc` is `--show-headers` and `--confirm`
+[[case]]
+argv = ["stripe", "customers", "delete", "-sc", "cus_1"]
+action = "customers_delete"
+fields = { confirm = true, customer = "cus_1", show_headers = true }
+effects = ["delete_data", "network", "skip_prompt"]
+
+# A cluster that ends in a letter that takes a value: `-cv 2024-06-20`
+[[case]]
+argv = ["stripe", "customers", "delete", "-cv", "2024-06-20", "cus_1"]
+action = "customers_delete"
+fields = { confirm = true, customer = "cus_1", stripe_version = "2024-06-20" }
+effects = ["delete_data", "network", "skip_prompt"]
+
+[[case]]
+argv = ["stripe", "customers", "delete", "cus_1", "--dry-run"]
+action = "customers_delete"
+fields = { customer = "cus_1", dry_run = true }
+effects = ["network"]
+
+# `-i=key` is not a value spelling
+[[case]]
+argv = ["stripe", "customers", "update", "cus_1", "-i=key"]
+action = "unmodeled"
+
+# Wrong operand counts (validators.ExactArgs on the URL parameters)
+[[case]]
+argv = ["stripe", "customers", "delete"]
+action = "unmodeled"
+
+[[case]]
+argv = ["stripe", "customers", "list", "extra"]
+action = "unmodeled"
+
+[[case]]
+argv = ["stripe", "customers"]
+action = "unmodeled"
+
+# Resource and operation names with `_` cannot be Box command words, so they are unmodeled
+[[case]]
+argv = ["stripe", "customers", "list_payment_methods", "cus_1"]
+action = "unmodeled"
+
+[[case]]
+argv = ["stripe", "payment_intents", "create", "--amount", "100", "--currency", "usd"]
+action = "unmodeled"
+
+# charges
+[[case]]
+argv = ["stripe", "charges", "create", "--amount", "2000", "--currency", "usd", "--source", "tok_visa", "--capture=false"]
+action = "charges_create"
+fields = { amount = "2000", capture = "false", currency = "usd", source = "tok_visa" }
+effects = ["move_money", "network", "write_data"]
+
+[[case]]
+argv = ["stripe", "charges", "capture", "ch_1", "--amount", "500"]
+action = "charges_capture"
+fields = { amount = "500", charge = "ch_1" }
+effects = ["move_money", "network", "write_data"]
+
+[[case]]
+argv = ["stripe", "charges", "list", "--customer", "cus_1"]
+action = "charges_list"
+fields = { customer = "cus_1" }
+effects = ["network"]
+
+[[case]]
+argv = ["stripe", "charges", "retrieve", "ch_1"]
+action = "charges_retrieve"
+fields = { charge = "ch_1" }
+effects = ["network"]
+
+[[case]]
+argv = ["stripe", "charges", "search", "--query", "amount>999"]
+action = "charges_search"
+fields = { query = "amount>999" }
+effects = ["network"]
+
+[[case]]
+argv = ["stripe", "charges", "update", "ch_1", "--description", "x"]
+action = "charges_update"
+fields = { charge = "ch_1", description = "x" }
+effects = ["network", "write_data"]
+
+# refunds: create moves money; `--dry-run` removes the write effects, `--live` stays
+[[case]]
+argv = ["stripe", "refunds", "create", "--charge", "ch_1", "--amount", "100"]
+action = "refunds_create"
+fields = { amount = "100", charge = "ch_1" }
+effects = ["move_money", "network", "write_data"]
+
+[[case]]
+argv = ["stripe", "refunds", "create", "--payment-intent", "pi_1", "--dry-run", "--live"]
+action = "refunds_create"
+fields = { dry_run = true, live = true, payment_intent = "pi_1" }
+effects = ["live_mode", "network"]
+
+# Canceling a pending refund keeps the money in the account, so no `move_money`
+[[case]]
+argv = ["stripe", "refunds", "cancel", "re_1"]
+action = "refunds_cancel"
+fields = { refund = "re_1" }
+effects = ["network", "write_data"]
+
+[[case]]
+argv = ["stripe", "refunds", "list", "--charge", "ch_1", "--starting-after", "re_0"]
+action = "refunds_list"
+fields = { charge = "ch_1", starting_after = "re_0" }
+effects = ["network"]
+
+[[case]]
+argv = ["stripe", "refunds", "retrieve", "re_1"]
+action = "refunds_retrieve"
+fields = { refund = "re_1" }
+effects = ["network"]
+
+[[case]]
+argv = ["stripe", "refunds", "update", "re_1", "-d", "metadata[order]=6735"]
+action = "refunds_update"
+fields = { data = ["metadata[order]=6735"], refund = "re_1" }
+effects = ["network", "write_data"]
+
+# subscriptions: cancel is an HTTP DELETE, and it can create a final invoice
+[[case]]
+argv = ["stripe", "subscriptions", "cancel", "sub_1", "-c"]
+action = "subscriptions_cancel"
+fields = { confirm = true, subscription_exposed_id = "sub_1" }
+effects = ["delete_data", "move_money", "network", "skip_prompt"]
+
+[[case]]
+argv = ["stripe", "subscriptions", "create", "--customer", "cus_1", "-d", "items[0][price]=price_1", "--trial-period-days", "7"]
+action = "subscriptions_create"
+fields = { customer = "cus_1", data = ["items[0][price]=price_1"], trial_period_days = "7" }
+effects = ["move_money", "network", "write_data"]
+
+[[case]]
+argv = ["stripe", "subscriptions", "list", "--status", "active"]
+action = "subscriptions_list"
+fields = { status = "active" }
+effects = ["network"]
+
+[[case]]
+argv = ["stripe", "subscriptions", "migrate", "sub_1", "--billing-mode.type", "flexible"]
+action = "subscriptions_migrate"
+fields = { billing_mode_type = "flexible", subscription = "sub_1" }
+effects = ["network", "write_data"]
+
+[[case]]
+argv = ["stripe", "subscriptions", "pause", "sub_1", "--type", "subscription"]
+action = "subscriptions_pause"
+fields = { subscription = "sub_1", type = "subscription" }
+effects = ["move_money", "network", "write_data"]
+
+[[case]]
+argv = ["stripe", "subscriptions", "resume", "sub_1", "--proration-behavior", "none"]
+action = "subscriptions_resume"
+fields = { proration_behavior = "none", subscription = "sub_1" }
+effects = ["move_money", "network", "write_data"]
+
+[[case]]
+argv = ["stripe", "subscriptions", "retrieve", "sub_1"]
+action = "subscriptions_retrieve"
+fields = { subscription_exposed_id = "sub_1" }
+effects = ["network"]
+
+[[case]]
+argv = ["stripe", "subscriptions", "search", "--query", "status:'active'"]
+action = "subscriptions_search"
+fields = { query = "status:'active'" }
+effects = ["network"]
+
+[[case]]
+argv = ["stripe", "subscriptions", "update", "sub_1", "--cancel-at-period-end"]
+action = "subscriptions_update"
+fields = { cancel_at_period_end = "", subscription_exposed_id = "sub_1" }
+effects = ["move_money", "network", "write_data"]
+
+# invoices: `auto_advance` lets Stripe finalize and collect the invoice by itself, and `-d` can
+# set it, so create and update always carry `move_money`
+[[case]]
+argv = ["stripe", "invoices", "create", "--customer", "cus_1"]
+action = "invoices_create"
+fields = { customer = "cus_1" }
+effects = ["move_money", "network", "write_data"]
+
+[[case]]
+argv = ["stripe", "invoices", "create", "--customer", "cus_1", "--auto-advance"]
+action = "invoices_create"
+fields = { auto_advance = "", customer = "cus_1" }
+effects = ["move_money", "network", "write_data"]
+
+[[case]]
+argv = ["stripe", "invoices", "update", "in_1", "--auto-advance=true"]
+action = "invoices_update"
+fields = { auto_advance = "true", invoice = "in_1" }
+effects = ["move_money", "network", "write_data"]
+
+[[case]]
+argv = ["stripe", "invoices", "pay", "in_1", "--paid-out-of-band"]
+action = "invoices_pay"
+fields = { invoice = "in_1", paid_out_of_band = "" }
+effects = ["move_money", "network", "write_data"]
+
+[[case]]
+argv = ["stripe", "invoices", "delete", "in_1", "--confirm"]
+action = "invoices_delete"
+fields = { confirm = true, invoice = "in_1" }
+effects = ["delete_data", "network", "skip_prompt"]
+
+[[case]]
+argv = ["stripe", "invoices", "list", "--customer", "cus_1", "--status", "open"]
+action = "invoices_list"
+fields = { customer = "cus_1", status = "open" }
+effects = ["network"]
+
+[[case]]
+argv = ["stripe", "invoices", "retrieve", "in_1"]
+action = "invoices_retrieve"
+fields = { invoice = "in_1" }
+effects = ["network"]
+
+[[case]]
+argv = ["stripe", "invoices", "search", "--query", "total>1000"]
+action = "invoices_search"
+fields = { query = "total>1000" }
+effects = ["network"]
+
+[[case]]
+argv = ["stripe", "invoices", "finalize_invoice", "in_1"]
+action = "unmodeled"
+
+# products and prices
+[[case]]
+argv = ["stripe", "products", "create", "--name", "T-shirt", "--images", "https://example.com/a.png"]
+action = "products_create"
+fields = { images = ["https://example.com/a.png"], name = "T-shirt" }
+effects = ["network", "write_data"]
+
+[[case]]
+argv = ["stripe", "products", "delete", "prod_1"]
+action = "products_delete"
+fields = { id = "prod_1" }
+effects = ["delete_data", "network"]
+
+[[case]]
+argv = ["stripe", "products", "list", "--active=true"]
+action = "products_list"
+fields = { active = "true" }
+effects = ["network"]
+
+[[case]]
+argv = ["stripe", "products", "retrieve", "prod_1"]
+action = "products_retrieve"
+fields = { id = "prod_1" }
+effects = ["network"]
+
+[[case]]
+argv = ["stripe", "products", "search", "--query", "active:'true'"]
+action = "products_search"
+fields = { query = "active:'true'" }
+effects = ["network"]
+
+[[case]]
+argv = ["stripe", "products", "update", "prod_1", "--name", "Hat"]
+action = "products_update"
+fields = { id = "prod_1", name = "Hat" }
+effects = ["network", "write_data"]
+
+[[case]]
+argv = ["stripe", "prices", "create", "--unit-amount", "2000", "--currency", "usd", "--product", "prod_1"]
+action = "prices_create"
+fields = { currency = "usd", product = "prod_1", unit_amount = "2000" }
+effects = ["network", "write_data"]
+
+[[case]]
+argv = ["stripe", "prices", "list", "--product", "prod_1"]
+action = "prices_list"
+fields = { product = "prod_1" }
+effects = ["network"]
+
+[[case]]
+argv = ["stripe", "prices", "retrieve", "price_1"]
+action = "prices_retrieve"
+fields = { price = "price_1" }
+effects = ["network"]
+
+[[case]]
+argv = ["stripe", "prices", "search", "--query", "currency:'usd'"]
+action = "prices_search"
+fields = { query = "currency:'usd'" }
+effects = ["network"]
+
+[[case]]
+argv = ["stripe", "prices", "update", "price_1", "--nickname", "monthly"]
+action = "prices_update"
+fields = { nickname = "monthly", price = "price_1" }
+effects = ["network", "write_data"]
+
+# checkout sessions: three command words
+[[case]]
+argv = ["stripe", "checkout", "sessions", "create", "--mode", "payment", "--success-url", "https://example.com/ok"]
+action = "checkout_sessions_create"
+fields = { mode = "payment", success_url = "https://example.com/ok" }
+effects = ["network", "write_data"]
+
+[[case]]
+argv = ["stripe", "checkout", "sessions", "expire", "cs_1"]
+action = "checkout_sessions_expire"
+fields = { session = "cs_1" }
+effects = ["network", "write_data"]
+
+[[case]]
+argv = ["stripe", "checkout", "sessions", "list", "--limit", "5"]
+action = "checkout_sessions_list"
+fields = { limit = "5" }
+effects = ["network"]
+
+[[case]]
+argv = ["stripe", "checkout", "sessions", "retrieve", "cs_1"]
+action = "checkout_sessions_retrieve"
+fields = { session = "cs_1" }
+effects = ["network"]
+
+[[case]]
+argv = ["stripe", "checkout", "sessions", "update", "cs_1", "--payment-intent-data.description", "x"]
+action = "checkout_sessions_update"
+fields = { payment_intent_data_description = "x", session = "cs_1" }
+effects = ["network", "write_data"]
+
+# A global option between three command words
+[[case]]
+argv = ["stripe", "checkout", "-p", "shop", "sessions", "retrieve", "cs_1"]
+action = "checkout_sessions_retrieve"
+fields = { project_name = "shop", session = "cs_1" }
+effects = ["network", "select_project"]
+
+[[case]]
+argv = ["stripe", "checkout", "sessions"]
+action = "unmodeled"
+
+[[case]]
+argv = ["stripe", "checkout", "session", "list"]
+action = "unmodeled"
+
+[[case]]
+argv = ["stripe", "checkout", "sessions", "list_line_items", "cs_1"]
+action = "unmodeled"
+
+# events (help: stripe events list/retrieve/resend; resource/events_resend.go)
+[[case]]
+argv = ["stripe", "events", "list", "--type", "charge.*", "--types", "a.b", "--types", "c.d", "--delivery-success=false"]
+action = "events_list"
+fields = { delivery_success = "false", type = "charge.*", types = ["a.b", "c.d"] }
+effects = ["network"]
+
+[[case]]
+argv = ["stripe", "events", "retrieve", "evt_1"]
+action = "events_retrieve"
+fields = { id = "evt_1" }
+effects = ["network"]
+
+# resend replays an event to the CLI, or to the endpoint `--webhook-endpoint` (or `-d`) names
+[[case]]
+argv = ["stripe", "events", "resend", "evt_1"]
+action = "events_resend"
+fields = { event = "evt_1" }
+effects = ["network", "write_data"]
+
+[[case]]
+argv = ["stripe", "events", "resend", "evt_1", "-d", "webhook_endpoint=we_1"]
+action = "events_resend"
+fields = { data = ["webhook_endpoint=we_1"], event = "evt_1" }
+effects = ["forward_events", "network", "write_data"]
+
+[[case]]
+argv = ["stripe", "events", "resend"]
+action = "unmodeled"
+
+# balance
+[[case]]
+argv = ["stripe", "balance", "retrieve"]
+action = "balance_retrieve"
+effects = ["network"]
+
+# ------------------------------------------------------------------------------------------------
+# config (help: stripe config; pkg/cmd/config.go), version, whoami
+# ------------------------------------------------------------------------------------------------
+
+# `--list` prints the config file, test-mode keys included
+[[case]]
+argv = ["stripe", "config", "--list"]
+action = "config"
+fields = { list = true }
+effects = ["credentials"]
+
+[[case]]
+argv = ["stripe", "-p", "shop", "config", "--list"]
+action = "config"
+fields = { list = true, project_name = "shop" }
+effects = ["credentials", "select_project"]
+
+# The help examples
+[[case]]
+argv = ["stripe", "config", "--set", "color", "off"]
+action = "config"
+fields = { field = "color", set = true, value = "off" }
+effects = ["override_config"]
+
+[[case]]
+argv = ["stripe", "config", "--unset", "color"]
+action = "config"
+fields = { unset = "color" }
+effects = ["override_config"]
+
+[[case]]
+argv = ["stripe", "config", "--remove-profile", "my-project", "-c"]
+action = "config"
+fields = { confirm = true, remove_profile = "my-project" }
+effects = ["credentials", "override_config", "skip_prompt"]
+
+# `stripe config` alone prints help
+[[case]]
+argv = ["stripe", "config"]
+action = "config"
+
+# `-e`/`--edit` opens an editor; not modeled. Three operands are too many.
+[[case]]
+argv = ["stripe", "config", "--edit"]
+action = "unmodeled"
+
+[[case]]
+argv = ["stripe", "config", "-e"]
+action = "unmodeled"
+
+[[case]]
+argv = ["stripe", "config", "--set", "a", "b", "c"]
+action = "unmodeled"
+
+[[case]]
+argv = ["stripe", "version"]
+action = "version"
+effects = ["network"]
+
+[[case]]
+argv = ["stripe", "version", "--notes"]
+action = "version"
+fields = { notes = true }
+effects = ["network"]
+
+[[case]]
+argv = ["stripe", "version", "x"]
+action = "unmodeled"
+
+[[case]]
+argv = ["stripe", "whoami", "--format", "json"]
+action = "whoami"
+fields = { format = "json" }
+effects = ["network"]
+
+# ------------------------------------------------------------------------------------------------
+# Commands left out on purpose: they log in or out, switch the active account, start other
+# programs (plugins, a browser, an editor), or are out of scope. Each is unmodeled.
+# ------------------------------------------------------------------------------------------------
+
+[[case]]
+argv = ["stripe", "login"]
+action = "unmodeled"
+
+[[case]]
+argv = ["stripe", "logout", "--all"]
+action = "unmodeled"
+
+[[case]]
+argv = ["stripe", "switch"]
+action = "unmodeled"
+
+[[case]]
+argv = ["stripe", "open", "dashboard"]
+action = "unmodeled"
+
+[[case]]
+argv = ["stripe", "sandboxes", "list"]
+action = "unmodeled"
+
+[[case]]
+argv = ["stripe", "apps", "start"]
+action = "unmodeled"
+
+[[case]]
+argv = ["stripe", "provision", "x"]
+action = "unmodeled"
+
+[[case]]
+argv = ["stripe", "v2", "core", "events", "list"]
+action = "unmodeled"
+
+[[case]]
+argv = ["stripe", "help", "customers"]
+action = "unmodeled"
+
+[[case]]
+argv = ["stripe", "Customers", "list"]
+action = "unmodeled"
+
+# --- independent verifier cases ---
+# Written by the verifier from stripe-cli v1.55.10 source (tag v1.55.10, commit cb77887):
+# pkg/cmd/root.go, pkg/requests/base.go, pkg/cmd/resource/operation.go, boolean_args.go,
+# nested_flags.go, pkg/cmd/listen.go, trigger.go, fixtures.go, config.go, logs/tail.go,
+# pkg/config/profile.go::GetAPIKey, pkg/cmd/resources/specs_gen.go.
+
+# A live key with `=` before the words, on a delete that skips the prompt (base.go::confirmCommand).
+[[case]]
+argv = ["stripe", "--api-key=sk_live_x", "customers", "delete", "cus_1", "--confirm"]
+action = "customers_delete"
+fields = { api_key = "sk_live_x", confirm = true, customer = "cus_1" }
+effects = ["api_key_override", "delete_data", "live_mode", "network", "skip_prompt"]
+
+# operation.go::runOperationCmd returns after the dry-run output, before the prompt and the request.
+[[case]]
+argv = ["stripe", "customers", "delete", "cus_1", "-c", "--dry-run"]
+action = "customers_delete"
+fields = { confirm = true, customer = "cus_1", dry_run = true }
+effects = ["network", "skip_prompt"]
+
+# base.go::RunRequestsCmd: the raw dry run also returns before MakeRequest.
+[[case]]
+argv = ["stripe", "delete", "/v1/customers/cus_1", "--dry-run"]
+action = "delete"
+fields = { dry_run = true, path = "/v1/customers/cus_1" }
+effects = ["network", "raw_request"]
+
+# A raw POST can create a refund.
+[[case]]
+argv = ["stripe", "post", "/v1/refunds", "-d", "charge=ch_1"]
+action = "post"
+fields = { data = ["charge=ch_1"], path = "/v1/refunds" }
+effects = ["move_money", "network", "raw_request", "write_data"]
+
+# `-d` is StringArrayVarP: an attached value in a cluster.
+[[case]]
+argv = ["stripe", "post", "/v1/refunds", "-dcharge=ch_1", "--dry-run"]
+action = "post"
+fields = { data = ["charge=ch_1"], dry_run = true, path = "/v1/refunds" }
+effects = ["network", "raw_request"]
+
+# `get` with an object ID (base.go::createOrNormalizePath maps ch_ to /v1/charges/).
+[[case]]
+argv = ["stripe", "get", "ch_123", "--live"]
+action = "get"
+fields = { live = true, path = "ch_123" }
+effects = ["live_mode", "network", "raw_request"]
+
+# validators.APIKey accepts the `rkcs` prefix too; profile.go::isLivemodeKey reads part 2.
+[[case]]
+argv = ["stripe", "charges", "create", "--amount", "100", "--currency", "usd", "--api-key", "rkcs_live_abc"]
+action = "charges_create"
+fields = { amount = "100", api_key = "rkcs_live_abc", currency = "usd" }
+effects = ["api_key_override", "live_mode", "move_money", "network", "write_data"]
+
+[[case]]
+argv = ["stripe", "charges", "create", "--amount=100", "--currency=usd", "--dry-run"]
+action = "charges_create"
+fields = { amount = "100", currency = "usd", dry_run = true }
+effects = ["network"]
+
+[[case]]
+argv = ["stripe", "refunds", "create", "--charge", "ch_1", "--stripe-account", "acct_1"]
+action = "refunds_create"
+fields = { charge = "ch_1", stripe_account = "acct_1" }
+effects = ["connected_account", "move_money", "network", "write_data"]
+
+# trigger.go calls ResolveCredentials(false), but GetAPIKey returns an explicit key first.
+[[case]]
+argv = ["stripe", "trigger", "payment_intent.succeeded", "--api-key", "sk_live_x"]
+action = "trigger"
+fields = { api_key = "sk_live_x", event = "payment_intent.succeeded" }
+effects = ["api_key_override", "live_mode", "move_money", "network", "write_data"]
+
+# trigger.go declares no --live and no --dry-run.
+[[case]]
+argv = ["stripe", "trigger", "payment_intent.succeeded", "--live"]
+action = "unmodeled"
+
+[[case]]
+argv = ["stripe", "trigger", "payment_intent.succeeded", "--dry-run"]
+action = "unmodeled"
+
+[[case]]
+argv = ["stripe", "fixtures", "fixture.json", "--stripe-account", "acct_1"]
+action = "fixtures"
+fields = { file = "fixture.json", stripe_account = "acct_1" }
+effects = ["connected_account", "delete_data", "move_money", "network", "raw_request", "write_data", "write_files"]
+
+# listen.go: -f takes any URL.
+[[case]]
+argv = ["stripe", "listen", "-f", "https://hooks.example.net/in"]
+action = "listen"
+fields = { forward_to = "https://hooks.example.net/in" }
+effects = ["forward_events", "network"]
+
+[[case]]
+argv = ["stripe", "listen", "--forward-to=localhost:4242", "--skip-verify", "--live"]
+action = "listen"
+fields = { forward_to = "localhost:4242", live = true, skip_verify = true }
+effects = ["forward_events", "insecure_tls", "live_mode", "network"]
+
+# listen.go SetNormalizeFunc maps the old name to --use-configured-webhooks.
+[[case]]
+argv = ["stripe", "listen", "--load-from-webhooks-api"]
+action = "listen"
+fields = { use_configured_webhooks = true }
+effects = ["forward_events", "network"]
+
+# Hidden --api-base on listen.
+[[case]]
+argv = ["stripe", "listen", "--api-base", "http://localhost:1"]
+action = "unmodeled"
+
+# base.go::InitFlags -H/--request-header can set any header.
+[[case]]
+argv = ["stripe", "customers", "list", "-H", "Stripe-Account: acct_1"]
+action = "unmodeled"
+
+# The list operation registers its own --limit param first, so InitFlags adds no -l.
+[[case]]
+argv = ["stripe", "customers", "list", "-l", "5"]
+action = "unmodeled"
+
+[[case]]
+argv = ["stripe", "customers", "list", "--limit", "5"]
+action = "customers_list"
+fields = { limit = "5" }
+effects = ["network"]
+
+# A retrieve (GET without a limit param) gets -l from InitFlags.
+[[case]]
+argv = ["stripe", "customers", "retrieve", "-l", "5", "cus_1"]
+action = "customers_retrieve"
+fields = { customer = "cus_1", limit = "5" }
+effects = ["network"]
+
+# boolean_args.go rewrites `--validate true`; the grammar reads it as an extra operand.
+[[case]]
+argv = ["stripe", "customers", "create", "--validate", "true"]
+action = "unmodeled"
+
+[[case]]
+argv = ["stripe", "customers", "create", "--validate=false"]
+action = "customers_create"
+fields = { validate = "false" }
+effects = ["network", "write_data"]
+
+# nested_flags.go maps brackets to dots; the grammar does not model brackets.
+[[case]]
+argv = ["stripe", "customers", "create", "--address[city]=Paris"]
+action = "unmodeled"
+
+# --live is a command flag, not a persistent one.
+[[case]]
+argv = ["stripe", "customers", "--live", "list"]
+action = "unmodeled"
+
+[[case]]
+argv = ["stripe", "customers", "retrieve", "--", "cus_1"]
+action = "customers_retrieve"
+fields = { customer = "cus_1" }
+effects = ["network"]
+
+# pflag: a String flag given twice keeps the last value; the grammar refuses the repeat.
+[[case]]
+argv = ["stripe", "--api-key", "sk_test_a", "customers", "delete", "cus_1", "--api-key", "sk_live_b"]
+action = "unmodeled"
+
+# Cobra has no prefix matching at this tag.
+[[case]]
+argv = ["stripe", "customers", "del", "cus_1"]
+action = "unmodeled"
+
+# validators.ExactArgs(1).
+[[case]]
+argv = ["stripe", "customers", "delete", "cus_1", "cus_2"]
+action = "unmodeled"
+
+# Invoice auto collection through -d instead of --auto-advance. The API charges the customer
+# when the invoice auto-advances, so the verifier expects move_money.
+[[case]]
+argv = ["stripe", "invoices", "create", "--customer", "cus_1", "-d", "auto_advance=true"]
+action = "invoices_create"
+fields = { customer = "cus_1", data = ["auto_advance=true"] }
+effects = ["move_money", "network", "write_data"]
+
+[[case]]
+argv = ["stripe", "invoices", "update", "in_1", "--auto-advance=false"]
+action = "invoices_update"
+fields = { auto_advance = "false", invoice = "in_1" }
+effects = ["move_money", "network", "write_data"]
+
+# Pause with invoicing_behavior=invoice bills outstanding usage at once; the verifier expects move_money.
+[[case]]
+argv = ["stripe", "subscriptions", "pause", "sub_1", "--invoicing-behavior", "invoice"]
+action = "subscriptions_pause"
+fields = { invoicing_behavior = "invoice", subscription = "sub_1" }
+effects = ["move_money", "network", "write_data"]
+
+[[case]]
+argv = ["stripe", "-p", "live", "config", "--list"]
+action = "config"
+fields = { list = true, project_name = "live" }
+effects = ["credentials", "select_project"]
+
+# config.go: --set with two operands writes any field, a key field included.
+[[case]]
+argv = ["stripe", "config", "--set", "test_mode_api_key", "sk_live_x"]
+action = "config"
+fields = { field = "test_mode_api_key", set = true, value = "sk_live_x" }
+effects = ["override_config"]
+
+[[case]]
+argv = ["stripe", "config", "--remove-profile", "shop", "-c"]
+action = "config"
+fields = { confirm = true, remove_profile = "shop" }
+effects = ["credentials", "override_config", "skip_prompt"]
+
+[[case]]
+argv = ["stripe", "config", "-e"]
+action = "unmodeled"
+
+# events_resend.go: --webhook-endpoint sends the event to an endpoint the account names.
+[[case]]
+argv = ["stripe", "events", "resend", "evt_1", "--webhook-endpoint", "we_1"]
+action = "events_resend"
+fields = { event = "evt_1", webhook_endpoint = "we_1" }
+effects = ["forward_events", "network", "write_data"]
+
+[[case]]
+argv = ["stripe", "logs", "tail", "--filter-account", "CONNECT_IN", "--filter-account", "SELF"]
+action = "logs_tail"
+fields = { filter_account = ["CONNECT_IN", "SELF"] }
+effects = ["network"]
+
+[[case]]
+argv = ["stripe", "logs", "tail", "--live"]
+action = "unmodeled"
+
+[[case]]
+argv = ["stripe", "-pshop", "get", "cus_1", "-l", "3", "-a", "cus_0"]
+action = "get"
+fields = { limit = "3", path = "cus_1", project_name = "shop", starting_after = "cus_0" }
+effects = ["network", "raw_request", "select_project"]
+
+[[case]]
+argv = ["stripe", "delete", "/v1/subscriptions/sub_1", "-c"]
+action = "delete"
+fields = { confirm = true, path = "/v1/subscriptions/sub_1" }
+effects = ["delete_data", "move_money", "network", "raw_request", "skip_prompt"]
+
+[[case]]
+argv = ["stripe", "--color", "off", "customers", "list", "--log-level", "debug", "--device-name", "x"]
+action = "customers_list"
+fields = { color = "off", device_name = "x", log_level = "debug" }
+effects = ["network"]
+
+# Root --map is a persistent flag that the grammar leaves out.
+[[case]]
+argv = ["stripe", "customers", "list", "--map"]
+action = "unmodeled"
+
+# -v on a resource command is --stripe-version (root -v/--version is not persistent).
+[[case]]
+argv = ["stripe", "customers", "list", "-v", "2024-06-20"]
+action = "customers_list"
+fields = { stripe_version = "2024-06-20" }
+effects = ["network"]
+
+# --- independent verifier cases, round 2 ---
+# S1: any invoice create/update carries move_money, by flag, by -d, or bare.
+[[case]]
+argv = ["stripe", "invoices", "create", "--customer", "cus_1", "--data", "auto_advance=true"]
+action = "invoices_create"
+fields = { customer = "cus_1", data = ["auto_advance=true"] }
+effects = ["move_money", "network", "write_data"]
+
+[[case]]
+argv = ["stripe", "invoices", "update", "in_1", "-dauto_advance=true"]
+action = "invoices_update"
+fields = { data = ["auto_advance=true"], invoice = "in_1" }
+effects = ["move_money", "network", "write_data"]
+
+# The dry run still removes it (operation.go::runOperationCmd).
+[[case]]
+argv = ["stripe", "invoices", "create", "--customer", "cus_1", "--auto-advance", "--dry-run"]
+action = "invoices_create"
+fields = { auto_advance = "", customer = "cus_1", dry_run = true }
+effects = ["network"]
+
+# S2: pause through -d.
+[[case]]
+argv = ["stripe", "subscriptions", "pause", "sub_1", "-d", "invoicing_behavior=invoice"]
+action = "subscriptions_pause"
+fields = { data = ["invoicing_behavior=invoice"], subscription = "sub_1" }
+effects = ["move_money", "network", "write_data"]
+
+# migrate changes the billing mode only.
+[[case]]
+argv = ["stripe", "subscriptions", "migrate", "sub_1", "--billing-mode.type", "flexible"]
+action = "subscriptions_migrate"
+fields = { billing_mode_type = "flexible", subscription = "sub_1" }
+effects = ["network", "write_data"]
+
+# S3: the endpoint named through -d.
+[[case]]
+argv = ["stripe", "events", "resend", "evt_1", "-dwebhook_endpoint=we_1"]
+action = "events_resend"
+fields = { data = ["webhook_endpoint=we_1"], event = "evt_1" }
+effects = ["forward_events", "network", "write_data"]
+
+# S5
+[[case]]
+argv = ["stripe", "listen", "--print-secret", "--api-key", "sk_live_x"]
+action = "listen"
+fields = { api_key = "sk_live_x", print_secret = true }
+effects = ["api_key_override", "credentials", "live_mode", "network"]
+
+# S6: refunds cancel keeps write_data only.
+[[case]]
+argv = ["stripe", "refunds", "cancel", "re_1", "--live"]
+action = "refunds_cancel"
+fields = { live = true, refund = "re_1" }
+effects = ["live_mode", "network", "write_data"]
+
+# Other money paths among modeled resources.
+[[case]]
+argv = ["stripe", "charges", "capture", "ch_1", "--amount", "500"]
+action = "charges_capture"
+fields = { amount = "500", charge = "ch_1" }
+effects = ["move_money", "network", "write_data"]
+
+[[case]]
+argv = ["stripe", "invoices", "pay", "in_1", "--paid-out-of-band=true"]
+action = "invoices_pay"
+fields = { invoice = "in_1", paid_out_of_band = "true" }
+effects = ["move_money", "network", "write_data"]
+
+[[case]]
+argv = ["stripe", "subscriptions", "create", "--customer", "cus_1", "--payment-behavior", "error_if_incomplete"]
+action = "subscriptions_create"
+fields = { customer = "cus_1", payment_behavior = "error_if_incomplete" }
+effects = ["move_money", "network", "write_data"]
+
+[[case]]
+argv = ["stripe", "subscriptions", "cancel", "sub_1", "-d", "invoice_now=true", "-c"]
+action = "subscriptions_cancel"
+fields = { confirm = true, data = ["invoice_now=true"], subscription_exposed_id = "sub_1" }
+effects = ["delete_data", "move_money", "network", "skip_prompt"]
+
+# charges update has no capture parameter (specs_gen.go V1ChargesUpdate).
+[[case]]
+argv = ["stripe", "charges", "update", "ch_1", "--description", "x"]
+action = "charges_update"
+fields = { charge = "ch_1", description = "x" }
+effects = ["network", "write_data"]
+
+# Checkout needs the buyer to pay; creating a session moves no money.
+[[case]]
+argv = ["stripe", "checkout", "sessions", "create", "--mode", "payment", "--success-url", "https://example.com/ok"]
+action = "checkout_sessions_create"
+fields = { mode = "payment", success_url = "https://example.com/ok" }
+effects = ["network", "write_data"]
+
+# Unmodeled money paths stay unmodeled (underscore names).
+[[case]]
+argv = ["stripe", "invoices", "finalize_invoice", "in_1"]
+action = "unmodeled"
+
+[[case]]
+argv = ["stripe", "payment_intents", "confirm", "pi_1"]
+action = "unmodeled"

@@ -1,0 +1,213 @@
+# Tool grammar for the Stripe CLI.
+#
+# Project:    Stripe CLI, https://github.com/stripe/stripe-cli (official, by Stripe)
+# Executable: stripe (a native Go binary)
+# Checked:    stripe version 1.55.10, tag v1.55.10 (commit cb778872cf48291bd53050554ade5321191dbb7c),
+#             against `stripe <command> --help` and the source at that tag.
+#
+# This file is the body of `[tool.<label>.grammar]` in box.toml. The resource-command section at the
+# end is generated from the CLI's own operation specs (pkg/cmd/resources/specs_gen.go) by gen/,
+# from gen/head.toml; edit those and regenerate (README.md, "Regenerate").
+#
+# What this grammar cannot see:
+# - Environment variables. STRIPE_API_KEY wins over both the logged-in key and `--api-key`
+#   (config/profile.go::GetAPIKey), so a test key on the command line does not prove test mode,
+#   and a live key in the environment makes every command live. STRIPE_PROJECT_NAME selects a
+#   profile, STRIPE_DEVICE_NAME, XDG_CONFIG_HOME
+#   moves the config file, EDITOR, HTTPS_PROXY, STRIPE_PLUGINS_PATH.
+# - The config file (~/.config/stripe/config.toml) and the keyring. They hold the keys, the
+#   active account, and whether `stripe switch` put the profile in live mode. With an OAuth
+#   login in live mode, a command without `--live` is refused by the CLI; with a stored or
+#   environment API key, the key decides the mode, and `live_mode` here sees only the flag
+#   or an `--api-key` value. `live_mode` absent means only "not asked for on this line".
+# - The contents of a fixture file (`stripe fixtures <file>`): it can send any API request.
+# - Plugins (`stripe apps`, `stripe projects`, ...) and `stripe provision`: other programs that
+#   the CLI starts. They are not modeled, so they are `unmodeled`.
+# - Cobra's bracket spelling of a nested parameter (`--address[city]=x`). The CLI maps it to
+#   `--address.city`; this grammar models only the dotted spelling that the help prints.
+
+format  = 1
+version = 1
+name    = "stripe"
+program = "stripe"
+
+[effects]
+network           = "Contacts the Stripe API or another network service"
+write_data        = "Creates or changes Stripe objects"
+delete_data       = "Deletes or cancels a Stripe object"
+move_money        = "Can charge, capture, pay, or refund money (real money in live mode)"
+live_mode         = "Targets live-mode data instead of test mode or a sandbox"
+api_key_override  = "Uses an API key from the command line instead of the logged-in session"
+select_project    = "Uses the keys and settings of a named project profile"
+override_config   = "Uses another config file, or changes a stored config value"
+credentials       = "Prints or removes a secret: stored API keys, or the webhook signing secret"
+connected_account = "Acts on a connected account or another account context"
+skip_prompt       = "Skips the confirmation prompt"
+raw_request       = "Sends a request to an API path that the command line names"
+forward_events    = "Forwards webhook events to a URL that the command line or the account names"
+insecure_tls      = "Skips TLS certificate checks when it forwards events"
+write_files       = "Writes a file in the working directory (.env)"
+
+# Persistent flags of the root command (pkg/cmd/root.go). Cobra accepts them before, between,
+# and after the command words. Hidden flags (`--api-base`, `--access-base`, `--dashboard-base`)
+# and `--map` are left out, so a line that gives one is `unmodeled`.
+[global]
+options.api_key      = { flag = ["--api-key"], value = "required", anywhere = true, adds = ["api_key_override"], when = [{ like = ["*_live_*", "*_live"], adds = ["live_mode"] }] }
+options.color        = { flag = ["--color"], value = "required", anywhere = true }
+options.config       = { flag = ["--config"], value = "required", anywhere = true, adds = ["override_config"] }
+options.device_name  = { flag = ["--device-name"], value = "required", anywhere = true }
+options.log_level    = { flag = ["--log-level"], value = "required", anywhere = true }
+options.project_name = { flag = ["-p", "--project-name"], value = "required", anywhere = true, adds = ["select_project"] }
+
+# ---------------------------------------------------------------------------------------------------
+# Webhook, log, and fixture commands
+# ---------------------------------------------------------------------------------------------------
+
+# pkg/cmd/listen.go. Deprecated flags (`--thin-events`, `--forward-thin-to`,
+# `--forward-thin-connect-to`, `-j`/`--print-json`) and hidden ones (`--no-wss`, `--timeout`,
+# `--api-base`) are left out. `--load-from-webhooks-api` is the old name the CLI still maps to
+# `--use-configured-webhooks`.
+[shell.listen]
+usage = "stripe [global options] listen [options]"
+adds  = ["network"]
+options.all_snapshot            = { flag = ["--all-snapshot"] }
+options.all_thin                = { flag = ["--all-thin"] }
+options.connect_headers         = { flag = ["--connect-headers"], value = "required", repeated = true }
+options.events                  = { flag = ["-e", "--events"], value = "required", repeated = true }
+options.events_from             = { flag = ["--events-from"], value = "required" }
+options.format                  = { flag = ["--format"], value = "required" }
+options.forward_connect_to      = { flag = ["-c", "--forward-connect-to"], value = "required", adds = ["forward_events"] }
+options.forward_to              = { flag = ["-f", "--forward-to"], value = "required", adds = ["forward_events"] }
+options.headers                 = { flag = ["-H", "--headers"], value = "required", repeated = true }
+options.latest                  = { flag = ["-l", "--latest"] }
+options.live                    = { flag = ["--live"], adds = ["live_mode"] }
+options.print_secret            = { flag = ["--print-secret"], adds = ["credentials"] }
+options.skip_update             = { flag = ["-s", "--skip-update"] }
+options.skip_verify             = { flag = ["--skip-verify"], adds = ["insecure_tls"] }
+options.use_configured_webhooks = { flag = ["-a", "--use-configured-webhooks", "--load-from-webhooks-api"], adds = ["forward_events"] }
+
+# pkg/cmd/trigger.go. A trigger runs a built-in fixture: it creates real objects in the account,
+# such as customers, payment intents, charges, and refunds. The CLI asks for test-mode
+# credentials, but an explicit live API key still wins. `--raw` (a fixture given inline) and
+# `--edit` (opens an editor) are left out.
+[shell.trigger]
+usage = "stripe [global options] trigger [options] <event>"
+adds  = ["move_money", "network", "write_data"]
+options.add            = { flag = ["--add"], value = "required", repeated = true }
+options.api_version    = { flag = ["--api-version"], value = "required" }
+options.override       = { flag = ["--override"], value = "required", repeated = true }
+options.remove         = { flag = ["--remove"], value = "required", repeated = true }
+options.skip           = { flag = ["--skip"], value = "required", repeated = true }
+options.stripe_account = { flag = ["--stripe-account"], value = "required", adds = ["connected_account"] }
+
+# pkg/cmd/fixtures.go. A fixture file is a list of API requests with any method and path, and it
+# can update a `.env` file in the working directory. `--edit` is left out.
+[shell.fixtures]
+usage = "stripe [global options] fixtures [options] <file>"
+adds  = ["delete_data", "move_money", "network", "raw_request", "write_data", "write_files"]
+options.add            = { flag = ["--add"], value = "required", repeated = true }
+options.api_version    = { flag = ["--api-version"], value = "required" }
+options.override       = { flag = ["--override"], value = "required", repeated = true }
+options.remove         = { flag = ["--remove"], value = "required", repeated = true }
+options.skip           = { flag = ["--skip"], value = "required", repeated = true }
+options.stripe_account = { flag = ["--stripe-account"], value = "required", adds = ["connected_account"] }
+
+# pkg/cmd/logs/tail.go. Hidden `--no-wss` and `--api-base` are left out.
+[shell.logs_tail]
+usage = "stripe [global options] logs tail [options]"
+adds  = ["network"]
+options.filter_account          = { flag = ["--filter-account"], value = "required", repeated = true }
+options.filter_http_method      = { flag = ["--filter-http-method"], value = "required", repeated = true }
+options.filter_ip_address       = { flag = ["--filter-ip-address"], value = "required", repeated = true }
+options.filter_request_path     = { flag = ["--filter-request-path"], value = "required", repeated = true }
+options.filter_request_status   = { flag = ["--filter-request-status"], value = "required", repeated = true }
+options.filter_source           = { flag = ["--filter-source"], value = "required", repeated = true }
+options.filter_status_code      = { flag = ["--filter-status-code"], value = "required", repeated = true }
+options.filter_status_code_type = { flag = ["--filter-status-code-type"], value = "required", repeated = true }
+options.format                  = { flag = ["--format"], value = "required" }
+
+# ---------------------------------------------------------------------------------------------------
+# Raw API commands (pkg/cmd/get.go, post.go, delete.go; flags from requests/base.go::InitFlags).
+# The operand is an object ID (`get` only) or an API path. `-H`/`--request-header` can set any
+# header, including the account and the authorization, so it is left out.
+# ---------------------------------------------------------------------------------------------------
+
+[shell.get]
+usage = "stripe [global options] get [options] <path>"
+adds  = ["network", "raw_request"]
+options.confirm        = { flag = ["-c", "--confirm"] }
+options.dark_style     = { flag = ["--dark-style"] }
+options.data           = { flag = ["-d", "--data"], value = "required", repeated = true }
+options.dry_run        = { flag = ["--dry-run"] }
+options.ending_before  = { flag = ["-b", "--ending-before"], value = "required" }
+options.expand         = { flag = ["-e", "--expand"], value = "required", repeated = true }
+options.idempotency    = { flag = ["-i", "--idempotency"], value = "required" }
+options.limit          = { flag = ["-l", "--limit"], value = "required" }
+options.live           = { flag = ["--live"], adds = ["live_mode"] }
+options.show_headers   = { flag = ["-s", "--show-headers"] }
+options.starting_after = { flag = ["-a", "--starting-after"], value = "required" }
+options.stripe_account = { flag = ["--stripe-account"], value = "required", adds = ["connected_account"] }
+options.stripe_context = { flag = ["--stripe-context"], value = "required", adds = ["connected_account"] }
+options.stripe_version = { flag = ["-v", "--stripe-version"], value = "required" }
+
+# `post` can reach every write endpoint, so the grammar cannot tell a refund from a new customer.
+[shell.post]
+usage = "stripe [global options] post [options] <path>"
+adds  = ["move_money", "network", "raw_request", "write_data"]
+options.confirm        = { flag = ["-c", "--confirm"] }
+options.dark_style     = { flag = ["--dark-style"] }
+options.data           = { flag = ["-d", "--data"], value = "required", repeated = true }
+options.dry_run        = { flag = ["--dry-run"], removes = ["move_money", "write_data"] }
+options.expand         = { flag = ["-e", "--expand"], value = "required", repeated = true }
+options.idempotency    = { flag = ["-i", "--idempotency"], value = "required" }
+options.live           = { flag = ["--live"], adds = ["live_mode"] }
+options.show_headers   = { flag = ["-s", "--show-headers"] }
+options.stripe_account = { flag = ["--stripe-account"], value = "required", adds = ["connected_account"] }
+options.stripe_context = { flag = ["--stripe-context"], value = "required", adds = ["connected_account"] }
+options.stripe_version = { flag = ["-v", "--stripe-version"], value = "required" }
+
+# A DELETE asks for confirmation on stdin unless `-c` is given (requests/base.go::confirmCommand).
+# Some DELETE endpoints cancel rather than delete, and a cancel can create a final invoice.
+[shell.delete]
+usage = "stripe [global options] delete [options] <path>"
+adds  = ["delete_data", "move_money", "network", "raw_request"]
+options.confirm        = { flag = ["-c", "--confirm"], adds = ["skip_prompt"] }
+options.dark_style     = { flag = ["--dark-style"] }
+options.data           = { flag = ["-d", "--data"], value = "required", repeated = true }
+options.dry_run        = { flag = ["--dry-run"], removes = ["delete_data", "move_money"] }
+options.expand         = { flag = ["-e", "--expand"], value = "required", repeated = true }
+options.idempotency    = { flag = ["-i", "--idempotency"], value = "required" }
+options.live           = { flag = ["--live"], adds = ["live_mode"] }
+options.show_headers   = { flag = ["-s", "--show-headers"] }
+options.stripe_account = { flag = ["--stripe-account"], value = "required", adds = ["connected_account"] }
+options.stripe_context = { flag = ["--stripe-context"], value = "required", adds = ["connected_account"] }
+options.stripe_version = { flag = ["-v", "--stripe-version"], value = "required" }
+
+# ---------------------------------------------------------------------------------------------------
+# Local and account-information commands
+# ---------------------------------------------------------------------------------------------------
+
+# pkg/cmd/config.go. One action, because the flag picks the operation: `--set <field> <value>`,
+# `--unset <field>`, `--remove-profile <name>`, `--list`. `--list` prints the config file,
+# test-mode keys included. `-e`/`--edit` (opens an editor) is left out. The CLI stops reading
+# flags at the first operand, so `config color off --set` sets nothing; this grammar still gives it
+# `override_config`.
+[shell.config]
+usage = "stripe [global options] config [options] [<field> [<value>]]"
+options.confirm        = { flag = ["-c", "--confirm"], adds = ["skip_prompt"] }
+options.list           = { flag = ["--list"], adds = ["credentials"] }
+options.remove_profile = { flag = ["--remove-profile"], value = "required", adds = ["credentials", "override_config"] }
+options.set            = { flag = ["--set"], adds = ["override_config"] }
+options.unset          = { flag = ["--unset"], value = "required", adds = ["override_config"] }
+
+# pkg/cmd/version.go. It checks GitHub for a newer release, or fetches the notes with `--notes`.
+[shell.version]
+usage = "stripe [global options] version [options]"
+adds  = ["network"]
+options.notes = { flag = ["--notes"] }
+
+# pkg/cmd/whoami.go. Hidden `--access-base` and `--api-base` are left out.
+[shell.whoami]
+usage = "stripe [global options] whoami [options]"
+adds  = ["network"]
+options.format = { flag = ["--format"], value = "required" }
