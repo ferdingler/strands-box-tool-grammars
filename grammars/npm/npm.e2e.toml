@@ -1,0 +1,94 @@
+# End-to-end cases for npm.grammar.toml. The harness runs each argv through the Shell of a real box,
+# where `npm` is a stub that prints its arguments and exits 0.
+#
+# The policy permits the modeled npm actions, refuses publishing and lifecycle scripts, and
+# refuses any line that npm would read differently from the grammar.
+
+policy = '''
+@id("npm_actions")
+permit (principal, action in Tool::npm::Action::"*", resource);
+
+@id("no_publish")
+@description("Publishing packages is not allowed.")
+forbid (principal, action == Tool::npm::Action::"publish", resource)
+when { context.input.effects.contains(Tool::npm::Effect::"publish") };
+
+@id("no_install_scripts")
+@description("Installs must use --ignore-scripts.")
+forbid (principal, action == Tool::npm::Action::"install", resource)
+when { context.input.effects.contains(Tool::npm::Effect::"run_lifecycle_scripts") };
+
+@id("no_ambiguous_argv")
+@description("This npm command line is ambiguous.")
+forbid (principal, action in Tool::npm::Action::"*", resource)
+when { context.input.effects.contains(Tool::npm::Effect::"ambiguous_argv") };
+'''
+
+# A permitted read runs the program
+[[case]]
+argv = ["npm", "ls", "--all"]
+exit = 0
+stdout = "stub-argv: [ls] [--all]"
+
+# A real publish is refused, and the program does not run
+[[case]]
+argv = ["npm", "publish", "--access", "public"]
+exit = 126
+stderr = "[policy: no_publish]: Publishing packages is not allowed."
+
+# `--dry-run` removes `publish`, so the forbid does not apply
+[[case]]
+argv = ["npm", "publish", "--dry-run"]
+exit = 0
+stdout = "stub-argv: [publish] [--dry-run]"
+
+# An install that may run lifecycle scripts is refused
+[[case]]
+argv = ["npm", "install", "lodash"]
+exit = 126
+stderr = "[policy: no_install_scripts]"
+
+# `--ignore-scripts` removes `run_lifecycle_scripts`, so the install runs
+[[case]]
+argv = ["npm", "i", "--ignore-scripts", "lodash"]
+exit = 0
+stdout = "stub-argv: [i] [--ignore-scripts] [lodash]"
+
+# `--ignore-scripts false` means "run scripts" to npm; the grammar flags it as ambiguous
+[[case]]
+argv = ["npm", "install", "--ignore-scripts", "false"]
+exit = 126
+stderr = "[policy: no_ambiguous_argv]"
+
+# An undeclared command is `unmodeled`, and nothing permits it
+[[case]]
+argv = ["npm", "unpublish", "x@1.0.0"]
+exit = 126
+stderr = "[default-deny]: No permit policy matched this request."
+
+# An undeclared flag also makes the line `unmodeled`
+[[case]]
+argv = ["npm", "install", "--ignore-script", "lodash"]
+exit = 126
+stderr = "[default-deny]"
+
+# The README rules load: one forbid over a list of actions, one over every action
+[[case]]
+argv = ["npm", "ci", "--dangerously-allow-all-scripts", "--ignore-scripts"]
+exit = 126
+stderr = "[policy: no_install_scripts]"
+policy = '''
+@id("npm_actions")
+permit (principal, action in Tool::npm::Action::"*", resource);
+
+@id("no_install_scripts")
+forbid (principal, action in [Tool::npm::Action::"install", Tool::npm::Action::"ci",
+                              Tool::npm::Action::"update"], resource)
+when { context.input.effects.contains(Tool::npm::Effect::"run_lifecycle_scripts") ||
+       context.input.effects.contains(Tool::npm::Effect::"bypass_script_policy") };
+
+@id("project_only")
+forbid (principal, action in Tool::npm::Action::"*", resource)
+when { context.input.effects.contains(Tool::npm::Effect::"global_install") ||
+       context.input.effects.contains(Tool::npm::Effect::"override_registry") };
+'''
