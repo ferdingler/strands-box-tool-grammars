@@ -1,0 +1,419 @@
+# Tool grammar for the Valyu CLI.
+#
+# Project:    valyuAI/valyu-cli ("The Official Valyu CLI"), https://github.com/valyuAI/valyu-cli
+# Executable: valyu (native single-file release binary; the npm package @valyu/cli ships the same
+#             CLI as the Node script dist/cli.cjs)
+# Checked:    1.3.2, tag v1.3.2 (commit 9496e7b7cf7e4a01dee6bd09d28c02b7ca647941), `--help` of every
+#             command, and the source in src/cli.ts and src/commands/. The CLI parses its command line
+#             with commander 14.0.3.
+#
+# Parsing facts that this grammar follows (commander 14.0.3, `Command.parseOptions`):
+# - The top-level options (--api-key, -p/--profile, --json, -q/--quiet) are read anywhere on the
+#   line, so they are `anywhere` globals.
+# - No command has an alias. `account keys` runs `account keys list` and `sources` runs
+#   `sources list` (`isDefault`), so those two spellings are aliases here.
+# - Long options match only their full spelling. A repeatable option is one with a `collect`
+#   function in the source. Any other value option given twice keeps the last value in the CLI, and
+#   is `unmodeled` here.
+# - The top level reads its own options even where a subcommand option expects a value, and the
+#   subcommand's words then shift: in `valyu batch create --name -p prod q1`, valyu uses profile
+#   `prod`, and in `batch create --name --json --metadata -m max` it sends mode max. The grammar
+#   cannot model this. When a value starts with `--`, `-p`, `-q`, or `-v`, it adds
+#   `option_like_value`, `other_account`, and every effect that an option of that action can add.
+# - After `--`, every word is an operand, also for the subcommand. An operand that starts with `-`
+#   still adds `option_like_value`, as a warning only.
+#
+# What the grammar cannot see:
+# - Environment variables: VALYU_API_KEY and VALYU_PROFILE pick the key and the account,
+#   XDG_CONFIG_HOME moves the credentials file.
+# - The credentials file (~/.config/valyu/credentials.json), which holds the API keys and the
+#   active profile.
+# - Standard input: `search`, `answer`, `contents`, and `batch create` read the query or the URLs
+#   from stdin when the line gives none; `deepresearch update <id> -`, `deepresearch respond
+#   --response -`, `workflows ... --params-file -`, and `workflows create|update --file -` read stdin.
+# - The content of the files that the line names (--file, --structured-file, --mcp-config,
+#   --deliverables-file, --response-file, --tasks-file, --params-file).
+# - Child processes: after most commands valyu asks registry.npmjs.org for a newer version, and
+#   `account topup --open` starts the system browser opener (`open` or `xdg-open`).
+# - What a workflow template holds: `workflows run` without `-m` uses the template's own mode.
+#
+# Not modeled (unmodeled): login, logout, upgrade, open, every `help` subcommand, -h/--help,
+# -v/--version, and the `--version <number>` option of `workflows get|preview|run`, because the
+# top-level -v/--version option takes that flag first and valyu prints its own version.
+
+format  = 1
+version = 1
+name    = "valyu"
+program = "valyu"
+
+[effects]
+network           = "Contacts the Valyu API (and the npm registry for the update check)"
+spend_credits     = "Makes a paid Valyu API call that spends account credits"
+high_cost         = "Asks for a heavy or max deep research mode, the most expensive depths"
+payment           = "Charges the card on file or creates a checkout to add credits (moves money)"
+open_browser      = "Opens a URL in the system browser"
+manage_keys       = "Creates, revokes, or rotates an API key (credentials); a new secret is printed"
+share_public      = "Toggles public access to a research report; it can make the report public"
+delete_data       = "Deletes a research task or a workflow, which cannot be undone"
+cancel_task       = "Cancels a running research task or batch"
+steer_task        = "Changes what a running research task does (a follow-up instruction or a checkpoint answer)"
+change_workflow   = "Creates or updates an organisation workflow template"
+upload_file       = "Reads a local file (or stdin) that the line names and sends its content to Valyu"
+expose_mcp        = "Gives the Valyu research agent the MCP servers, and their tokens, from a local file"
+notify_external   = "Asks Valyu to send the result to a webhook URL or an email address"
+skip_prompt       = "Skips the confirmation prompt"
+other_account     = "Uses an API key or a profile that the line names, not the default credentials"
+option_like_value = "A word can mean something else to valyu: a value or operand that looks like an option, or a bare --summary"
+
+[global]
+options.api_key = { flag = "--api-key", value = "required", anywhere = true, adds = ["other_account"] }
+options.profile = { flag = ["-p", "--profile"], value = "required", anywhere = true, adds = ["other_account"] }
+options.json    = { flag = "--json", anywhere = true }
+options.quiet   = { flag = ["-q", "--quiet"], anywhere = true }
+
+# ─── search ────────────────────────────────────────────────────────────────────
+
+[shell.search]
+usage = "valyu [global options] search [options] [<type_or_query>] [<query>]"
+adds  = ["network", "spend_credits"]
+options.limit               = { flag = ["-n", "--limit"], value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account"] }] }
+options.max_price           = { flag = "--max-price", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account"] }] }
+options.relevance_threshold = { flag = "--relevance-threshold", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account"] }] }
+options.search_type         = { flag = "--search-type", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account"] }] }
+options.include_source      = { flag = "--include-source", value = "required", repeated = true, when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account"] }] }
+options.exclude_source      = { flag = "--exclude-source", value = "required", repeated = true, when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account"] }] }
+options.source_bias         = { flag = "--source-bias", value = "required", repeated = true, when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account"] }] }
+options.instructions        = { flag = "--instructions", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account"] }] }
+options.response_length     = { flag = ["-l", "--response-length"], value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account"] }] }
+options.start_date          = { flag = "--start-date", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account"] }] }
+options.end_date            = { flag = "--end-date", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account"] }] }
+options.country             = { flag = "--country", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account"] }] }
+options.fast_mode           = { flag = "--fast-mode" }
+options.url_only            = { flag = "--url-only" }
+options.no_tool_call        = { flag = "--no-tool-call" }
+operands.type_or_query      = { like = "-*", adds = ["option_like_value"] }
+operands.query              = { like = "-*", adds = ["option_like_value"] }
+
+# ─── answer ────────────────────────────────────────────────────────────────────
+
+[shell.answer]
+usage = "valyu [global options] answer [options] [<query>]"
+adds  = ["network", "spend_credits"]
+options.fast                = { flag = "--fast" }
+options.system_instructions = { flag = "--system-instructions", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "upload_file"] }] }
+options.structured          = { flag = "--structured", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "upload_file"] }] }
+options.structured_file     = { flag = "--structured-file", value = "required", adds = ["upload_file"], when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "upload_file"] }] }
+options.search_type         = { flag = "--search-type", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "upload_file"] }] }
+options.include_source      = { flag = "--include-source", value = "required", repeated = true, when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "upload_file"] }] }
+options.exclude_source      = { flag = "--exclude-source", value = "required", repeated = true, when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "upload_file"] }] }
+options.source_bias         = { flag = "--source-bias", value = "required", repeated = true, when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "upload_file"] }] }
+options.country             = { flag = "--country", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "upload_file"] }] }
+options.start_date          = { flag = "--start-date", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "upload_file"] }] }
+options.end_date            = { flag = "--end-date", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "upload_file"] }] }
+options.data_max_price      = { flag = "--data-max-price", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "upload_file"] }] }
+operands.query              = { like = "-*", adds = ["option_like_value"] }
+
+# ─── contents ──────────────────────────────────────────────────────────────────
+
+# `-s, --summary [instructions]`: commander takes the next word as the value when it does not
+# start with `-`. The grammar reads a bare `--summary` as "" and the next word as a URL, so a bare
+# `--summary` adds `option_like_value`. `-s<text>` and `--summary=<text>` do not.
+[shell.contents]
+usage = "valyu [global options] contents [options] [<urls>...]"
+adds  = ["network", "spend_credits"]
+options.summary           = { flag = ["-s", "--summary"], value = "optional", when = [{ like = "", adds = ["option_like_value"] }] }
+options.length            = { flag = ["-l", "--length"], value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "upload_file", "notify_external"] }] }
+options.structured        = { flag = "--structured", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "upload_file", "notify_external"] }] }
+options.structured_file   = { flag = "--structured-file", value = "required", adds = ["upload_file"], when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "upload_file", "notify_external"] }] }
+options.extract_effort    = { flag = "--extract-effort", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "upload_file", "notify_external"] }] }
+options.screenshot        = { flag = "--screenshot" }
+options.async             = { flag = "--async" }
+options.webhook_url       = { flag = "--webhook-url", value = "required", adds = ["notify_external"], when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "upload_file", "notify_external"] }] }
+options.max_price_dollars = { flag = "--max-price-dollars", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "upload_file", "notify_external"] }] }
+options.watch             = { flag = ["-w", "--watch"] }
+operands.urls             = { like = "-*", adds = ["option_like_value"] }
+
+[shell.contents_jobs]
+usage = "valyu [global options] contents jobs [options] <job_id>"
+adds  = ["network"]
+options.watch   = { flag = ["-w", "--watch"] }
+operands.job_id = { like = "-*", adds = ["option_like_value"] }
+
+# ─── deepresearch ──────────────────────────────────────────────────────────────
+
+[shell.deepresearch_create]
+usage = "valyu [global options] deepresearch create [options] <query>"
+adds  = ["network", "spend_credits"]
+options.mode              = { flag = ["-m", "--mode"], value = "required", when = [{ like = ["heavy", "max"], adds = ["high_cost"] }, { like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "high_cost", "upload_file", "expose_mcp", "notify_external"] }] }
+options.watch             = { flag = ["-w", "--watch"] }
+options.research_strategy = { flag = "--research-strategy", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "high_cost", "upload_file", "expose_mcp", "notify_external"] }] }
+options.report_format     = { flag = "--report-format", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "high_cost", "upload_file", "expose_mcp", "notify_external"] }] }
+options.no_pdf            = { flag = "--no-pdf" }
+options.output_format     = { flag = "--output-format", value = "required", repeated = true, when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "high_cost", "upload_file", "expose_mcp", "notify_external"] }] }
+options.structured        = { flag = "--structured", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "high_cost", "upload_file", "expose_mcp", "notify_external"] }] }
+options.structured_file   = { flag = "--structured-file", value = "required", adds = ["upload_file"], when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "high_cost", "upload_file", "expose_mcp", "notify_external"] }] }
+options.url               = { flag = "--url", value = "required", repeated = true, when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "high_cost", "upload_file", "expose_mcp", "notify_external"] }] }
+options.file              = { flag = "--file", value = "required", repeated = true, adds = ["upload_file"], when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "high_cost", "upload_file", "expose_mcp", "notify_external"] }] }
+options.file_context      = { flag = "--file-context", value = "required", repeated = true, when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "high_cost", "upload_file", "expose_mcp", "notify_external"] }] }
+options.previous_report   = { flag = "--previous-report", value = "required", repeated = true, when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "high_cost", "upload_file", "expose_mcp", "notify_external"] }] }
+options.search_type       = { flag = "--search-type", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "high_cost", "upload_file", "expose_mcp", "notify_external"] }] }
+options.include_source    = { flag = "--include-source", value = "required", repeated = true, when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "high_cost", "upload_file", "expose_mcp", "notify_external"] }] }
+options.exclude_source    = { flag = "--exclude-source", value = "required", repeated = true, when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "high_cost", "upload_file", "expose_mcp", "notify_external"] }] }
+options.source_bias       = { flag = "--source-bias", value = "required", repeated = true, when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "high_cost", "upload_file", "expose_mcp", "notify_external"] }] }
+options.country           = { flag = "--country", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "high_cost", "upload_file", "expose_mcp", "notify_external"] }] }
+options.start_date        = { flag = "--start-date", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "high_cost", "upload_file", "expose_mcp", "notify_external"] }] }
+options.end_date          = { flag = "--end-date", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "high_cost", "upload_file", "expose_mcp", "notify_external"] }] }
+options.code_execution    = { flag = "--code-execution" }
+options.screenshots       = { flag = "--screenshots" }
+options.browser_use       = { flag = "--browser-use" }
+options.mcp_config        = { flag = "--mcp-config", value = "required", adds = ["upload_file", "expose_mcp"], when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "high_cost", "upload_file", "expose_mcp", "notify_external"] }] }
+options.deliverable       = { flag = "--deliverable", value = "required", repeated = true, when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "high_cost", "upload_file", "expose_mcp", "notify_external"] }] }
+options.deliverables_file = { flag = "--deliverables-file", value = "required", adds = ["upload_file"], when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "high_cost", "upload_file", "expose_mcp", "notify_external"] }] }
+options.webhook_url       = { flag = "--webhook-url", value = "required", adds = ["notify_external"], when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "high_cost", "upload_file", "expose_mcp", "notify_external"] }] }
+options.alert_email       = { flag = "--alert-email", value = "required", adds = ["notify_external"], when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "high_cost", "upload_file", "expose_mcp", "notify_external"] }] }
+options.alert_email_url   = { flag = "--alert-email-url", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "high_cost", "upload_file", "expose_mcp", "notify_external"] }] }
+options.metadata          = { flag = "--metadata", value = "required", repeated = true, when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "high_cost", "upload_file", "expose_mcp", "notify_external"] }] }
+options.hitl              = { flag = "--hitl", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "high_cost", "upload_file", "expose_mcp", "notify_external"] }] }
+operands.query            = { like = "-*", adds = ["option_like_value"] }
+
+[shell.deepresearch_list]
+usage = "valyu [global options] deepresearch list [options]"
+adds  = ["network"]
+options.limit = { flag = ["-n", "--limit"], value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account"] }] }
+
+[shell.deepresearch_status]
+usage = "valyu [global options] deepresearch status <id>"
+adds  = ["network"]
+operands.id = { like = "-*", adds = ["option_like_value"] }
+
+[shell.deepresearch_watch]
+usage = "valyu [global options] deepresearch watch [<id>]"
+adds  = ["network"]
+operands.id = { like = "-*", adds = ["option_like_value"] }
+
+[shell.deepresearch_cancel]
+usage = "valyu [global options] deepresearch cancel <id>"
+adds  = ["network", "cancel_task"]
+operands.id = { like = "-*", adds = ["option_like_value"] }
+
+# `<instruction>` may be `-`, which valyu reads as "take the instruction from stdin".
+[shell.deepresearch_update]
+usage = "valyu [global options] deepresearch update <id> <instruction>"
+adds  = ["network", "steer_task"]
+operands.id = { like = "-*", adds = ["option_like_value"] }
+
+[shell.deepresearch_respond]
+usage = "valyu [global options] deepresearch respond [options] <id>"
+adds  = ["network", "steer_task"]
+options.interaction_id = { flag = "--interaction-id", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "upload_file"] }] }
+options.response       = { flag = "--response", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "upload_file"] }] }
+options.response_file  = { flag = "--response-file", value = "required", adds = ["upload_file"], when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "upload_file"] }] }
+options.approve        = { flag = "--approve" }
+options.reject         = { flag = "--reject" }
+options.modifications  = { flag = "--modifications", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "upload_file"] }] }
+operands.id            = { like = "-*", adds = ["option_like_value"] }
+
+[shell.deepresearch_delete]
+usage = "valyu [global options] deepresearch delete [options] <id>"
+adds  = ["network", "delete_data"]
+options.yes = { flag = ["-y", "--yes"], adds = ["skip_prompt"] }
+operands.id = { like = "-*", adds = ["option_like_value"] }
+
+[shell.deepresearch_share]
+usage = "valyu [global options] deepresearch share <id>"
+adds  = ["network", "share_public"]
+operands.id = { like = "-*", adds = ["option_like_value"] }
+
+# ─── batch ─────────────────────────────────────────────────────────────────────
+
+# An empty batch is free, but valyu reads queries from stdin when the line gives none, so every
+# `batch create` spends credits here.
+[shell.batch_create]
+usage = "valyu [global options] batch create [options] [<queries>...]"
+adds  = ["network", "spend_credits"]
+options.name            = { flag = "--name", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "high_cost", "upload_file", "expose_mcp", "notify_external"] }] }
+options.mode            = { flag = ["-m", "--mode"], value = "required", when = [{ like = ["heavy", "max"], adds = ["high_cost"] }, { like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "high_cost", "upload_file", "expose_mcp", "notify_external"] }] }
+options.no_pdf          = { flag = "--no-pdf" }
+options.output_format   = { flag = "--output-format", value = "required", repeated = true, when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "high_cost", "upload_file", "expose_mcp", "notify_external"] }] }
+options.search_type     = { flag = "--search-type", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "high_cost", "upload_file", "expose_mcp", "notify_external"] }] }
+options.include_source  = { flag = "--include-source", value = "required", repeated = true, when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "high_cost", "upload_file", "expose_mcp", "notify_external"] }] }
+options.exclude_source  = { flag = "--exclude-source", value = "required", repeated = true, when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "high_cost", "upload_file", "expose_mcp", "notify_external"] }] }
+options.source_bias     = { flag = "--source-bias", value = "required", repeated = true, when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "high_cost", "upload_file", "expose_mcp", "notify_external"] }] }
+options.country         = { flag = "--country", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "high_cost", "upload_file", "expose_mcp", "notify_external"] }] }
+options.start_date      = { flag = "--start-date", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "high_cost", "upload_file", "expose_mcp", "notify_external"] }] }
+options.end_date        = { flag = "--end-date", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "high_cost", "upload_file", "expose_mcp", "notify_external"] }] }
+options.webhook_url     = { flag = "--webhook-url", value = "required", adds = ["notify_external"], when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "high_cost", "upload_file", "expose_mcp", "notify_external"] }] }
+options.alert_email     = { flag = "--alert-email", value = "required", adds = ["notify_external"], when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "high_cost", "upload_file", "expose_mcp", "notify_external"] }] }
+options.alert_email_url = { flag = "--alert-email-url", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "high_cost", "upload_file", "expose_mcp", "notify_external"] }] }
+options.mcp_config      = { flag = "--mcp-config", value = "required", adds = ["upload_file", "expose_mcp"], when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "high_cost", "upload_file", "expose_mcp", "notify_external"] }] }
+options.metadata        = { flag = "--metadata", value = "required", repeated = true, when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "high_cost", "upload_file", "expose_mcp", "notify_external"] }] }
+operands.queries        = { like = "-*", adds = ["option_like_value"] }
+
+[shell.batch_list]
+usage = "valyu [global options] batch list [options]"
+adds  = ["network"]
+options.limit = { flag = ["-n", "--limit"], value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account"] }] }
+
+[shell.batch_status]
+usage = "valyu [global options] batch status <id>"
+adds  = ["network"]
+operands.id = { like = "-*", adds = ["option_like_value"] }
+
+[shell.batch_tasks]
+usage = "valyu [global options] batch tasks [options] <id>"
+adds  = ["network"]
+options.status         = { flag = "--status", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account"] }] }
+options.limit          = { flag = ["-n", "--limit"], value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account"] }] }
+options.last_key       = { flag = "--last-key", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account"] }] }
+options.include_output = { flag = "--include-output" }
+operands.id            = { like = "-*", adds = ["option_like_value"] }
+
+[shell.batch_add]
+usage = "valyu [global options] batch add [options] <id> [<queries>...]"
+adds  = ["network", "spend_credits"]
+options.tasks_file = { flag = "--tasks-file", value = "required", adds = ["upload_file"], when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "upload_file"] }] }
+operands.id        = { like = "-*", adds = ["option_like_value"] }
+operands.queries   = { like = "-*", adds = ["option_like_value"] }
+
+[shell.batch_watch]
+usage = "valyu [global options] batch watch [<id>]"
+adds  = ["network"]
+operands.id = { like = "-*", adds = ["option_like_value"] }
+
+[shell.batch_cancel]
+usage = "valyu [global options] batch cancel <id>"
+adds  = ["network", "cancel_task"]
+operands.id = { like = "-*", adds = ["option_like_value"] }
+
+# ─── workflows ─────────────────────────────────────────────────────────────────
+
+[shell.workflows_list]
+usage = "valyu [global options] workflows list [options]"
+adds  = ["network"]
+options.vertical = { flag = "--vertical", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account"] }] }
+options.scope    = { flag = "--scope", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account"] }] }
+options.search   = { flag = "--search", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account"] }] }
+options.tag      = { flag = "--tag", value = "required", repeated = true, when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account"] }] }
+options.limit    = { flag = ["-n", "--limit"], value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account"] }] }
+options.expand   = { flag = "--expand" }
+
+[shell.workflows_get]
+usage = "valyu [global options] workflows get <slug>"
+adds  = ["network"]
+operands.slug = { like = "-*", adds = ["option_like_value"] }
+
+[shell.workflows_versions]
+usage = "valyu [global options] workflows versions <slug>"
+adds  = ["network"]
+operands.slug = { like = "-*", adds = ["option_like_value"] }
+
+# `preview` resolves a template and spends no credits (help: "without running it (no credits)").
+[shell.workflows_preview]
+usage = "valyu [global options] workflows preview [options] <slug>"
+adds  = ["network"]
+options.param       = { flag = ["-P", "--param"], value = "required", repeated = true, when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "upload_file"] }] }
+options.params_file = { flag = "--params-file", value = "required", adds = ["upload_file"], when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "upload_file"] }] }
+operands.slug       = { like = "-*", adds = ["option_like_value"] }
+
+# Without `-m`, valyu sends no mode and the template's recommended mode runs, which can be heavy or
+# max. `-m fast` does not remove `high_cost`: a remove always wins, and a top-level option inside a
+# value can hide a second `-m max` that valyu keeps (see AUTHOR_NOTES).
+[shell.workflows_run]
+usage = "valyu [global options] workflows run [options] <slug>"
+adds  = ["network", "spend_credits", "high_cost"]
+options.param           = { flag = ["-P", "--param"], value = "required", repeated = true, when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "high_cost", "upload_file", "notify_external"] }] }
+options.params_file     = { flag = "--params-file", value = "required", adds = ["upload_file"], when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "high_cost", "upload_file", "notify_external"] }] }
+options.mode            = { flag = ["-m", "--mode"], value = "required", when = [{ like = ["heavy", "max"], adds = ["high_cost"] }, { like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "high_cost", "upload_file", "notify_external"] }] }
+options.watch           = { flag = ["-w", "--watch"] }
+options.webhook_url     = { flag = "--webhook-url", value = "required", adds = ["notify_external"], when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "high_cost", "upload_file", "notify_external"] }] }
+options.alert_email     = { flag = "--alert-email", value = "required", adds = ["notify_external"], when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "high_cost", "upload_file", "notify_external"] }] }
+options.alert_email_url = { flag = "--alert-email-url", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "high_cost", "upload_file", "notify_external"] }] }
+operands.slug           = { like = "-*", adds = ["option_like_value"] }
+
+[shell.workflows_create]
+usage = "valyu [global options] workflows create [options]"
+adds  = ["network", "change_workflow"]
+options.file = { flag = "--file", value = "required", adds = ["upload_file"], when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "upload_file"] }] }
+
+[shell.workflows_update]
+usage = "valyu [global options] workflows update [options] <slug>"
+adds  = ["network", "change_workflow"]
+options.file  = { flag = "--file", value = "required", adds = ["upload_file"], when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "upload_file"] }] }
+operands.slug = { like = "-*", adds = ["option_like_value"] }
+
+[shell.workflows_delete]
+usage = "valyu [global options] workflows delete [options] <slug>"
+adds  = ["network", "delete_data"]
+options.yes   = { flag = ["-y", "--yes"], adds = ["skip_prompt"] }
+operands.slug = { like = "-*", adds = ["option_like_value"] }
+
+# ─── sources ───────────────────────────────────────────────────────────────────
+
+# `sources` alone runs `sources list` (`isDefault`).
+[shell.sources_list]
+usage   = "valyu [global options] sources list [options]"
+aliases = ["sources"]
+adds    = ["network"]
+options.category = { flag = ["-c", "--category"], value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account"] }] }
+
+[shell.sources_categories]
+usage = "valyu [global options] sources categories"
+adds  = ["network"]
+
+# ─── account ───────────────────────────────────────────────────────────────────
+
+[shell.account_whoami]
+usage = "valyu [global options] account whoami"
+adds  = ["network"]
+
+[shell.account_balance]
+usage = "valyu [global options] account balance"
+adds  = ["network"]
+
+[shell.account_datasets]
+usage = "valyu [global options] account datasets"
+adds  = ["network"]
+
+# `account keys` alone runs `account keys list` (`isDefault`).
+[shell.account_keys_list]
+usage   = "valyu [global options] account keys list"
+aliases = ["account keys"]
+adds    = ["network"]
+
+[shell.account_keys_create]
+usage = "valyu [global options] account keys create [options]"
+adds  = ["network", "manage_keys"]
+options.name       = { flag = "--name", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account"] }] }
+options.cap        = { flag = "--cap", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account"] }] }
+options.window     = { flag = "--window", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account"] }] }
+options.scopes     = { flag = "--scopes", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account"] }] }
+options.type       = { flag = "--type", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account"] }] }
+options.rate_limit = { flag = "--rate-limit", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account"] }] }
+options.expires    = { flag = "--expires", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account"] }] }
+
+[shell.account_keys_revoke]
+usage = "valyu [global options] account keys revoke <id>"
+adds  = ["network", "manage_keys"]
+operands.id = { like = "-*", adds = ["option_like_value"] }
+
+[shell.account_keys_rotate]
+usage = "valyu [global options] account keys rotate <id>"
+adds  = ["network", "manage_keys"]
+operands.id = { like = "-*", adds = ["option_like_value"] }
+
+[shell.account_topup]
+usage = "valyu [global options] account topup [options] <amount>"
+adds  = ["network", "payment"]
+options.open    = { flag = "--open", adds = ["open_browser"] }
+options.yes     = { flag = ["-y", "--yes"], adds = ["skip_prompt"] }
+operands.amount = { like = "-*", adds = ["option_like_value"] }
+
+# ─── local status ──────────────────────────────────────────────────────────────
+
+[shell.whoami]
+usage = "valyu [global options] whoami"
+adds  = ["network"]
+
+[shell.doctor]
+usage = "valyu [global options] doctor"
+adds  = ["network"]

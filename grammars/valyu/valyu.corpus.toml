@@ -1,0 +1,1181 @@
+# Golden cases for valyu.grammar.toml (Valyu CLI 1.3.2, valyuAI/valyu-cli tag v1.3.2).
+#
+# Each expectation comes from the `--help` text of valyu 1.3.2 (named per group) and from the source
+# at the tag: src/cli.ts, src/commands/**, and commander 14.0.3 `Command.parseOptions`.
+# `fields` lists only fields that do not hold their default.
+
+# ─── search (help: valyu search --help; src/commands/search/index.ts) ──────────
+
+# The documented first example: one operand is the query, type web
+[[case]]
+argv = ["valyu", "search", "AI agent infrastructure"]
+action = "search"
+fields = { type_or_query = "AI agent infrastructure" }
+effects = ["network", "spend_credits"]
+
+# A type then a query, and `-n 20` after the operands (help example)
+[[case]]
+argv = ["valyu", "search", "paper", "transformer attention mechanisms", "-n", "20"]
+action = "search"
+fields = { type_or_query = "paper", query = "transformer attention mechanisms", limit = "20" }
+effects = ["network", "spend_credits"]
+
+# Short flag with an attached value: commander reads `-n5` as `-n 5`
+[[case]]
+argv = ["valyu", "search", "-n5", "q"]
+action = "search"
+fields = { limit = "5", type_or_query = "q" }
+effects = ["network", "spend_credits"]
+
+# `--flag=value` and `--flag value`; `--include-source` is repeatable (`collect`), so both values stay
+[[case]]
+argv = ["valyu", "search", "climate", "--start-date=2024-01-01", "--end-date", "2024-12-31", "--include-source", "arxiv.org", "--include-source=valyu/valyu-pubmed"]
+action = "search"
+fields = { type_or_query = "climate", start_date = "2024-01-01", end_date = "2024-12-31", include_source = ["arxiv.org", "valyu/valyu-pubmed"] }
+effects = ["network", "spend_credits"]
+
+# `--source-bias reddit.com=-4`: the value holds a `-` but does not start with one (help example)
+[[case]]
+argv = ["valyu", "search", "quantum error correction", "--source-bias", "arxiv.org=5", "--source-bias", "reddit.com=-4"]
+action = "search"
+fields = { type_or_query = "quantum error correction", source_bias = ["arxiv.org=5", "reddit.com=-4"] }
+effects = ["network", "spend_credits"]
+
+# The cost knobs are fields: --max-price, -l, and the flags --fast-mode, --url-only, --no-tool-call
+[[case]]
+argv = ["valyu", "search", "news", "chips", "--max-price", "30", "-l", "short", "--fast-mode", "--url-only", "--no-tool-call", "--country", "US"]
+action = "search"
+fields = { type_or_query = "news", query = "chips", max_price = "30", response_length = "short", fast_mode = true, url_only = true, no_tool_call = true, country = "US" }
+effects = ["network", "spend_credits"]
+
+# The remaining search options
+[[case]]
+argv = ["valyu", "search", "q", "--relevance-threshold", "0.7", "--search-type", "proprietary", "--exclude-source", "reddit.com", "--instructions", "prefer primary sources", "--response-length", "max"]
+action = "search"
+fields = { type_or_query = "q", relevance_threshold = "0.7", search_type = "proprietary", exclude_source = ["reddit.com"], instructions = "prefer primary sources", response_length = "max" }
+effects = ["network", "spend_credits"]
+
+# No query: valyu reads it from stdin, which the grammar cannot see
+[[case]]
+argv = ["valyu", "search"]
+action = "search"
+effects = ["network", "spend_credits"]
+
+# Global options before the command word, and `anywhere` after it (commander reads top-level options
+# anywhere): `--json` and `-q` change only the output
+[[case]]
+argv = ["valyu", "--json", "search", "q", "-q"]
+action = "search"
+fields = { json = true, quiet = true, type_or_query = "q" }
+effects = ["network", "spend_credits"]
+
+# A short cluster across levels: `-qn 5` is the top-level `-q` and search `-n 5`
+[[case]]
+argv = ["valyu", "search", "-qn", "5", "q"]
+action = "search"
+fields = { quiet = true, limit = "5", type_or_query = "q" }
+effects = ["network", "spend_credits"]
+
+# `-p`/`--profile` and `--api-key` pick other credentials (help: "overrides VALYU_PROFILE",
+# "overrides env/config")
+[[case]]
+argv = ["valyu", "-p", "work", "search", "q"]
+action = "search"
+fields = { profile = "work", type_or_query = "q" }
+effects = ["network", "spend_credits", "other_account"]
+
+[[case]]
+argv = ["valyu", "search", "q", "--api-key=val_test", "--profile", "ci"]
+action = "search"
+fields = { api_key = "val_test", profile = "ci", type_or_query = "q" }
+effects = ["network", "spend_credits", "other_account"]
+
+# A global option given twice is unmodeled (it is not repeatable)
+[[case]]
+argv = ["valyu", "-p", "a", "search", "q", "-p", "b"]
+action = "unmodeled"
+
+# A value that starts with `-p`: commander's top level takes `-p` as the profile option (here valyu
+# then errors, because --include-source has no value left). The worst case is another account.
+[[case]]
+argv = ["valyu", "search", "q", "--include-source", "-p"]
+action = "search"
+fields = { type_or_query = "q", include_source = ["-p"] }
+effects = ["network", "spend_credits", "option_like_value", "other_account"]
+
+# A value that starts with `--`
+[[case]]
+argv = ["valyu", "search", "q", "--instructions", "--json"]
+action = "search"
+fields = { type_or_query = "q", instructions = "--json" }
+effects = ["network", "spend_credits", "option_like_value", "other_account"]
+
+# A word after `--` is an operand, for valyu too (commander's leaf does not parse operands again).
+# An operand that starts with `-` adds `option_like_value` as a warning only.
+[[case]]
+argv = ["valyu", "search", "--", "--fast-mode", "q"]
+action = "search"
+fields = { type_or_query = "--fast-mode", query = "q" }
+effects = ["network", "spend_credits", "option_like_value"]
+
+# Three operands: search takes at most two (commander 14 refuses excess arguments)
+[[case]]
+argv = ["valyu", "search", "paper", "a", "b"]
+action = "unmodeled"
+
+# A prefix of a long flag is not accepted (commander matches full spellings only)
+[[case]]
+argv = ["valyu", "search", "q", "--max-pri", "5"]
+action = "unmodeled"
+
+# A repeated non-repeatable value option is unmodeled
+[[case]]
+argv = ["valyu", "search", "q", "-n", "5", "-n", "6"]
+action = "unmodeled"
+
+# `--tool-call` is not defined; only `--no-tool-call` is
+[[case]]
+argv = ["valyu", "search", "q", "--tool-call"]
+action = "unmodeled"
+
+# Help and version are not modeled
+[[case]]
+argv = ["valyu", "search", "--help"]
+action = "unmodeled"
+
+[[case]]
+argv = ["valyu", "search", "q", "-v"]
+action = "unmodeled"
+
+[[case]]
+argv = ["valyu", "--version"]
+action = "unmodeled"
+
+# `--` before the command words: no action is spelled
+[[case]]
+argv = ["valyu", "--", "search", "q"]
+action = "unmodeled"
+
+# Command words are case sensitive
+[[case]]
+argv = ["valyu", "Search", "q"]
+action = "unmodeled"
+
+# ─── answer (help: valyu answer --help; src/commands/answer/index.ts) ──────────
+
+[[case]]
+argv = ["valyu", "answer", "Current Bitcoin price and market trends", "--fast"]
+action = "answer"
+fields = { query = "Current Bitcoin price and market trends", fast = true }
+effects = ["network", "spend_credits"]
+
+# --structured-file reads a local JSON schema and sends it
+[[case]]
+argv = ["valyu", "answer", "Top 5 EVs by range and price", "--structured-file", "schema.json"]
+action = "answer"
+fields = { query = "Top 5 EVs by range and price", structured_file = "schema.json" }
+effects = ["network", "spend_credits", "upload_file"]
+
+# The cost cap and the other answer options
+[[case]]
+argv = ["valyu", "answer", "--data-max-price=0.5", "--system-instructions", "You are a regulatory analyst.", "--structured", "{\"a\":\"string\"}", "--search-type", "web", "--include-source", "sec.gov", "--exclude-source", "x.com", "--source-bias", "sec.gov=3", "--country", "GB", "--start-date", "2024-01-01", "--end-date", "2024-06-30", "SEC actions"]
+action = "answer"
+fields = { data_max_price = "0.5", system_instructions = "You are a regulatory analyst.", structured = "{\"a\":\"string\"}", search_type = "web", include_source = ["sec.gov"], exclude_source = ["x.com"], source_bias = ["sec.gov=3"], country = "GB", start_date = "2024-01-01", end_date = "2024-06-30", query = "SEC actions" }
+effects = ["network", "spend_credits"]
+
+# `answer -- --fast`: commander drops the `--`, so answer reads `--fast` as a flag and the query
+# from stdin
+[[case]]
+argv = ["valyu", "answer", "--", "--fast"]
+action = "answer"
+fields = { query = "--fast" }
+effects = ["network", "spend_credits", "option_like_value"]
+
+# answer has no `-n`
+[[case]]
+argv = ["valyu", "answer", "q", "-n", "3"]
+action = "unmodeled"
+
+[[case]]
+argv = ["valyu", "answer", "a", "b"]
+action = "unmodeled"
+
+# ─── contents (help: valyu contents --help; src/commands/contents/*.ts) ───────
+
+[[case]]
+argv = ["valyu", "contents", "https://techcrunch.com/article"]
+action = "contents"
+fields = { urls = ["https://techcrunch.com/article"] }
+effects = ["network", "spend_credits"]
+
+# A bare `--summary` at the end of the line (help example). A bare `--summary` takes the next word
+# in valyu when one follows, so it always adds `option_like_value`.
+[[case]]
+argv = ["valyu", "contents", "https://example.com", "--summary"]
+action = "contents"
+fields = { urls = ["https://example.com"], summary = "" }
+effects = ["network", "spend_credits", "option_like_value"]
+
+# `--summary=<instructions>` and the attached `-s<instructions>`
+[[case]]
+argv = ["valyu", "contents", "https://paper.com", "--summary=Key findings"]
+action = "contents"
+fields = { urls = ["https://paper.com"], summary = "Key findings" }
+effects = ["network", "spend_credits"]
+
+[[case]]
+argv = ["valyu", "contents", "-sbullets", "https://paper.com"]
+action = "contents"
+fields = { urls = ["https://paper.com"], summary = "bullets" }
+effects = ["network", "spend_credits"]
+
+# Several URLs, a webhook, --async and -w; the webhook sends the result to a third party
+[[case]]
+argv = ["valyu", "contents", "https://a.com", "https://b.com", "--async", "-w", "--webhook-url", "https://app.com/hook"]
+action = "contents"
+fields = { urls = ["https://a.com", "https://b.com"], async = true, watch = true, webhook_url = "https://app.com/hook" }
+effects = ["network", "spend_credits", "notify_external"]
+
+# --structured-file, --extract-effort, --screenshot, -l, and the dollar cap
+[[case]]
+argv = ["valyu", "contents", "https://dashboard.app", "--extract-effort", "high", "--screenshot", "-l", "large", "--max-price-dollars", "2", "--structured-file", "s.json"]
+action = "contents"
+fields = { urls = ["https://dashboard.app"], extract_effort = "high", screenshot = true, length = "large", max_price_dollars = "2", structured_file = "s.json" }
+effects = ["network", "spend_credits", "upload_file"]
+
+[[case]]
+argv = ["valyu", "contents", "https://product.com", "--structured", "{\"name\":\"string\"}", "--length=max"]
+action = "contents"
+fields = { urls = ["https://product.com"], structured = "{\"name\":\"string\"}", length = "max" }
+effects = ["network", "spend_credits"]
+
+# After `--`, valyu reads --webhook-url as a URL and refuses it; the operand adds only the warning
+[[case]]
+argv = ["valyu", "contents", "--", "--webhook-url", "https://evil.example", "https://a.com"]
+action = "contents"
+fields = { urls = ["--webhook-url", "https://evil.example", "https://a.com"] }
+effects = ["network", "spend_credits", "option_like_value"]
+
+# contents has `-s` but no `-S`; and no `--summarize`
+[[case]]
+argv = ["valyu", "contents", "https://a.com", "--summarize"]
+action = "unmodeled"
+
+[[case]]
+argv = ["valyu", "contents", "-x", "https://a.com"]
+action = "unmodeled"
+
+# `contents jobs <job_id>`: the longest spelling wins, so `jobs` is the subcommand, not a URL
+[[case]]
+argv = ["valyu", "contents", "jobs", "cj_abc123", "--watch"]
+action = "contents_jobs"
+fields = { job_id = "cj_abc123", watch = true }
+effects = ["network"]
+
+[[case]]
+argv = ["valyu", "contents", "jobs", "cj_abc123", "--json"]
+action = "contents_jobs"
+fields = { job_id = "cj_abc123", json = true }
+effects = ["network"]
+
+# jobs takes exactly one job id
+[[case]]
+argv = ["valyu", "contents", "jobs"]
+action = "unmodeled"
+
+[[case]]
+argv = ["valyu", "contents", "jobs", "a", "b"]
+action = "unmodeled"
+
+# ─── deepresearch (help: valyu deepresearch <cmd> --help; src/commands/deepresearch/index.ts) ─
+
+[[case]]
+argv = ["valyu", "deepresearch", "create", "Global AI infrastructure investment trends", "--watch"]
+action = "deepresearch_create"
+fields = { query = "Global AI infrastructure investment trends", watch = true }
+effects = ["network", "spend_credits"]
+
+# Mode `heavy` or `max` adds high_cost; the CLI compares the mode exactly (MODES.includes)
+[[case]]
+argv = ["valyu", "deepresearch", "create", "DD brief", "--mode", "heavy"]
+action = "deepresearch_create"
+fields = { query = "DD brief", mode = "heavy" }
+effects = ["network", "spend_credits", "high_cost"]
+
+[[case]]
+argv = ["valyu", "deepresearch", "create", "-m", "max", "q"]
+action = "deepresearch_create"
+fields = { query = "q", mode = "max" }
+effects = ["network", "spend_credits", "high_cost"]
+
+# `-wm fast`: the cluster is `-w` and `-m fast`
+[[case]]
+argv = ["valyu", "deepresearch", "create", "-wm", "fast", "q"]
+action = "deepresearch_create"
+fields = { query = "q", watch = true, mode = "fast" }
+effects = ["network", "spend_credits"]
+
+# `-mmax`: the attached value
+[[case]]
+argv = ["valyu", "deepresearch", "create", "-mmax", "q"]
+action = "deepresearch_create"
+fields = { query = "q", mode = "max" }
+effects = ["network", "spend_credits", "high_cost"]
+
+# Mode `instant` is cheap; the value `Heavy` is not a mode (the CLI refuses it) and adds nothing
+[[case]]
+argv = ["valyu", "deepresearch", "create", "q", "--mode=Heavy"]
+action = "deepresearch_create"
+fields = { query = "q", mode = "Heavy" }
+effects = ["network", "spend_credits"]
+
+# --file attaches a local file (base64 upload); --file-context, --url and --previous-report repeat
+[[case]]
+argv = ["valyu", "deepresearch", "create", "q", "--file", "a.pdf", "--file-context", "the 10-K", "--file", "b.csv", "--url", "https://x.com", "--url", "https://y.com", "--previous-report", "dr_1"]
+action = "deepresearch_create"
+fields = { query = "q", file = ["a.pdf", "b.csv"], file_context = ["the 10-K"], url = ["https://x.com", "https://y.com"], previous_report = ["dr_1"] }
+effects = ["network", "spend_credits", "upload_file"]
+
+# --mcp-config gives Valyu the MCP servers and tokens from a file
+[[case]]
+argv = ["valyu", "deepresearch", "create", "q", "--mcp-config", "mcp.json", "--browser-use", "--code-execution", "--screenshots"]
+action = "deepresearch_create"
+fields = { query = "q", mcp_config = "mcp.json", browser_use = true, code_execution = true, screenshots = true }
+effects = ["network", "spend_credits", "upload_file", "expose_mcp"]
+
+# Notifications: --webhook-url and --alert-email
+[[case]]
+argv = ["valyu", "deepresearch", "create", "q", "--webhook-url=https://app.com/hook", "--alert-email", "me@example.com", "--alert-email-url", "https://app.com/r/{id}"]
+action = "deepresearch_create"
+fields = { query = "q", webhook_url = "https://app.com/hook", alert_email = "me@example.com", alert_email_url = "https://app.com/r/{id}" }
+effects = ["network", "spend_credits", "notify_external"]
+
+# Output, steering, deliverables, metadata, HITL, and search scope options
+[[case]]
+argv = ["valyu", "deepresearch", "create", "q", "--no-pdf", "--output-format", "markdown", "--output-format", "toon", "--research-strategy", "s", "--report-format", "r", "--structured", "{}", "--deliverable", "d1", "--metadata", "k=v", "--hitl", "plan-review,source-review", "--search-type", "web", "--include-source", "a", "--exclude-source", "b", "--source-bias", "a=2", "--country", "US", "--start-date", "2024-01-01", "--end-date", "2024-02-01"]
+action = "deepresearch_create"
+fields = { query = "q", no_pdf = true, output_format = ["markdown", "toon"], research_strategy = "s", report_format = "r", structured = "{}", deliverable = ["d1"], metadata = ["k=v"], hitl = "plan-review,source-review", search_type = "web", include_source = ["a"], exclude_source = ["b"], source_bias = ["a=2"], country = "US", start_date = "2024-01-01", end_date = "2024-02-01" }
+effects = ["network", "spend_credits"]
+
+[[case]]
+argv = ["valyu", "deepresearch", "create", "q", "--structured-file", "s.json", "--deliverables-file", "d.json"]
+action = "deepresearch_create"
+fields = { query = "q", structured_file = "s.json", deliverables_file = "d.json" }
+effects = ["network", "spend_credits", "upload_file"]
+
+# A value that looks like a top-level option, and the cost effect at the same time
+[[case]]
+argv = ["valyu", "deepresearch", "create", "q", "-m", "heavy", "--research-strategy", "-pprod"]
+action = "deepresearch_create"
+fields = { query = "q", mode = "heavy", research_strategy = "-pprod" }
+effects = ["network", "spend_credits", "high_cost", "option_like_value", "other_account", "upload_file", "expose_mcp", "notify_external"]
+
+# create needs exactly one query; `--pdf` is not defined (only --no-pdf); -m twice is unmodeled
+[[case]]
+argv = ["valyu", "deepresearch", "create"]
+action = "unmodeled"
+
+[[case]]
+argv = ["valyu", "deepresearch", "create", "q", "--pdf"]
+action = "unmodeled"
+
+[[case]]
+argv = ["valyu", "deepresearch", "create", "q", "-m", "fast", "-m", "max"]
+action = "unmodeled"
+
+[[case]]
+argv = ["valyu", "deepresearch", "list"]
+action = "deepresearch_list"
+effects = ["network"]
+
+[[case]]
+argv = ["valyu", "deepresearch", "list", "-n", "5", "--json"]
+action = "deepresearch_list"
+fields = { limit = "5", json = true }
+effects = ["network"]
+
+[[case]]
+argv = ["valyu", "deepresearch", "list", "extra"]
+action = "unmodeled"
+
+[[case]]
+argv = ["valyu", "deepresearch", "status", "dr_123"]
+action = "deepresearch_status"
+fields = { id = "dr_123" }
+effects = ["network"]
+
+# watch: the id is optional (omit to watch the latest task)
+[[case]]
+argv = ["valyu", "deepresearch", "watch"]
+action = "deepresearch_watch"
+effects = ["network"]
+
+[[case]]
+argv = ["valyu", "deepresearch", "watch", "dr_123"]
+action = "deepresearch_watch"
+fields = { id = "dr_123" }
+effects = ["network"]
+
+[[case]]
+argv = ["valyu", "deepresearch", "cancel", "dr_123"]
+action = "deepresearch_cancel"
+fields = { id = "dr_123" }
+effects = ["network", "cancel_task"]
+
+# update: `-` as the instruction means stdin; it is an operand, not an option
+[[case]]
+argv = ["valyu", "deepresearch", "update", "dr_123", "Also cover regulatory risks"]
+action = "deepresearch_update"
+fields = { id = "dr_123", instruction = "Also cover regulatory risks" }
+effects = ["network", "steer_task"]
+
+[[case]]
+argv = ["valyu", "deepresearch", "update", "dr_123", "-"]
+action = "deepresearch_update"
+fields = { id = "dr_123", instruction = "-" }
+effects = ["network", "steer_task"]
+
+[[case]]
+argv = ["valyu", "deepresearch", "update", "dr_123"]
+action = "unmodeled"
+
+[[case]]
+argv = ["valyu", "deepresearch", "respond", "dr_123", "--approve"]
+action = "deepresearch_respond"
+fields = { id = "dr_123", approve = true }
+effects = ["network", "steer_task"]
+
+[[case]]
+argv = ["valyu", "deepresearch", "respond", "dr_123", "--reject", "--modifications", "Focus more on EU regulators", "--interaction-id", "int_1"]
+action = "deepresearch_respond"
+fields = { id = "dr_123", reject = true, modifications = "Focus more on EU regulators", interaction_id = "int_1" }
+effects = ["network", "steer_task"]
+
+# --response-file reads a local file; `--response -` reads stdin
+[[case]]
+argv = ["valyu", "deepresearch", "respond", "dr_123", "--response-file", "response.json"]
+action = "deepresearch_respond"
+fields = { id = "dr_123", response_file = "response.json" }
+effects = ["network", "steer_task", "upload_file"]
+
+[[case]]
+argv = ["valyu", "deepresearch", "respond", "dr_123", "--response", "-"]
+action = "deepresearch_respond"
+fields = { id = "dr_123", response = "-" }
+effects = ["network", "steer_task"]
+
+# delete: -y skips the prompt
+[[case]]
+argv = ["valyu", "deepresearch", "delete", "dr_123"]
+action = "deepresearch_delete"
+fields = { id = "dr_123" }
+effects = ["network", "delete_data"]
+
+[[case]]
+argv = ["valyu", "deepresearch", "delete", "-y", "dr_123"]
+action = "deepresearch_delete"
+fields = { id = "dr_123", yes = true }
+effects = ["network", "delete_data", "skip_prompt"]
+
+[[case]]
+argv = ["valyu", "deepresearch", "delete", "dr_123", "--force"]
+action = "unmodeled"
+
+# share toggles public access
+[[case]]
+argv = ["valyu", "deepresearch", "share", "dr_123"]
+action = "deepresearch_share"
+fields = { id = "dr_123" }
+effects = ["network", "share_public"]
+
+# share has no options
+[[case]]
+argv = ["valyu", "deepresearch", "share", "dr_123", "--private"]
+action = "unmodeled"
+
+# The group word alone, an unknown subcommand, and the `help` subcommand are not modeled
+[[case]]
+argv = ["valyu", "deepresearch"]
+action = "unmodeled"
+
+[[case]]
+argv = ["valyu", "deepresearch", "help", "create"]
+action = "unmodeled"
+
+[[case]]
+argv = ["valyu", "deepresearch", "stat", "dr_123"]
+action = "unmodeled"
+
+# ─── batch (help: valyu batch <cmd> --help; src/commands/batch/index.ts) ───────
+
+[[case]]
+argv = ["valyu", "batch", "create", "CRISPR gene therapy", "AI chip market", "Quantum computing"]
+action = "batch_create"
+fields = { queries = ["CRISPR gene therapy", "AI chip market", "Quantum computing"] }
+effects = ["network", "spend_credits"]
+
+[[case]]
+argv = ["valyu", "batch", "create", "Tesla", "Apple", "--name", "Q4-earnings", "--mode", "heavy"]
+action = "batch_create"
+fields = { queries = ["Tesla", "Apple"], name = "Q4-earnings", mode = "heavy" }
+effects = ["network", "spend_credits", "high_cost"]
+
+# No queries: an empty batch, or queries from stdin
+[[case]]
+argv = ["valyu", "batch", "create", "--webhook-url", "https://app.com/hook", "--metadata", "project=q4"]
+action = "batch_create"
+fields = { webhook_url = "https://app.com/hook", metadata = ["project=q4"] }
+effects = ["network", "spend_credits", "notify_external"]
+
+[[case]]
+argv = ["valyu", "batch", "create", "q", "--mcp-config", "mcp.json", "--alert-email", "a@example.com", "--alert-email-url", "https://x/{id}", "--no-pdf", "--output-format", "markdown", "--search-type", "all", "--include-source", "a", "--exclude-source", "b", "--source-bias", "a=1", "--country", "DE", "--start-date", "2024-01-01", "--end-date", "2024-03-01"]
+action = "batch_create"
+fields = { queries = ["q"], mcp_config = "mcp.json", alert_email = "a@example.com", alert_email_url = "https://x/{id}", no_pdf = true, output_format = ["markdown"], search_type = "all", include_source = ["a"], exclude_source = ["b"], source_bias = ["a=1"], country = "DE", start_date = "2024-01-01", end_date = "2024-03-01" }
+effects = ["network", "spend_credits", "upload_file", "expose_mcp", "notify_external"]
+
+# batch create has no --watch
+[[case]]
+argv = ["valyu", "batch", "create", "q", "--watch"]
+action = "unmodeled"
+
+[[case]]
+argv = ["valyu", "batch", "list", "--limit=10"]
+action = "batch_list"
+fields = { limit = "10" }
+effects = ["network"]
+
+[[case]]
+argv = ["valyu", "batch", "status", "b_1"]
+action = "batch_status"
+fields = { id = "b_1" }
+effects = ["network"]
+
+[[case]]
+argv = ["valyu", "batch", "tasks", "b_1", "--status", "failed", "-n", "5", "--last-key", "cur", "--include-output"]
+action = "batch_tasks"
+fields = { id = "b_1", status = "failed", limit = "5", last_key = "cur", include_output = true }
+effects = ["network"]
+
+# batch add: one id, then zero or more queries; --tasks-file reads a local file
+[[case]]
+argv = ["valyu", "batch", "add", "b_1", "Tesla analysis", "Apple analysis"]
+action = "batch_add"
+fields = { id = "b_1", queries = ["Tesla analysis", "Apple analysis"] }
+effects = ["network", "spend_credits"]
+
+[[case]]
+argv = ["valyu", "batch", "add", "b_1", "--tasks-file", "tasks.json"]
+action = "batch_add"
+fields = { id = "b_1", tasks_file = "tasks.json" }
+effects = ["network", "spend_credits", "upload_file"]
+
+[[case]]
+argv = ["valyu", "batch", "add"]
+action = "unmodeled"
+
+[[case]]
+argv = ["valyu", "batch", "watch"]
+action = "batch_watch"
+effects = ["network"]
+
+[[case]]
+argv = ["valyu", "batch", "cancel", "b_1"]
+action = "batch_cancel"
+fields = { id = "b_1" }
+effects = ["network", "cancel_task"]
+
+[[case]]
+argv = ["valyu", "batch", "cancel", "b_1", "-y"]
+action = "unmodeled"
+
+# ─── workflows (help: valyu workflows --help; src/commands/workflows/index.ts) ──
+
+[[case]]
+argv = ["valyu", "workflows", "list", "--scope", "valyu", "--search", "company profile", "--tag", "ib", "--tag", "dd", "--vertical", "investment-banking", "-n", "10", "--expand"]
+action = "workflows_list"
+fields = { scope = "valyu", search = "company profile", tag = ["ib", "dd"], vertical = "investment-banking", limit = "10", expand = true }
+effects = ["network"]
+
+[[case]]
+argv = ["valyu", "workflows", "get", "ib-company-profile"]
+action = "workflows_get"
+fields = { slug = "ib-company-profile" }
+effects = ["network"]
+
+# `--version 3` is the top-level version flag in commander, so valyu prints its own version
+[[case]]
+argv = ["valyu", "workflows", "get", "ib-company-profile", "--version", "3"]
+action = "unmodeled"
+
+[[case]]
+argv = ["valyu", "workflows", "versions", "ib-company-profile"]
+action = "workflows_versions"
+fields = { slug = "ib-company-profile" }
+effects = ["network"]
+
+# preview spends no credits (help: "no credits")
+[[case]]
+argv = ["valyu", "workflows", "preview", "ib-company-profile", "--param", "company=NVIDIA (NVDA)"]
+action = "workflows_preview"
+fields = { slug = "ib-company-profile", param = ["company=NVIDIA (NVDA)"] }
+effects = ["network"]
+
+[[case]]
+argv = ["valyu", "workflows", "preview", "ib-company-profile", "--params-file", "params.json"]
+action = "workflows_preview"
+fields = { slug = "ib-company-profile", params_file = "params.json" }
+effects = ["network", "upload_file"]
+
+# run: `-P` (uppercase) is --param; `-p` is the top-level profile. Every run has `high_cost`: without
+# `-m` the template's mode runs, and `-m fast` cannot remove it safely (see AUTHOR_NOTES)
+[[case]]
+argv = ["valyu", "workflows", "run", "ib-company-profile", "-P", "company=Apple", "-m", "heavy", "-w"]
+action = "workflows_run"
+fields = { slug = "ib-company-profile", param = ["company=Apple"], mode = "heavy", watch = true }
+effects = ["network", "spend_credits", "high_cost"]
+
+[[case]]
+argv = ["valyu", "workflows", "run", "my-org/quarterly-review", "--params-file", "params.json", "--webhook-url", "https://app.com/h", "--alert-email", "a@example.com", "--alert-email-url", "https://x/{id}"]
+action = "workflows_run"
+fields = { slug = "my-org/quarterly-review", params_file = "params.json", webhook_url = "https://app.com/h", alert_email = "a@example.com", alert_email_url = "https://x/{id}" }
+effects = ["network", "spend_credits", "high_cost", "upload_file", "notify_external"]
+
+[[case]]
+argv = ["valyu", "workflows", "run", "slug", "-p", "work"]
+action = "workflows_run"
+fields = { slug = "slug", profile = "work" }
+effects = ["network", "spend_credits", "high_cost", "other_account"]
+
+# `-m fast` keeps `high_cost` (no `removes`; see the comment on [shell.workflows_run])
+[[case]]
+argv = ["valyu", "workflows", "run", "slug", "-m", "fast"]
+action = "workflows_run"
+fields = { slug = "slug", mode = "fast" }
+effects = ["network", "spend_credits", "high_cost"]
+
+[[case]]
+argv = ["valyu", "workflows", "run", "slug", "--version", "2"]
+action = "unmodeled"
+
+[[case]]
+argv = ["valyu", "workflows", "create", "--file", "wf.json"]
+action = "workflows_create"
+fields = { file = "wf.json" }
+effects = ["network", "change_workflow", "upload_file"]
+
+[[case]]
+argv = ["valyu", "workflows", "update", "my-wf", "--file", "-"]
+action = "workflows_update"
+fields = { slug = "my-wf", file = "-" }
+effects = ["network", "change_workflow", "upload_file"]
+
+[[case]]
+argv = ["valyu", "workflows", "delete", "my-wf", "--yes"]
+action = "workflows_delete"
+fields = { slug = "my-wf", yes = true }
+effects = ["network", "delete_data", "skip_prompt"]
+
+[[case]]
+argv = ["valyu", "workflows", "delete", "my-wf"]
+action = "workflows_delete"
+fields = { slug = "my-wf" }
+effects = ["network", "delete_data"]
+
+# ─── sources (help: valyu sources --help; src/commands/sources/index.ts) ───────
+
+[[case]]
+argv = ["valyu", "sources", "list", "--category", "markets"]
+action = "sources_list"
+fields = { category = "markets" }
+effects = ["network"]
+
+# `sources` alone runs `sources list` (isDefault), and passes `-c` to it
+[[case]]
+argv = ["valyu", "sources", "-c", "research"]
+action = "sources_list"
+fields = { category = "research" }
+effects = ["network"]
+
+[[case]]
+argv = ["valyu", "sources", "categories"]
+action = "sources_categories"
+effects = ["network"]
+
+[[case]]
+argv = ["valyu", "sources", "categories", "-c", "x"]
+action = "unmodeled"
+
+# ─── account (help: valyu account <cmd> --help; src/commands/account.ts) ───────
+
+[[case]]
+argv = ["valyu", "account", "whoami"]
+action = "account_whoami"
+effects = ["network"]
+
+[[case]]
+argv = ["valyu", "account", "balance", "--json"]
+action = "account_balance"
+fields = { json = true }
+effects = ["network"]
+
+[[case]]
+argv = ["valyu", "account", "datasets"]
+action = "account_datasets"
+effects = ["network"]
+
+# `account keys` alone runs `account keys list` (isDefault)
+[[case]]
+argv = ["valyu", "account", "keys"]
+action = "account_keys_list"
+effects = ["network"]
+
+[[case]]
+argv = ["valyu", "account", "keys", "list"]
+action = "account_keys_list"
+effects = ["network"]
+
+[[case]]
+argv = ["valyu", "account", "keys", "list", "extra"]
+action = "unmodeled"
+
+# keys create mints a credential; every option is a field
+[[case]]
+argv = ["valyu", "account", "keys", "create", "--name", "agent", "--cap", "5"]
+action = "account_keys_create"
+fields = { name = "agent", cap = "5" }
+effects = ["network", "manage_keys"]
+
+[[case]]
+argv = ["valyu", "account", "keys", "create", "--name=ops", "--scopes", "account:read,keys:read,keys:write", "--window", "monthly", "--type", "service_account", "--rate-limit", "60", "--expires", "2027-01-01T00:00:00Z"]
+action = "account_keys_create"
+fields = { name = "ops", scopes = "account:read,keys:read,keys:write", window = "monthly", type = "service_account", rate_limit = "60", expires = "2027-01-01T00:00:00Z" }
+effects = ["network", "manage_keys"]
+
+[[case]]
+argv = ["valyu", "account", "keys", "create", "--name", "a", "-y"]
+action = "unmodeled"
+
+[[case]]
+argv = ["valyu", "account", "keys", "revoke", "key_1"]
+action = "account_keys_revoke"
+fields = { id = "key_1" }
+effects = ["network", "manage_keys"]
+
+[[case]]
+argv = ["valyu", "account", "keys", "rotate", "key_1"]
+action = "account_keys_rotate"
+fields = { id = "key_1" }
+effects = ["network", "manage_keys"]
+
+# `account keys revoke` needs exactly one id
+[[case]]
+argv = ["valyu", "account", "keys", "revoke"]
+action = "unmodeled"
+
+# topup moves money; --open opens the checkout URL; -y skips the large-amount prompt
+[[case]]
+argv = ["valyu", "account", "topup", "25"]
+action = "account_topup"
+fields = { amount = "25" }
+effects = ["network", "payment"]
+
+[[case]]
+argv = ["valyu", "account", "topup", "500", "-y", "--open"]
+action = "account_topup"
+fields = { amount = "500", yes = true, open = true }
+effects = ["network", "payment", "skip_prompt", "open_browser"]
+
+# A negative amount is an option word here (the CLI refuses it as an amount)
+[[case]]
+argv = ["valyu", "account", "topup", "-5"]
+action = "unmodeled"
+
+[[case]]
+argv = ["valyu", "account", "topup"]
+action = "unmodeled"
+
+[[case]]
+argv = ["valyu", "account"]
+action = "unmodeled"
+
+# ─── local status (help: valyu whoami --help, valyu doctor --help) ─────────────
+
+[[case]]
+argv = ["valyu", "whoami", "--json"]
+action = "whoami"
+fields = { json = true }
+effects = ["network"]
+
+[[case]]
+argv = ["valyu", "doctor"]
+action = "doctor"
+effects = ["network"]
+
+[[case]]
+argv = ["valyu", "doctor", "--fix"]
+action = "unmodeled"
+
+# ─── excluded commands ─────────────────────────────────────────────────────────
+
+[[case]]
+argv = ["valyu", "login", "--key", "val_x"]
+action = "unmodeled"
+
+[[case]]
+argv = ["valyu", "logout", "--revoke"]
+action = "unmodeled"
+
+[[case]]
+argv = ["valyu", "upgrade", "--run"]
+action = "unmodeled"
+
+[[case]]
+argv = ["valyu", "open", "keys"]
+action = "unmodeled"
+
+# --- independent verifier cases ---
+# Each expectation is what valyu 1.3.2 (npm @valyu/cli 1.3.2 dist/cli.cjs, commander 14.0.3) did when
+# the verifier ran it with `fetch` stubbed: the request it sent, or the error it printed.
+
+# Global option before the words, `=` form: valyu uses the `prod` profile key
+[[case]]
+argv = ["valyu", "--profile=prod", "search", "q"]
+action = "search"
+fields = { profile = "prod", type_or_query = "q" }
+effects = ["network", "spend_credits", "other_account"]
+
+# Global option after the operands, `=` form: valyu sends the key K2
+[[case]]
+argv = ["valyu", "search", "q", "--api-key=K2"]
+action = "search"
+fields = { api_key = "K2", type_or_query = "q" }
+effects = ["network", "spend_credits", "other_account"]
+
+# Global option between the command words (commander reads root options anywhere)
+[[case]]
+argv = ["valyu", "deepresearch", "-p", "prod", "status", "t1"]
+action = "deepresearch_status"
+fields = { profile = "prod", id = "t1" }
+effects = ["network", "other_account"]
+
+# Cluster of a global flag and an action flag: valyu deletes task abc without a prompt
+[[case]]
+argv = ["valyu", "deepresearch", "delete", "-qy", "abc"]
+action = "deepresearch_delete"
+fields = { quiet = true, yes = true, id = "abc" }
+effects = ["network", "delete_data", "skip_prompt"]
+
+# `--mode=heavy` and `-mheavy` both send mode heavy
+[[case]]
+argv = ["valyu", "deepresearch", "create", "q", "--mode=heavy"]
+action = "deepresearch_create"
+fields = { query = "q", mode = "heavy" }
+effects = ["network", "spend_credits", "high_cost"]
+
+[[case]]
+argv = ["valyu", "deepresearch", "create", "q", "-mheavy"]
+action = "deepresearch_create"
+fields = { query = "q", mode = "heavy" }
+effects = ["network", "spend_credits", "high_cost"]
+
+# `-m=heavy`: valyu reads the value `=heavy` and refuses the mode
+[[case]]
+argv = ["valyu", "deepresearch", "create", "q", "-m=heavy"]
+action = "unmodeled"
+
+# Repeated non-repeatable option: valyu keeps the last (`fast`); the grammar must not show `max` alone
+[[case]]
+argv = ["valyu", "deepresearch", "create", "q", "--mode", "max", "--mode", "fast"]
+action = "unmodeled"
+
+# Prefix of a long option: commander has no abbreviation, valyu errors
+[[case]]
+argv = ["valyu", "deepresearch", "create", "q", "--mod", "max"]
+action = "unmodeled"
+
+# `--` then an option-looking word: valyu sends the query "--fast" (no fast mode)
+[[case]]
+argv = ["valyu", "answer", "--", "--fast"]
+action = "answer"
+fields = { query = "--fast" }
+effects = ["network", "spend_credits", "option_like_value"]
+
+# `--` after an option: valyu sends fast_mode and the query "-p", and does not read a profile
+[[case]]
+argv = ["valyu", "answer", "--fast", "--", "-p"]
+action = "answer"
+fields = { fast = true, query = "-p" }
+effects = ["network", "spend_credits", "option_like_value"]
+
+# `--` before a flag on delete: valyu reads `--yes` as the id and prompts
+[[case]]
+argv = ["valyu", "deepresearch", "delete", "--", "--yes"]
+action = "deepresearch_delete"
+fields = { id = "--yes" }
+effects = ["network", "delete_data", "option_like_value"]
+
+# `--` between command words: not modeled
+[[case]]
+argv = ["valyu", "deepresearch", "--", "delete", "x"]
+action = "unmodeled"
+
+# README "dropped --" claim: valyu reads `--webhook-url` as a URL and refuses it; no webhook is set
+[[case]]
+argv = ["valyu", "contents", "--", "--webhook-url", "https://x.example", "https://a.example"]
+action = "contents"
+fields = { urls = ["--webhook-url", "https://x.example", "https://a.example"] }
+effects = ["network", "spend_credits", "option_like_value"]
+
+# A global option inside a value: valyu uses profile prod (key prodkey) and names the batch "q1".
+# Amended by the author for B2 (this case and the next two): a top-level option word in a value adds
+# the worst case of the action, so more effects than this one line causes (see AUTHOR_NOTES).
+[[case]]
+argv = ["valyu", "batch", "create", "--name", "-p", "prod", "q1"]
+action = "batch_create"
+fields = { name = "-p", queries = ["prod", "q1"] }
+effects = ["network", "spend_credits", "option_like_value", "other_account", "high_cost", "upload_file", "expose_mcp", "notify_external"]
+
+# A global flag inside a value shifts the words: valyu sends the MCP config (with its tokens)
+[[case]]
+argv = ["valyu", "batch", "create", "--name", "--json", "--metadata", "--mcp-config", "cfg.json"]
+action = "batch_create"
+fields = { name = "--json", metadata = ["--mcp-config"], queries = ["cfg.json"] }
+effects = ["network", "spend_credits", "option_like_value", "other_account", "high_cost", "upload_file", "expose_mcp", "notify_external"]
+
+# The same shift: valyu sends mode max
+[[case]]
+argv = ["valyu", "batch", "create", "--name", "--json", "--metadata", "-m", "max"]
+action = "batch_create"
+fields = { name = "--json", metadata = ["-m"], queries = ["max"] }
+effects = ["network", "spend_credits", "option_like_value", "other_account", "high_cost", "upload_file", "expose_mcp", "notify_external"]
+
+# A global option inside a search value: valyu sends key KEY and reads the query from stdin
+[[case]]
+argv = ["valyu", "search", "--instructions", "--api-key", "KEY", "Y"]
+action = "search"
+fields = { instructions = "--api-key", type_or_query = "KEY", query = "Y" }
+effects = ["network", "spend_credits", "option_like_value", "other_account"]
+
+# `-h` as a value is a value: valyu sends instructions "-h"
+[[case]]
+argv = ["valyu", "search", "--instructions", "-h", "q"]
+action = "search"
+fields = { instructions = "-h", type_or_query = "q" }
+effects = ["network", "spend_credits"]
+
+# Optional value: valyu takes the next word as the summary and fetches only b (or stdin URLs).
+# Amended by the author: the grammar cannot give an optional value the next word, so it reads a
+# as a URL and flags the bare --summary with option_like_value (see AUTHOR_NOTES).
+[[case]]
+argv = ["valyu", "contents", "--summary", "https://a.example", "https://b.example"]
+action = "contents"
+fields = { summary = "", urls = ["https://a.example", "https://b.example"] }
+effects = ["network", "spend_credits", "option_like_value"]
+
+# Optional value attached and with `=`
+[[case]]
+argv = ["valyu", "contents", "-shello", "https://a.example"]
+action = "contents"
+fields = { summary = "hello", urls = ["https://a.example"] }
+effects = ["network", "spend_credits"]
+
+[[case]]
+argv = ["valyu", "contents", "--summary=hi", "https://a.example"]
+action = "contents"
+fields = { summary = "hi", urls = ["https://a.example"] }
+effects = ["network", "spend_credits"]
+
+# Optional value followed by an option: the summary is bare
+[[case]]
+argv = ["valyu", "contents", "--summary", "--length", "short", "https://a.example"]
+action = "contents"
+fields = { summary = "", length = "short", urls = ["https://a.example"] }
+effects = ["network", "spend_credits", "option_like_value"]
+
+# A parent option before the subcommand word: valyu runs `contents jobs cj_1` (GET, no credits).
+# Amended by the author: the grammar reads `contents` with two URLs and over-states spend_credits
+# (verifier finding m3, "none needed"; see AUTHOR_NOTES).
+[[case]]
+argv = ["valyu", "contents", "--screenshot", "jobs", "cj_1"]
+action = "contents"
+fields = { screenshot = true, urls = ["jobs", "cj_1"] }
+effects = ["network", "spend_credits"]
+
+# Negatable option: only `--no-pdf` exists; `--pdf` is unknown
+[[case]]
+argv = ["valyu", "deepresearch", "create", "q", "--no-pdf"]
+action = "deepresearch_create"
+fields = { query = "q", no_pdf = true }
+effects = ["network", "spend_credits"]
+
+[[case]]
+argv = ["valyu", "deepresearch", "create", "q", "--pdf"]
+action = "unmodeled"
+
+[[case]]
+argv = ["valyu", "search", "q", "--tool-call"]
+action = "unmodeled"
+
+# Default subcommands
+[[case]]
+argv = ["valyu", "sources", "--category", "markets"]
+action = "sources_list"
+fields = { category = "markets" }
+effects = ["network"]
+
+[[case]]
+argv = ["valyu", "sources", "foo"]
+action = "unmodeled"
+
+[[case]]
+argv = ["valyu", "account", "keys", "kid"]
+action = "unmodeled"
+
+# `workflows run` without `-m`: valyu sends no mode, so the template's recommended mode runs
+[[case]]
+argv = ["valyu", "workflows", "run", "slug"]
+action = "workflows_run"
+fields = { slug = "slug" }
+effects = ["network", "spend_credits", "high_cost"]
+
+# `--version` on `workflows get`: valyu prints its own version
+[[case]]
+argv = ["valyu", "workflows", "get", "slug", "--version", "3"]
+action = "unmodeled"
+
+# Negative number as an option word: valyu refuses the amount, the grammar must not model `-5`
+[[case]]
+argv = ["valyu", "account", "topup", "-5"]
+action = "unmodeled"
+
+# Topup with an `=`-less global after the amount
+[[case]]
+argv = ["valyu", "account", "topup", "25", "--json", "-y"]
+action = "account_topup"
+fields = { amount = "25", json = true, yes = true }
+effects = ["network", "payment", "skip_prompt"]
+
+# Unknown option on an action with no options
+[[case]]
+argv = ["valyu", "account", "keys", "revoke", "kid", "--force"]
+action = "unmodeled"
+
+# A subcommand that does not exist under `contents`
+[[case]]
+argv = ["valyu", "contents", "job", "cj_1"]
+action = "contents"
+fields = { urls = ["job", "cj_1"] }
+effects = ["network", "spend_credits"]
+
+# --- independent verifier cases, round 2 ---
+# Expectations come from valyu 1.3.2 run with fetch stubbed. Where Box cannot give the exact
+# reading, the expectation is the over-stated reading, and the comment names what valyu did.
+
+# A hidden second -m: valyu sends mode max and webhook "--alert-email-url". Every run is high_cost.
+[[case]]
+argv = ["valyu", "workflows", "run", "slug", "-m", "fast", "--webhook-url", "--json", "--alert-email-url", "-wmmax"]
+action = "workflows_run"
+fields = { slug = "slug", mode = "fast", webhook_url = "--json", alert_email_url = "-wmmax" }
+effects = ["network", "spend_credits", "high_cost", "option_like_value", "other_account", "upload_file", "notify_external"]
+
+# -m standard still keeps high_cost (over-states; valyu sends mode standard)
+[[case]]
+argv = ["valyu", "workflows", "run", "slug", "-m", "standard"]
+action = "workflows_run"
+fields = { slug = "slug", mode = "standard" }
+effects = ["network", "spend_credits", "high_cost"]
+
+# Bare -s, then a top-level option: valyu takes -p prod, then the URL as the summary (stdin URLs)
+[[case]]
+argv = ["valyu", "contents", "-s", "-p", "prod", "https://a.example"]
+action = "contents"
+fields = { summary = "", profile = "prod", urls = ["https://a.example"] }
+effects = ["network", "spend_credits", "option_like_value", "other_account"]
+
+# Attached optional value: clean, as valyu reads it
+[[case]]
+argv = ["valyu", "contents", "-sbullets", "https://a.example"]
+action = "contents"
+fields = { summary = "bullets", urls = ["https://a.example"] }
+effects = ["network", "spend_credits"]
+
+# Bare --summary last: flagged
+[[case]]
+argv = ["valyu", "contents", "https://a.example", "--summary"]
+action = "contents"
+fields = { summary = "", urls = ["https://a.example"] }
+effects = ["network", "spend_credits", "option_like_value"]
+
+# `--profile=` inside a value: valyu uses profile prod (it then errors: no query on stdin here)
+[[case]]
+argv = ["valyu", "answer", "--system-instructions", "--profile=prod", "q"]
+action = "answer"
+fields = { system_instructions = "--profile=prod", query = "q" }
+effects = ["network", "spend_credits", "option_like_value", "other_account", "upload_file"]
+
+# A leaf-unknown dash value is a plain value for valyu too: instructions "-x"
+[[case]]
+argv = ["valyu", "search", "--instructions", "-x", "q"]
+action = "search"
+fields = { instructions = "-x", type_or_query = "q" }
+effects = ["network", "spend_credits"]
+
+# A value that holds `--` after its first character: valyu sends {"a":"--json"}, clean
+[[case]]
+argv = ["valyu", "workflows", "preview", "slug", "-Pa=--json"]
+action = "workflows_preview"
+fields = { slug = "slug", param = ["a=--json"] }
+effects = ["network"]
+
+# `=`-attached hazard value: valyu does not take it (one word), the grammar over-flags it (safe)
+[[case]]
+argv = ["valyu", "search", "--instructions=-p", "q"]
+action = "search"
+fields = { instructions = "-p", type_or_query = "q" }
+effects = ["network", "spend_credits", "option_like_value", "other_account"]
+
+# Cluster of top-level letters inside a value (valyu takes -q and -p prod, then errors)
+[[case]]
+argv = ["valyu", "deepresearch", "create", "q", "--report-format", "-qp", "prod"]
+action = "unmodeled"
+
+[[case]]
+argv = ["valyu", "deepresearch", "create", "q", "--report-format", "-qp"]
+action = "deepresearch_create"
+fields = { query = "q", report_format = "-qp" }
+effects = ["network", "spend_credits", "option_like_value", "other_account", "high_cost", "upload_file", "expose_mcp", "notify_external"]
+
+# A key-management line with a hazard value keeps manage_keys and adds the worst case
+[[case]]
+argv = ["valyu", "account", "keys", "create", "--name", "-p"]
+action = "account_keys_create"
+fields = { name = "-p" }
+effects = ["network", "manage_keys", "option_like_value", "other_account"]
+
+# respond with a hazard value adds upload_file (from --response-file) and other_account
+[[case]]
+argv = ["valyu", "deepresearch", "respond", "t1", "--response", "--json"]
+action = "deepresearch_respond"
+fields = { id = "t1", response = "--json" }
+effects = ["network", "steer_task", "option_like_value", "other_account", "upload_file"]
+
+# `-v` as a value: valyu prints its version and runs nothing; the grammar over-states
+[[case]]
+argv = ["valyu", "batch", "add", "b1", "--tasks-file", "-v"]
+action = "batch_add"
+fields = { id = "b1", tasks_file = "-v" }
+effects = ["network", "spend_credits", "option_like_value", "other_account", "upload_file"]
+
+# `--` then `-y` on delete: valyu reads "-y" as the id and prompts
+[[case]]
+argv = ["valyu", "workflows", "delete", "--", "-y"]
+action = "workflows_delete"
+fields = { slug = "-y" }
+effects = ["network", "delete_data", "option_like_value"]
+
+# Topup has no value option, so -y stays the only prompt skip
+[[case]]
+argv = ["valyu", "account", "topup", "--open", "10"]
+action = "account_topup"
+fields = { open = true, amount = "10" }
+effects = ["network", "payment", "open_browser"]
