@@ -131,13 +131,14 @@ removes all three.
 | `write_local_config` | Changes the saved current team | `teams switch`, `switch` |
 | `skip_prompt` | Skips a confirmation prompt | `-y`/`--yes`, `project delete --confirm-name` |
 | `token_argument` | Passes a login token on the command line | `-t`/`--token` |
-| `export_local_env` | Can copy a variable from the CLI's own environment into a deployment | every `--env` and `--build-env` on `deploy` and `deploy init` |
+| `export_local_env` | Can copy variables from the CLI's own environment into a deployment | every `deploy` and `deploy init` (`--env`, `--build-env`, and `vercel.json` `env`/`build.env`) |
 | `override_config` | Reads CLI configuration from a named path | `-A`/`--local-config`, `-Q`/`--global-config` |
 
-`--env KEY` and `--build-env KEY` with no `=` copy the value of `KEY` from the CLI's own
-environment (for example `VERCEL_TOKEN`) into the deployment, whose code the agent may control.
-A `like` pattern cannot match "a value with no `=`", so every `--env` and `--build-env` adds
-`export_local_env`, including `--env KEY=value`.
+A name with no value in `--env KEY`, `--build-env KEY`, or the `env` and `build.env` lists of
+`vercel.json` (or the file `-A` names) copies the value of `KEY` from the CLI's own environment
+(for example `VERCEL_TOKEN`) into the deployment, whose code the agent may control. The agent can
+write `vercel.json`, so every `deploy` and `deploy init` has `export_local_env`, even with `--dry`.
+To keep local secrets out of deployments, keep them out of the tool's environment.
 
 ## Example rules
 
@@ -153,9 +154,10 @@ forbid (principal, action in Tool::vercel::Action::"*", resource)
 when { context.input.effects.contains(Tool::vercel::Effect::"deploy_production") ||
        context.input.effects.contains(Tool::vercel::Effect::"change_traffic") };
 
-// Never copy the CLI's own environment into a deployment.
+// Every deploy can copy the CLI's own environment into the deployment, so this rule stops all
+// deploys. Use it when the tool's environment holds secrets.
 @id("vercel_no_local_env")
-@description("Pass deployment variables with env add, not --env or --build-env.")
+@description("A deploy can copy local variables into the deployment; a person deploys.")
 forbid (principal, action in Tool::vercel::Action::"*", resource)
 when { context.input.effects.contains(Tool::vercel::Effect::"export_local_env") };
 
@@ -206,8 +208,8 @@ Each of these is `unmodeled`, so only a rule that permits `unmodeled` lets it ru
 
 - The grammar decides the command line, not what the CLI reads: `VERCEL_TOKEN`, `VERCEL_ORG_ID`,
   `VERCEL_PROJECT_ID`, `.vercel/project.json`, `vercel.json`, and the global config choose the
-  account, team, and project. `env` and `build.env` in `vercel.json` can also name deployment
-  variables.
+  account, team, and project. Names in the `env` and `build.env` lists of `vercel.json` copy
+  local values into a deployment, which is why every deploy has `export_local_env`.
 - Box does not decide programs that the CLI starts itself: the native binary, project build scripts
   and frameworks (`build`, `dev`, `deploy --temporary`), the command after `env run --`, `git`,
   extensions, and the update check. The effect `run_local_code` marks the commands that run project

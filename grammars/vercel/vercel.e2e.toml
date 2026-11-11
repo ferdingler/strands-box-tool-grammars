@@ -16,11 +16,6 @@ when { context.input.effects.contains(Tool::vercel::Effect::"deploy_production")
 forbid (principal, action in Tool::vercel::Action::"*", resource)
 when { context.input.effects.contains(Tool::vercel::Effect::"read_secret") };
 
-@id("vercel_no_local_env")
-@description("Pass deployment variables with env add, not --env or --build-env.")
-forbid (principal, action in Tool::vercel::Action::"*", resource)
-when { context.input.effects.contains(Tool::vercel::Effect::"export_local_env") };
-
 @id("vercel_no_token_argument")
 @description("Do not pass a login token on the command line.")
 forbid (principal, action in Tool::vercel::Action::"*", resource)
@@ -51,11 +46,21 @@ argv = ["vercel", "deploy"]
 exit = 126
 stderr = "[policy: vercel_no_production]"
 
-# `--env KEY` with no `=` copies the CLI's own variable into a preview deployment.
+# Every deploy can copy the CLI's own variables into the deployment (`--env KEY`, or the
+# `env` list in vercel.json), so a rule on `export_local_env` refuses even a preview deploy.
 [[case]]
-argv = ["vercel", "deploy", "--environment", "preview", "--env", "VERCEL_TOKEN"]
+argv = ["vercel", "deploy", "--environment", "preview"]
 exit = 126
 stderr = "[policy: vercel_no_local_env]"
+policy = '''
+@id("vercel_actions")
+permit (principal, action in Tool::vercel::Action::"*", resource);
+
+@id("vercel_no_local_env")
+@description("A deploy can copy local variables into the deployment; a person deploys.")
+forbid (principal, action in Tool::vercel::Action::"*", resource)
+when { context.input.effects.contains(Tool::vercel::Effect::"export_local_env") };
+'''
 
 # Promoting a preview deployment builds a new production deployment.
 [[case]]
@@ -103,7 +108,7 @@ when { context.input.effects.contains(Tool::vercel::Effect::"deploy_production")
        context.input.effects.contains(Tool::vercel::Effect::"change_traffic") };
 
 @id("vercel_no_local_env")
-@description("Pass deployment variables with env add, not --env or --build-env.")
+@description("A deploy can copy local variables into the deployment; a person deploys.")
 forbid (principal, action in Tool::vercel::Action::"*", resource)
 when { context.input.effects.contains(Tool::vercel::Effect::"export_local_env") };
 

@@ -12,14 +12,14 @@
 [[case]]
 argv = ["vercel", "deploy"]
 action = "deploy"
-effects = ["deploy", "deploy_production", "change_traffic"]
+effects = ["deploy", "deploy_production", "change_traffic", "export_local_env"]
 
 # `--prod` is a production deployment (`vercel deploy --help`: "Create a production deployment").
 [[case]]
 argv = ["vercel", "deploy", "--prod"]
 action = "deploy"
 fields = { prod = true }
-effects = ["deploy", "deploy_production", "change_traffic"]
+effects = ["deploy", "deploy_production", "change_traffic", "export_local_env"]
 
 # `--environment preview` names the preview target and removes the production effects.
 # `--environment=value` and `--environment value` are both arg@5 spellings.
@@ -27,13 +27,13 @@ effects = ["deploy", "deploy_production", "change_traffic"]
 argv = ["vercel", "deploy", "--environment", "preview"]
 action = "deploy"
 fields = { environment = "preview" }
-effects = ["deploy"]
+effects = ["deploy", "export_local_env"]
 
 [[case]]
 argv = ["vercel", "deploy", "--environment=preview", "./site"]
 action = "deploy"
 fields = { environment = "preview", project_path = "./site" }
-effects = ["deploy"]
+effects = ["deploy", "export_local_env"]
 
 # The CLI ignores `--prod` when `--environment` is set ("Ignoring --prod because --environment is
 # also set"), so the preview target wins here too.
@@ -41,42 +41,42 @@ effects = ["deploy"]
 argv = ["vercel", "deploy", "--prod", "--environment", "preview"]
 action = "deploy"
 fields = { prod = true, environment = "preview" }
-effects = ["deploy"]
+effects = ["deploy", "export_local_env"]
 
 # A custom environment is not known to be non-production, so it keeps the production effects.
 [[case]]
 argv = ["vercel", "deploy", "--environment", "staging"]
 action = "deploy"
 fields = { environment = "staging" }
-effects = ["deploy", "deploy_production", "change_traffic"]
+effects = ["deploy", "deploy_production", "change_traffic", "export_local_env"]
 
 # `--skip-domain` disables the automatic aliasing of production domains.
 [[case]]
 argv = ["vercel", "deploy", "--prod", "--skip-domain"]
 action = "deploy"
 fields = { prod = true, skip_domain = true }
-effects = ["deploy", "deploy_production"]
+effects = ["deploy", "deploy_production", "export_local_env"]
 
 # `--dry` inspects inputs "without uploading or creating a deployment".
 [[case]]
 argv = ["vercel", "deploy", "--dry", "--json"]
 action = "deploy"
 fields = { dry = true, json = true }
-effects = []
+effects = ["export_local_env"]
 
 # `--prebuilt` deploys the local `.vercel/output`; `--force` and `--with-cache` are flags.
 [[case]]
 argv = ["vercel", "deploy", "--prebuilt", "--prod", "--force", "--with-cache"]
 action = "deploy"
 fields = { prebuilt = true, prod = true, force = true, with_cache = true }
-effects = ["deploy", "deploy_production", "change_traffic"]
+effects = ["deploy", "deploy_production", "change_traffic", "export_local_env"]
 
 # `--temporary` deploys without login, after a local build (`runImplicitBuild` runs `build --prod`).
 [[case]]
 argv = ["vercel", "deploy", "--temporary"]
 action = "deploy"
 fields = { temporary = true }
-effects = ["deploy", "deploy_production", "change_traffic", "run_local_code", "write_local_files"]
+effects = ["deploy", "deploy_production", "change_traffic", "run_local_code", "write_local_files", "export_local_env"]
 
 # `--env` and `--build-env` are repeatable `[String]` options; values that look like flags are data.
 # Every `--env`/`--build-env` adds `export_local_env`, because a value with no `=` copies the
@@ -98,35 +98,35 @@ effects = ["deploy", "export_local_env"]
 argv = ["vercel", "deploy", "-y", "-p", "web", "--create-if-missing", "--environment", "preview"]
 action = "deploy"
 fields = { yes = true, project = "web", create_if_missing = true, environment = "preview" }
-effects = ["deploy", "write_remote", "write_local_files", "skip_prompt"]
+effects = ["deploy", "write_remote", "write_local_files", "skip_prompt", "export_local_env"]
 
 # `deploy --yes` in an unlinked directory creates and links a project (`ensureLink` autoConfirm).
 [[case]]
 argv = ["vercel", "deploy", "--yes", "--environment", "preview"]
 action = "deploy"
 fields = { yes = true, environment = "preview" }
-effects = ["deploy", "write_remote", "write_local_files", "skip_prompt"]
+effects = ["deploy", "write_remote", "write_local_files", "skip_prompt", "export_local_env"]
 
 # `--verify` creates the Protection Bypass for Automation secret if it is missing.
 [[case]]
 argv = ["vercel", "deploy", "--verify", "--environment", "preview"]
 action = "deploy"
 fields = { verify = true, environment = "preview" }
-effects = ["deploy", "write_remote"]
+effects = ["deploy", "write_remote", "export_local_env"]
 
 # Other value options: `--regions`, `--archive`, `--delete-project-after`.
 [[case]]
 argv = ["vercel", "deploy", "--regions", "iad1", "--archive=tgz", "--delete-project-after", "1d", "--no-wait", "--logs", "--turbo", "--guidance"]
 action = "deploy"
 fields = { regions = "iad1", archive = "tgz", delete_project_after = "1d", no_wait = true, logs = true, turbo = true, guidance = true }
-effects = ["deploy", "deploy_production", "change_traffic", "write_remote"]
+effects = ["deploy", "deploy_production", "change_traffic", "write_remote", "export_local_env"]
 
 # A path operand after `--` is data, even when it looks like a flag.
 [[case]]
 argv = ["vercel", "deploy", "--", "--prod"]
 action = "deploy"
 fields = { project_path = "--prod" }
-effects = ["deploy", "deploy_production", "change_traffic"]
+effects = ["deploy", "deploy_production", "change_traffic", "export_local_env"]
 
 # The bare program and a bare path also deploy, but a grammar needs a command word.
 [[case]]
@@ -181,7 +181,7 @@ action = "unmodeled"
 argv = ["vercel", "deploy", "init", "--prod", "-y"]
 action = "deploy_init"
 fields = { prod = true, yes = true }
-effects = ["deploy", "deploy_production", "change_traffic", "skip_prompt"]
+effects = ["deploy", "deploy_production", "change_traffic", "skip_prompt", "export_local_env"]
 
 [[case]]
 argv = ["vercel", "deploy", "init", "--environment", "preview", "--env", "A=1"]
@@ -194,7 +194,7 @@ effects = ["deploy", "export_local_env"]
 argv = ["vercel", "deploy", "init", "./site"]
 action = "deploy_init"
 fields = { project_path = "./site" }
-effects = ["deploy", "deploy_production", "change_traffic"]
+effects = ["deploy", "deploy_production", "change_traffic", "export_local_env"]
 
 [[case]]
 argv = ["vercel", "deploy", "init", "a", "b"]
@@ -219,13 +219,13 @@ effects = ["read_remote", "write_local_files"]
 argv = ["vercel", "--scope", "acme", "deploy", "--prod"]
 action = "deploy"
 fields = { scope = "acme", prod = true }
-effects = ["deploy", "deploy_production", "change_traffic"]
+effects = ["deploy", "deploy_production", "change_traffic", "export_local_env"]
 
 [[case]]
 argv = ["vercel", "deploy", "--prod", "-S", "acme", "--cwd", "/work/app"]
 action = "deploy"
 fields = { scope = "acme", prod = true, cwd_option = "/work/app" }
-effects = ["deploy", "deploy_production", "change_traffic"]
+effects = ["deploy", "deploy_production", "change_traffic", "export_local_env"]
 
 [[case]]
 argv = ["vercel", "env", "--scope=acme", "ls"]
@@ -894,13 +894,13 @@ action = "unmodeled"
 argv = ["vercel", "--scope", "acme", "deploy", "--environment", "preview"]
 action = "deploy"
 fields = { scope = "acme", environment = "preview" }
-effects = ["deploy"]
+effects = ["deploy", "export_local_env"]
 
 [[case]]
 argv = ["vercel", "deploy", "--environment", "preview", "--scope", "acme"]
 action = "deploy"
 fields = { scope = "acme", environment = "preview" }
-effects = ["deploy"]
+effects = ["deploy", "export_local_env"]
 
 [[case]]
 argv = ["vercel", "-S", "acme", "-t", "tok", "list"]
@@ -941,26 +941,26 @@ action = "unmodeled"
 argv = ["vercel", "deploy", "--prod", "--environment=preview"]
 action = "deploy"
 fields = { prod = true, environment = "preview" }
-effects = ["deploy"]
+effects = ["deploy", "export_local_env"]
 
 # The target string is passed as typed; only the exact `preview` is known to be non-production.
 [[case]]
 argv = ["vercel", "deploy", "--environment", "Preview"]
 action = "deploy"
 fields = { environment = "Preview" }
-effects = ["deploy", "deploy_production", "change_traffic"]
+effects = ["deploy", "deploy_production", "change_traffic", "export_local_env"]
 
 [[case]]
 argv = ["vercel", "deploy", "--dry", "--prod"]
 action = "deploy"
 fields = { dry = true, prod = true }
-effects = []
+effects = ["export_local_env"]
 
 [[case]]
 argv = ["vercel", "deploy", "--skip-domain", "--prod"]
 action = "deploy"
 fields = { skip_domain = true, prod = true }
-effects = ["deploy", "deploy_production"]
+effects = ["deploy", "deploy_production", "export_local_env"]
 
 # arg@5 ignores a value on a Boolean (`--prod=x` is `--prod`); the grammar refuses the spelling.
 [[case]]
@@ -997,13 +997,13 @@ effects = ["deploy", "export_local_env"]
 argv = ["vercel", "deploy", "--dry", "--", "init"]
 action = "deploy"
 fields = { dry = true, project_path = "init" }
-effects = []
+effects = ["export_local_env"]
 
 [[case]]
 argv = ["vercel", "deploy", "init", "--environment", "preview"]
 action = "deploy_init"
 fields = { environment = "preview" }
-effects = ["deploy"]
+effects = ["deploy", "export_local_env"]
 
 [[case]]
 argv = ["vercel", "redeploy", "dpl_1", "-e", "preview"]
@@ -1241,10 +1241,10 @@ effects = ["change_traffic", "skip_prompt"]
 argv = ["vercel", "deploy", "-y", "--environment", "preview"]
 action = "deploy"
 fields = { yes = true, environment = "preview" }
-effects = ["deploy", "skip_prompt", "write_remote", "write_local_files"]
+effects = ["deploy", "skip_prompt", "write_remote", "write_local_files", "export_local_env"]
 
 [[case]]
 argv = ["vercel", "deploy", "--delete-project-after", "1h"]
 action = "deploy"
 fields = { delete_project_after = "1h" }
-effects = ["deploy", "deploy_production", "change_traffic", "write_remote"]
+effects = ["deploy", "deploy_production", "change_traffic", "write_remote", "export_local_env"]

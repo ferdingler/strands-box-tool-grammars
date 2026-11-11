@@ -22,7 +22,8 @@
 #   JavaScript CLI. `build`, `dev`, `deploy --temporary`, and `env run` run project code and build
 #   scripts. An unknown command runs a `vercel-<name>` extension from PATH. The CLI also starts a
 #   background update check and can upgrade a native install. None of these spawns is decided.
-# - `env` and `build.env` in `vercel.json`, which can also name variables for the deployment.
+# - The `env` and `build.env` lists in `vercel.json` (or the `-A` file): a name there copies the
+#   CLI's own variable into the deployment, so every deploy has `export_local_env`.
 # - The team and project that a command acts on, when no `--scope` or `--project` names them: they
 #   come from `.vercel/project.json`, the global config, or the environment.
 # - `-S` takes a separate value only. `-Sfoo` and `-ep` read here as a value attached to the
@@ -49,7 +50,7 @@ listen             = "Starts a local server that listens on a network port"
 write_local_config = "Changes the CLI's saved global configuration (the current team)"
 skip_prompt        = "Skips a confirmation prompt"
 token_argument     = "Passes a login token on the command line"
-export_local_env   = "Can copy a value from the CLI's own environment into a deployment (`--env KEY` with no `=`)"
+export_local_env   = "Can copy values from the CLI's own environment into a deployment (every deploy: --env, --build-env, vercel.json env)"
 override_config    = "Reads the local or global CLI configuration from a path the command line names"
 
 # The global options in `globalCommandOptions`. The CLI parses them over the whole command line, so
@@ -69,17 +70,17 @@ options.token           = { flag = ["-t", "--token"], value = "required", anywhe
 
 # ---------------------------------------------------------------- deploy
 
-# `--env KEY` and `--build-env KEY` with no `=` copy KEY's value from the CLI's own environment
-# into the deployment (`addProcessEnv`). `like` cannot match "no `=`", and a `removes` on values
-# with `=` would also cancel the effect for a bare KEY beside them, so every `--env` and
-# `--build-env` adds `export_local_env`.
+# A name with no value in `--env`, `--build-env`, or the `env` and `build.env` lists of
+# `vercel.json` (or the `-A` file) copies that variable from the CLI's own environment into the
+# deployment (`addProcessEnv`). The agent can write `vercel.json`, so every `deploy` and
+# `deploy init` has `export_local_env`, and `--dry` keeps it.
 #
 # A deployment with no explicit target can go to production: the CLI sends a project's first
 # deployment and a `--temporary` deployment to production. So `deploy` has `deploy_production` and
 # `change_traffic` unless `--environment preview` names the preview target, which wins over `--prod`.
 [shell.deploy]
 usage = "vercel [global options] deploy [options] [<project_path>]"
-adds  = ["deploy", "deploy_production", "change_traffic"]
+adds  = ["deploy", "deploy_production", "change_traffic", "export_local_env"]
 options.prod                 = { flag = ["--prod"], adds = ["deploy_production", "change_traffic"] }
 options.environment          = { flag = ["--environment"], value = "required", like = ["preview"], removes = ["deploy_production", "change_traffic"] }
 options.skip_domain          = { flag = ["--skip-domain"], removes = ["change_traffic"] }
@@ -109,7 +110,7 @@ options.yes                  = { flag = ["-y", "--yes"], adds = ["skip_prompt", 
 # directory named `init`.
 [shell.deploy_init]
 usage = "vercel [global options] deploy init [options] [<project_path>]"
-adds  = ["deploy", "deploy_production", "change_traffic"]
+adds  = ["deploy", "deploy_production", "change_traffic", "export_local_env"]
 options.prod        = { flag = ["--prod"], adds = ["deploy_production", "change_traffic"] }
 options.environment = { flag = ["--environment"], value = "required", like = ["preview"], removes = ["deploy_production", "change_traffic"] }
 options.skip_domain = { flag = ["--skip-domain"], removes = ["change_traffic"] }
