@@ -1,0 +1,1101 @@
+# Golden cases for gws.grammar.toml, checked against gws 0.22.5 (tag v0.22.5) and the Discovery
+# revisions named in the grammar's top comment.
+#
+# Sources:
+#   help/   the `--help` output of gws 0.22.5 (`gws --help`, `gws drive files create --help`, ...).
+#   src/    the gws source at v0.22.5: crates/google-workspace-cli/src/main.rs (`run`,
+#           `filter_args_for_subcommand`, `parse_service_and_version`), commands.rs (`build_cli`,
+#           `build_resource_command`), executor.rs (`execute_method`, dry run), auth_commands.rs.
+#   disc/   https://www.googleapis.com/discovery/v1/apis/<api>/<version>/rest
+#
+# Each method takes --params, -o/--output, --format, --dry-run, --page-all, --page-limit, and
+# --page-delay; --json only when the Discovery method has a request body; --upload and
+# --upload-content-type only when it supports media upload (src: build_resource_command).
+# Each value option is a clap `Arg` with one value: clap accepts `--x v`, `--x=v`, and for `-o`
+# also `-ov`. A second use of the same option is a clap error.
+
+# ==================================================================================================
+# auth and schema
+# ==================================================================================================
+
+# `gws auth status` prints the auth state; it reads the stored credentials and asks Google for the
+# account (src: auth_commands.rs handle_status; help/gws_auth_status.txt).
+[[case]]
+argv = ["gws", "auth", "status"]
+action = "auth_status"
+effects = ["read_credentials"]
+
+# `auth status` takes no option but -h (help/gws_auth_status.txt); help is unmodeled.
+[[case]]
+argv = ["gws", "auth", "status", "--help"]
+action = "unmodeled"
+
+# login opens a browser and stores credentials; export prints them; logout deletes them.
+# All three are deliberately unmodeled.
+[[case]]
+argv = ["gws", "auth", "login", "--readonly"]
+action = "unmodeled"
+
+[[case]]
+argv = ["gws", "auth", "export", "--unmasked"]
+action = "unmodeled"
+
+[[case]]
+argv = ["gws", "auth", "logout"]
+action = "unmodeled"
+
+# `gws schema <service.resource.method> [--resolve-refs]` (help/gws.txt USAGE).
+[[case]]
+argv = ["gws", "schema", "drive.files.list"]
+action = "schema"
+fields = { method_path = "drive.files.list" }
+
+[[case]]
+argv = ["gws", "schema", "drive.permissions.create", "--resolve-refs"]
+action = "schema"
+fields = { method_path = "drive.permissions.create", resolve_refs = true }
+
+# schema reads exactly one path; a missing path is unmodeled.
+[[case]]
+argv = ["gws", "schema"]
+action = "unmodeled"
+
+# ==================================================================================================
+# Program-level lines
+# ==================================================================================================
+
+# Only the program, `--version`, and `--help` have no command word, so they are unmodeled.
+[[case]]
+argv = ["gws"]
+action = "unmodeled"
+
+[[case]]
+argv = ["gws", "--version"]
+action = "unmodeled"
+
+[[case]]
+argv = ["gws", "--help"]
+action = "unmodeled"
+
+# A service alone, or a service and a resource, has no method: clap prints help (src:
+# `subcommand_required(true)`). Unmodeled.
+[[case]]
+argv = ["gws", "drive"]
+action = "unmodeled"
+
+[[case]]
+argv = ["gws", "drive", "files"]
+action = "unmodeled"
+
+# Command words are case sensitive: clap matches `drive`, not `DRIVE`.
+[[case]]
+argv = ["gws", "DRIVE", "files", "list"]
+action = "unmodeled"
+
+# `<service>:<version>` selects another API version (src: parse_service_and_version), which can
+# change what a method name means. `:` cannot be in a command word, so it is unmodeled.
+[[case]]
+argv = ["gws", "drive:v2", "files", "list"]
+action = "unmodeled"
+
+# `--api-version` works anywhere on the line (src: parse_service_and_version). Undeclared, so
+# unmodeled before or after the words.
+[[case]]
+argv = ["gws", "--api-version", "v2", "drive", "files", "list"]
+action = "unmodeled"
+
+[[case]]
+argv = ["gws", "drive", "files", "list", "--api-version", "v2"]
+action = "unmodeled"
+
+# gws accepts the root flags --dry-run, --format, and --sanitize before and between the command
+# words (src: build_cli `.global(true)`). The grammar accepts them only after the method, so these
+# lines are unmodeled. That loses no safety: the line is refused, not misread.
+[[case]]
+argv = ["gws", "--dry-run", "drive", "files", "delete", "--params", '{"fileId":"f1"}']
+action = "unmodeled"
+
+[[case]]
+argv = ["gws", "drive", "--dry-run", "files", "delete", "--params", '{"fileId":"f1"}']
+action = "unmodeled"
+
+# --sanitize sends responses through a Model Armor template; it is not declared.
+[[case]]
+argv = ["gws", "drive", "files", "list", "--sanitize", "projects/p/locations/l/templates/t"]
+action = "unmodeled"
+
+# ==================================================================================================
+# Drive: reads
+# ==================================================================================================
+
+# The help example `gws drive files list --params '{"pageSize": 10}'` (help/gws.txt). `--x v`.
+[[case]]
+argv = ["gws", "drive", "files", "list", "--params", '{"pageSize": 10}']
+action = "drive_files_list"
+fields = { params = '{"pageSize": 10}' }
+effects = ["read_data"]
+
+# The `--x=v` spelling gives the same field.
+[[case]]
+argv = ["gws", "drive", "files", "list", "--params={\"q\":\"name contains 'plan'\"}"]
+action = "drive_files_list"
+fields = { params = "{\"q\":\"name contains 'plan'\"}" }
+effects = ["read_data"]
+
+# Pagination and output format (help/gws_drive_files_list.txt).
+[[case]]
+argv = ["gws", "drive", "files", "list", "--page-all", "--page-limit", "5", "--page-delay=200", "--format", "table"]
+action = "drive_files_list"
+fields = { page_all = true, page_limit = "5", page_delay = "200", format = "table" }
+effects = ["read_data"]
+
+# A list method has no request body, so gws defines no --json on it (src: build_resource_command).
+[[case]]
+argv = ["gws", "drive", "files", "list", "--json", "{}"]
+action = "unmodeled"
+
+# A long flag matches only its full spelling; clap does not infer `--page-al`.
+[[case]]
+argv = ["gws", "drive", "files", "list", "--page-al"]
+action = "unmodeled"
+
+# `-h` and `--help` print help; unmodeled.
+[[case]]
+argv = ["gws", "drive", "files", "list", "-h"]
+action = "unmodeled"
+
+# A method takes no positional argument: an extra word is unmodeled.
+[[case]]
+argv = ["gws", "drive", "files", "list", "extra"]
+action = "unmodeled"
+
+# --params given twice is a clap error; unmodeled.
+[[case]]
+argv = ["gws", "drive", "files", "list", "--params", "{}", "--params", "{}"]
+action = "unmodeled"
+
+# `--` ends the options. With nothing after it the line is still the method.
+[[case]]
+argv = ["gws", "drive", "files", "list", "--params", "{}", "--"]
+action = "drive_files_list"
+fields = { params = "{}" }
+effects = ["read_data"]
+
+# A word after `--` is a positional argument, which no method takes.
+[[case]]
+argv = ["gws", "drive", "files", "list", "--", "--dry-run"]
+action = "unmodeled"
+
+# `--dry-run=true` gives a value to a flag that takes none; clap refuses it. Unmodeled.
+[[case]]
+argv = ["gws", "drive", "files", "list", "--dry-run=true"]
+action = "unmodeled"
+
+# `files get` reads metadata, or content with `alt=media` (disc: drive.files.get). -o writes the
+# response to a local file (help/gws_drive_files_get.txt).
+[[case]]
+argv = ["gws", "drive", "files", "get", "--params", '{"fileId":"f1","alt":"media"}', "-o", "report.pdf"]
+action = "drive_files_get"
+fields = { params = '{"fileId":"f1","alt":"media"}', output = "report.pdf" }
+effects = ["read_data", "write_local_file"]
+
+# The short flag takes an attached value: `-oreport.pdf`.
+[[case]]
+argv = ["gws", "drive", "files", "get", "-oreport.pdf", "--params", '{"fileId":"f1"}']
+action = "drive_files_get"
+fields = { params = '{"fileId":"f1"}', output = "report.pdf" }
+effects = ["read_data", "write_local_file"]
+
+# The long spelling `--output=PATH`, placed before --params: options come in any order.
+[[case]]
+argv = ["gws", "drive", "files", "get", "--output=report.pdf", "--params", '{"fileId":"f1"}']
+action = "drive_files_get"
+fields = { params = '{"fileId":"f1"}', output = "report.pdf" }
+effects = ["read_data", "write_local_file"]
+
+# `-o=x` is not a value spelling the grammar reads; unmodeled.
+[[case]]
+argv = ["gws", "drive", "files", "get", "-o=report.pdf"]
+action = "unmodeled"
+
+# A required value takes the next word even when it looks like a flag. (clap refuses this line, so
+# gws exits 3 without a request; the grammar reads --dry-run as the params value, not as dry run.)
+[[case]]
+argv = ["gws", "drive", "files", "get", "--params", "--dry-run"]
+action = "drive_files_get"
+fields = { params = "--dry-run" }
+effects = ["read_data"]
+
+# A value that is only `-` is still the value of -o.
+[[case]]
+argv = ["gws", "drive", "files", "get", "-o", "-", "--params", '{"fileId":"f1"}']
+action = "drive_files_get"
+fields = { params = '{"fileId":"f1"}', output = "-" }
+effects = ["read_data", "write_local_file"]
+
+# A get method has no media upload, so no --upload.
+[[case]]
+argv = ["gws", "drive", "files", "get", "--upload", "a.txt"]
+action = "unmodeled"
+
+# `files export` exports a Google document to a MIME type (disc: drive.files.export).
+[[case]]
+argv = ["gws", "drive", "files", "export", "--params", '{"fileId":"d1","mimeType":"application/pdf"}', "--output", "d1.pdf"]
+action = "drive_files_export"
+fields = { params = '{"fileId":"d1","mimeType":"application/pdf"}', output = "d1.pdf" }
+effects = ["read_data", "write_local_file"]
+
+[[case]]
+argv = ["gws", "drive", "files", "download", "--params", '{"fileId":"f1"}']
+action = "drive_files_download"
+fields = { params = '{"fileId":"f1"}' }
+effects = ["read_data"]
+
+[[case]]
+argv = ["gws", "drive", "about", "get", "--params", '{"fields":"user"}']
+action = "drive_about_get"
+fields = { params = '{"fields":"user"}' }
+effects = ["read_data"]
+
+[[case]]
+argv = ["gws", "drive", "permissions", "list", "--params", '{"fileId":"f1"}']
+action = "drive_permissions_list"
+fields = { params = '{"fileId":"f1"}' }
+effects = ["read_data"]
+
+[[case]]
+argv = ["gws", "drive", "permissions", "get", "--params", '{"fileId":"f1","permissionId":"p1"}']
+action = "drive_permissions_get"
+fields = { params = '{"fileId":"f1","permissionId":"p1"}' }
+effects = ["read_data"]
+
+[[case]]
+argv = ["gws", "drive", "drives", "list"]
+action = "drive_drives_list"
+effects = ["read_data"]
+
+[[case]]
+argv = ["gws", "drive", "drives", "get", "--params", '{"driveId":"0A1"}']
+action = "drive_drives_get"
+fields = { params = '{"driveId":"0A1"}' }
+effects = ["read_data"]
+
+[[case]]
+argv = ["gws", "drive", "comments", "list", "--params", '{"fileId":"f1","fields":"*"}']
+action = "drive_comments_list"
+fields = { params = '{"fileId":"f1","fields":"*"}' }
+effects = ["read_data"]
+
+[[case]]
+argv = ["gws", "drive", "comments", "get", "--params", '{"fileId":"f1","commentId":"c1"}']
+action = "drive_comments_get"
+fields = { params = '{"fileId":"f1","commentId":"c1"}' }
+effects = ["read_data"]
+
+[[case]]
+argv = ["gws", "drive", "replies", "list", "--params", '{"fileId":"f1","commentId":"c1"}']
+action = "drive_replies_list"
+fields = { params = '{"fileId":"f1","commentId":"c1"}' }
+effects = ["read_data"]
+
+[[case]]
+argv = ["gws", "drive", "replies", "get", "--params", '{"fileId":"f1","commentId":"c1","replyId":"r1"}']
+action = "drive_replies_get"
+fields = { params = '{"fileId":"f1","commentId":"c1","replyId":"r1"}' }
+effects = ["read_data"]
+
+[[case]]
+argv = ["gws", "drive", "revisions", "list", "--params", '{"fileId":"f1"}']
+action = "drive_revisions_list"
+fields = { params = '{"fileId":"f1"}' }
+effects = ["read_data"]
+
+[[case]]
+argv = ["gws", "drive", "revisions", "get", "--params", '{"fileId":"f1","revisionId":"1"}']
+action = "drive_revisions_get"
+fields = { params = '{"fileId":"f1","revisionId":"1"}' }
+effects = ["read_data"]
+
+[[case]]
+argv = ["gws", "drive", "changes", "list", "--params", '{"pageToken":"1"}']
+action = "drive_changes_list"
+fields = { params = '{"pageToken":"1"}' }
+effects = ["read_data"]
+
+# ==================================================================================================
+# Drive: writes and uploads
+# ==================================================================================================
+
+# `files create` with a body and a media upload (help/gws_drive_files_create.txt).
+[[case]]
+argv = ["gws", "drive", "files", "create", "--json", '{"name":"notes.txt"}', "--upload", "notes.txt", "--upload-content-type", "text/plain"]
+action = "drive_files_create"
+fields = { json = '{"name":"notes.txt"}', upload = "notes.txt", upload_content_type = "text/plain" }
+effects = ["upload_file", "write_data"]
+
+# --dry-run builds the request and prints it without sending it (src: execute_method returns
+# before the HTTP loop), so it removes every effect, the upload included.
+[[case]]
+argv = ["gws", "drive", "files", "create", "--dry-run", "--json", '{"name":"notes.txt"}', "--upload=notes.txt"]
+action = "drive_files_create"
+fields = { dry_run = true, json = '{"name":"notes.txt"}', upload = "notes.txt" }
+
+# Metadata only, no upload.
+[[case]]
+argv = ["gws", "drive", "files", "create", "--json={\"name\":\"Plans\",\"mimeType\":\"application/vnd.google-apps.folder\"}"]
+action = "drive_files_create"
+fields = { json = "{\"name\":\"Plans\",\"mimeType\":\"application/vnd.google-apps.folder\"}" }
+effects = ["write_data"]
+
+[[case]]
+argv = ["gws", "drive", "files", "copy", "--params", '{"fileId":"f1"}', "--json", '{"name":"copy"}']
+action = "drive_files_copy"
+fields = { params = '{"fileId":"f1"}', json = '{"name":"copy"}' }
+effects = ["write_data"]
+
+# files copy has no media upload (disc: drive.files.copy).
+[[case]]
+argv = ["gws", "drive", "files", "copy", "--upload", "a.txt"]
+action = "unmodeled"
+
+# `files update` with `trashed: true` moves the file to the trash. The body is opaque, so this is
+# only `write_data`.
+[[case]]
+argv = ["gws", "drive", "files", "update", "--params", '{"fileId":"f1"}', "--json", '{"trashed":true}']
+action = "drive_files_update"
+fields = { params = '{"fileId":"f1"}', json = '{"trashed":true}' }
+effects = ["write_data"]
+
+[[case]]
+argv = ["gws", "drive", "files", "update", "--params", '{"fileId":"f1"}', "--upload", "v2.txt"]
+action = "drive_files_update"
+fields = { params = '{"fileId":"f1"}', upload = "v2.txt" }
+effects = ["upload_file", "write_data"]
+
+[[case]]
+argv = ["gws", "drive", "drives", "create", "--params", '{"requestId":"r1"}', "--json", '{"name":"Team"}']
+action = "drive_drives_create"
+fields = { params = '{"requestId":"r1"}', json = '{"name":"Team"}' }
+effects = ["write_data"]
+
+[[case]]
+argv = ["gws", "drive", "drives", "update", "--params", '{"driveId":"0A1"}', "--json", '{"name":"Team 2"}']
+action = "drive_drives_update"
+fields = { params = '{"driveId":"0A1"}', json = '{"name":"Team 2"}' }
+effects = ["write_data"]
+
+# drives hide has no request body (disc: drive.drives.hide), so no --json.
+[[case]]
+argv = ["gws", "drive", "drives", "hide", "--params", '{"driveId":"0A1"}']
+action = "drive_drives_hide"
+fields = { params = '{"driveId":"0A1"}' }
+effects = ["write_data"]
+
+[[case]]
+argv = ["gws", "drive", "drives", "hide", "--json", "{}"]
+action = "unmodeled"
+
+[[case]]
+argv = ["gws", "drive", "drives", "unhide", "--params", '{"driveId":"0A1"}']
+action = "drive_drives_unhide"
+fields = { params = '{"driveId":"0A1"}' }
+effects = ["write_data"]
+
+[[case]]
+argv = ["gws", "drive", "comments", "create", "--params", '{"fileId":"f1","fields":"id"}', "--json", '{"content":"LGTM"}']
+action = "drive_comments_create"
+fields = { params = '{"fileId":"f1","fields":"id"}', json = '{"content":"LGTM"}' }
+effects = ["write_data"]
+
+[[case]]
+argv = ["gws", "drive", "comments", "update", "--params", '{"fileId":"f1","commentId":"c1"}', "--json", '{"content":"ok"}']
+action = "drive_comments_update"
+fields = { params = '{"fileId":"f1","commentId":"c1"}', json = '{"content":"ok"}' }
+effects = ["write_data"]
+
+[[case]]
+argv = ["gws", "drive", "replies", "create", "--params", '{"fileId":"f1","commentId":"c1"}', "--json", '{"content":"done"}']
+action = "drive_replies_create"
+fields = { params = '{"fileId":"f1","commentId":"c1"}', json = '{"content":"done"}' }
+effects = ["write_data"]
+
+[[case]]
+argv = ["gws", "drive", "replies", "update", "--params", '{"fileId":"f1","commentId":"c1","replyId":"r1"}', "--json", '{"content":"x"}']
+action = "drive_replies_update"
+fields = { params = '{"fileId":"f1","commentId":"c1","replyId":"r1"}', json = '{"content":"x"}' }
+effects = ["write_data"]
+
+[[case]]
+argv = ["gws", "drive", "revisions", "update", "--params", '{"fileId":"f1","revisionId":"1"}', "--json", '{"keepForever":true}']
+action = "drive_revisions_update"
+fields = { params = '{"fileId":"f1","revisionId":"1"}', json = '{"keepForever":true}' }
+effects = ["write_data"]
+
+# `+upload` is a gws helper command. `+` cannot start a command word, so it is unmodeled
+# (help/gws_drive_+upload.txt).
+[[case]]
+argv = ["gws", "drive", "+upload", "notes.txt"]
+action = "unmodeled"
+
+# `files watch` registers a push channel to a URL; deliberately unmodeled.
+[[case]]
+argv = ["gws", "drive", "files", "watch", "--params", '{"fileId":"f1"}', "--json", '{"address":"https://example.com/hook"}']
+action = "unmodeled"
+
+# ==================================================================================================
+# Drive: deletes
+# ==================================================================================================
+
+# `files delete` deletes without the trash (help/gws_drive_files.txt).
+[[case]]
+argv = ["gws", "drive", "files", "delete", "--params", '{"fileId":"f1"}']
+action = "drive_files_delete"
+fields = { params = '{"fileId":"f1"}' }
+effects = ["delete_data"]
+
+[[case]]
+argv = ["gws", "drive", "files", "delete", "--params", '{"fileId":"f1"}', "--dry-run"]
+action = "drive_files_delete"
+fields = { params = '{"fileId":"f1"}', dry_run = true }
+
+# delete has no request body.
+[[case]]
+argv = ["gws", "drive", "files", "delete", "--json", "{}"]
+action = "unmodeled"
+
+# `files emptyTrash` empties the trash. A camelCase method name cannot be a command word, so it is
+# unmodeled, and so is any lowercase spelling (clap would refuse `emptytrash`).
+[[case]]
+argv = ["gws", "drive", "files", "emptyTrash"]
+action = "unmodeled"
+
+[[case]]
+argv = ["gws", "drive", "files", "emptytrash"]
+action = "unmodeled"
+
+[[case]]
+argv = ["gws", "drive", "drives", "delete", "--params", '{"driveId":"0A1"}']
+action = "drive_drives_delete"
+fields = { params = '{"driveId":"0A1"}' }
+effects = ["delete_data"]
+
+[[case]]
+argv = ["gws", "drive", "comments", "delete", "--params", '{"fileId":"f1","commentId":"c1"}']
+action = "drive_comments_delete"
+fields = { params = '{"fileId":"f1","commentId":"c1"}' }
+effects = ["delete_data"]
+
+[[case]]
+argv = ["gws", "drive", "replies", "delete", "--params", '{"fileId":"f1","commentId":"c1","replyId":"r1"}']
+action = "drive_replies_delete"
+fields = { params = '{"fileId":"f1","commentId":"c1","replyId":"r1"}' }
+effects = ["delete_data"]
+
+[[case]]
+argv = ["gws", "drive", "revisions", "delete", "--params", '{"fileId":"f1","revisionId":"1"}']
+action = "drive_revisions_delete"
+fields = { params = '{"fileId":"f1","revisionId":"1"}' }
+effects = ["delete_data"]
+
+# ==================================================================================================
+# Drive: sharing
+# ==================================================================================================
+
+# Share with one user (disc: Permission.type `user`). Every share is `share_external`: the grammar
+# cannot tell an address in the user's own domain from one outside it.
+[[case]]
+argv = ["gws", "drive", "permissions", "create", "--params", '{"fileId":"f1"}', "--json", '{"role":"reader","type":"user","emailAddress":"alex@example.com"}']
+action = "drive_permissions_create"
+fields = { params = '{"fileId":"f1"}', json = '{"role":"reader","type":"user","emailAddress":"alex@example.com"}' }
+effects = ["share_external"]
+
+# `type: anyone` makes the file public (disc: Permission.type). The body names `anyone`, so
+# `make_public` is added.
+[[case]]
+argv = ["gws", "drive", "permissions", "create", "--params", '{"fileId":"f1"}', "--json", '{"role":"reader","type":"anyone"}']
+action = "drive_permissions_create"
+fields = { params = '{"fileId":"f1"}', json = '{"role":"reader","type":"anyone"}' }
+effects = ["make_public", "share_external"]
+
+# The `--json=` spelling, other spacing, and key order.
+[[case]]
+argv = ["gws", "drive", "permissions", "create", "--json={ \"type\" : \"anyone\", \"role\" : \"writer\" }", "--params", '{"fileId":"f1"}']
+action = "drive_permissions_create"
+fields = { params = '{"fileId":"f1"}', json = "{ \"type\" : \"anyone\", \"role\" : \"writer\" }" }
+effects = ["make_public", "share_external"]
+
+# Any letter case of `anyone` is flagged, because the grammar does not know whether the API
+# accepts it.
+[[case]]
+argv = ["gws", "drive", "permissions", "create", "--params", '{"fileId":"f1"}', "--json", '{"role":"reader","type":"AnyOne"}']
+action = "drive_permissions_create"
+fields = { params = '{"fileId":"f1"}', json = '{"role":"reader","type":"AnyOne"}' }
+effects = ["make_public", "share_external"]
+
+# A JSON `\u` escape can spell `anyone` without the plain letters (gws decodes the body with
+# serde_json). Any `\u` in the body adds `make_public`.
+[[case]]
+argv = ["gws", "drive", "permissions", "create", "--params", '{"fileId":"f1"}', "--json", '{"role":"reader","type":"anyone"}']
+action = "drive_permissions_create"
+fields = { params = '{"fileId":"f1"}', json = '{"role":"reader","type":"anyone"}' }
+effects = ["make_public", "share_external"]
+
+# The check is a substring test, so an address that contains `anyone` is also flagged. This
+# over-approximates: it never misses a public share.
+[[case]]
+argv = ["gws", "drive", "permissions", "create", "--params", '{"fileId":"f1"}', "--json", '{"role":"reader","type":"user","emailAddress":"anyone@example.com"}']
+action = "drive_permissions_create"
+fields = { params = '{"fileId":"f1"}', json = '{"role":"reader","type":"user","emailAddress":"anyone@example.com"}' }
+effects = ["make_public", "share_external"]
+
+# A domain share is not public.
+[[case]]
+argv = ["gws", "drive", "permissions", "create", "--params", '{"fileId":"f1"}', "--json", '{"role":"reader","type":"domain","domain":"example.com"}']
+action = "drive_permissions_create"
+fields = { params = '{"fileId":"f1"}', json = '{"role":"reader","type":"domain","domain":"example.com"}' }
+effects = ["share_external"]
+
+# `--dry-run` removes every effect, `make_public` included.
+[[case]]
+argv = ["gws", "drive", "permissions", "create", "--params", '{"fileId":"f1"}', "--json", '{"role":"reader","type":"anyone"}', "--dry-run"]
+action = "drive_permissions_create"
+fields = { params = '{"fileId":"f1"}', json = '{"role":"reader","type":"anyone"}', dry_run = true }
+
+# --json given twice is a clap error; unmodeled.
+[[case]]
+argv = ["gws", "drive", "permissions", "create", "--json", '{"type":"user"}', "--json", '{"type":"anyone"}']
+action = "unmodeled"
+
+# `permissions update` changes a role. It can widen an existing `anyone` permission, which the
+# grammar cannot see, so it always adds `make_public`.
+[[case]]
+argv = ["gws", "drive", "permissions", "update", "--params", '{"fileId":"f1","permissionId":"anyoneWithLink"}', "--json", '{"role":"writer"}']
+action = "drive_permissions_update"
+fields = { params = '{"fileId":"f1","permissionId":"anyoneWithLink"}', json = '{"role":"writer"}' }
+effects = ["make_public", "share_external"]
+
+# Removing a permission deletes it.
+[[case]]
+argv = ["gws", "drive", "permissions", "delete", "--params", '{"fileId":"f1","permissionId":"p1"}']
+action = "drive_permissions_delete"
+fields = { params = '{"fileId":"f1","permissionId":"p1"}' }
+effects = ["delete_data"]
+
+# ==================================================================================================
+# Gmail
+# ==================================================================================================
+
+# The help example `gws gmail users messages list --params '{"userId": "me"}'` (help/gws.txt).
+[[case]]
+argv = ["gws", "gmail", "users", "messages", "list", "--params", '{"userId": "me"}']
+action = "gmail_users_messages_list"
+fields = { params = '{"userId": "me"}' }
+effects = ["read_data"]
+
+[[case]]
+argv = ["gws", "gmail", "users", "messages", "get", "--params", '{"userId":"me","id":"m1","format":"full"}']
+action = "gmail_users_messages_get"
+fields = { params = '{"userId":"me","id":"m1","format":"full"}' }
+effects = ["read_data"]
+
+# Five command words after the program.
+[[case]]
+argv = ["gws", "gmail", "users", "messages", "attachments", "get", "--params", '{"userId":"me","messageId":"m1","id":"a1"}', "-o", "a.bin"]
+action = "gmail_users_messages_attachments_get"
+fields = { params = '{"userId":"me","messageId":"m1","id":"a1"}', output = "a.bin" }
+effects = ["read_data", "write_local_file"]
+
+# `messages send` sends the message in the body (disc: gmail.users.messages.send).
+[[case]]
+argv = ["gws", "gmail", "users", "messages", "send", "--params", '{"userId":"me"}', "--json", '{"raw":"VG86IGFAZXhhbXBsZS5jb20NCg0KaGk="}']
+action = "gmail_users_messages_send"
+fields = { params = '{"userId":"me"}', json = '{"raw":"VG86IGFAZXhhbXBsZS5jb20NCg0KaGk="}' }
+effects = ["send_email"]
+
+# send supports media upload: the RFC 822 message comes from a local file.
+[[case]]
+argv = ["gws", "gmail", "users", "messages", "send", "--params", '{"userId":"me"}', "--upload", "msg.eml", "--upload-content-type", "message/rfc822"]
+action = "gmail_users_messages_send"
+fields = { params = '{"userId":"me"}', upload = "msg.eml", upload_content_type = "message/rfc822" }
+effects = ["send_email", "upload_file"]
+
+[[case]]
+argv = ["gws", "gmail", "users", "messages", "send", "--dry-run", "--params", '{"userId":"me"}', "--json", '{"raw":"eA=="}']
+action = "gmail_users_messages_send"
+fields = { dry_run = true, params = '{"userId":"me"}', json = '{"raw":"eA=="}' }
+
+# An undeclared option (a typo of --json) is unmodeled.
+[[case]]
+argv = ["gws", "gmail", "users", "messages", "send", "--jsn", "{}"]
+action = "unmodeled"
+
+# `+send`, `+reply`, `+forward`, `+triage` are gws helpers; unmodeled (help/gws_gmail_+send.txt).
+[[case]]
+argv = ["gws", "gmail", "+send", "--to", "alex@example.com", "--subject", "hi", "--body", "hello"]
+action = "unmodeled"
+
+[[case]]
+argv = ["gws", "gmail", "+triage"]
+action = "unmodeled"
+
+[[case]]
+argv = ["gws", "gmail", "users", "messages", "modify", "--params", '{"userId":"me","id":"m1"}', "--json", '{"removeLabelIds":["UNREAD"]}']
+action = "gmail_users_messages_modify"
+fields = { params = '{"userId":"me","id":"m1"}', json = '{"removeLabelIds":["UNREAD"]}' }
+effects = ["write_data"]
+
+[[case]]
+argv = ["gws", "gmail", "users", "messages", "import", "--params", '{"userId":"me"}', "--upload", "old.eml"]
+action = "gmail_users_messages_import"
+fields = { params = '{"userId":"me"}', upload = "old.eml" }
+effects = ["upload_file", "write_data"]
+
+[[case]]
+argv = ["gws", "gmail", "users", "messages", "insert", "--params", '{"userId":"me"}', "--json", '{"raw":"eA=="}']
+action = "gmail_users_messages_insert"
+fields = { params = '{"userId":"me"}', json = '{"raw":"eA=="}' }
+effects = ["write_data"]
+
+# trash moves a message to the trash (disc: gmail.users.messages.trash); untrash restores it.
+[[case]]
+argv = ["gws", "gmail", "users", "messages", "trash", "--params", '{"userId":"me","id":"m1"}']
+action = "gmail_users_messages_trash"
+fields = { params = '{"userId":"me","id":"m1"}' }
+effects = ["trash_data"]
+
+[[case]]
+argv = ["gws", "gmail", "users", "messages", "trash", "--params", '{"userId":"me","id":"m1"}', "--dry-run"]
+action = "gmail_users_messages_trash"
+fields = { params = '{"userId":"me","id":"m1"}', dry_run = true }
+
+[[case]]
+argv = ["gws", "gmail", "users", "messages", "untrash", "--params", '{"userId":"me","id":"m1"}']
+action = "gmail_users_messages_untrash"
+fields = { params = '{"userId":"me","id":"m1"}' }
+effects = ["write_data"]
+
+# delete removes a message for ever (disc: gmail.users.messages.delete).
+[[case]]
+argv = ["gws", "gmail", "users", "messages", "delete", "--params", '{"userId":"me","id":"m1"}']
+action = "gmail_users_messages_delete"
+fields = { params = '{"userId":"me","id":"m1"}' }
+effects = ["delete_data"]
+
+# batchDelete and batchModify are camelCase; unmodeled.
+[[case]]
+argv = ["gws", "gmail", "users", "messages", "batchDelete", "--params", '{"userId":"me"}']
+action = "unmodeled"
+
+# users getProfile is camelCase; unmodeled.
+[[case]]
+argv = ["gws", "gmail", "users", "getProfile", "--params", '{"userId":"me"}']
+action = "unmodeled"
+
+[[case]]
+argv = ["gws", "gmail", "users", "drafts", "list", "--params", '{"userId":"me"}']
+action = "gmail_users_drafts_list"
+fields = { params = '{"userId":"me"}' }
+effects = ["read_data"]
+
+[[case]]
+argv = ["gws", "gmail", "users", "drafts", "get", "--params", '{"userId":"me","id":"d1"}']
+action = "gmail_users_drafts_get"
+fields = { params = '{"userId":"me","id":"d1"}' }
+effects = ["read_data"]
+
+[[case]]
+argv = ["gws", "gmail", "users", "drafts", "create", "--params", '{"userId":"me"}', "--json", '{"message":{"raw":"eA=="}}']
+action = "gmail_users_drafts_create"
+fields = { params = '{"userId":"me"}', json = '{"message":{"raw":"eA=="}}' }
+effects = ["write_data"]
+
+[[case]]
+argv = ["gws", "gmail", "users", "drafts", "update", "--params", '{"userId":"me","id":"d1"}', "--json", '{"message":{"raw":"eQ=="}}']
+action = "gmail_users_drafts_update"
+fields = { params = '{"userId":"me","id":"d1"}', json = '{"message":{"raw":"eQ=="}}' }
+effects = ["write_data"]
+
+# drafts send sends a draft (disc: gmail.users.drafts.send).
+[[case]]
+argv = ["gws", "gmail", "users", "drafts", "send", "--params", '{"userId":"me"}', "--json", '{"id":"d1"}']
+action = "gmail_users_drafts_send"
+fields = { params = '{"userId":"me"}', json = '{"id":"d1"}' }
+effects = ["send_email"]
+
+[[case]]
+argv = ["gws", "gmail", "users", "drafts", "delete", "--params", '{"userId":"me","id":"d1"}']
+action = "gmail_users_drafts_delete"
+fields = { params = '{"userId":"me","id":"d1"}' }
+effects = ["delete_data"]
+
+[[case]]
+argv = ["gws", "gmail", "users", "threads", "list", "--params", '{"userId":"me","q":"from:alex"}', "--page-all"]
+action = "gmail_users_threads_list"
+fields = { params = '{"userId":"me","q":"from:alex"}', page_all = true }
+effects = ["read_data"]
+
+[[case]]
+argv = ["gws", "gmail", "users", "threads", "get", "--params", '{"userId":"me","id":"t1"}']
+action = "gmail_users_threads_get"
+fields = { params = '{"userId":"me","id":"t1"}' }
+effects = ["read_data"]
+
+[[case]]
+argv = ["gws", "gmail", "users", "threads", "modify", "--params", '{"userId":"me","id":"t1"}', "--json", '{"addLabelIds":["STARRED"]}']
+action = "gmail_users_threads_modify"
+fields = { params = '{"userId":"me","id":"t1"}', json = '{"addLabelIds":["STARRED"]}' }
+effects = ["write_data"]
+
+[[case]]
+argv = ["gws", "gmail", "users", "threads", "trash", "--params", '{"userId":"me","id":"t1"}']
+action = "gmail_users_threads_trash"
+fields = { params = '{"userId":"me","id":"t1"}' }
+effects = ["trash_data"]
+
+[[case]]
+argv = ["gws", "gmail", "users", "threads", "untrash", "--params", '{"userId":"me","id":"t1"}']
+action = "gmail_users_threads_untrash"
+fields = { params = '{"userId":"me","id":"t1"}' }
+effects = ["write_data"]
+
+[[case]]
+argv = ["gws", "gmail", "users", "threads", "delete", "--params", '{"userId":"me","id":"t1"}']
+action = "gmail_users_threads_delete"
+fields = { params = '{"userId":"me","id":"t1"}' }
+effects = ["delete_data"]
+
+[[case]]
+argv = ["gws", "gmail", "users", "labels", "list", "--params", '{"userId":"me"}', "--format", "csv"]
+action = "gmail_users_labels_list"
+fields = { params = '{"userId":"me"}', format = "csv" }
+effects = ["read_data"]
+
+[[case]]
+argv = ["gws", "gmail", "users", "labels", "get", "--params", '{"userId":"me","id":"Label_1"}']
+action = "gmail_users_labels_get"
+fields = { params = '{"userId":"me","id":"Label_1"}' }
+effects = ["read_data"]
+
+[[case]]
+argv = ["gws", "gmail", "users", "labels", "create", "--params", '{"userId":"me"}', "--json", '{"name":"Receipts"}']
+action = "gmail_users_labels_create"
+fields = { params = '{"userId":"me"}', json = '{"name":"Receipts"}' }
+effects = ["write_data"]
+
+[[case]]
+argv = ["gws", "gmail", "users", "labels", "patch", "--params", '{"userId":"me","id":"Label_1"}', "--json", '{"name":"Bills"}']
+action = "gmail_users_labels_patch"
+fields = { params = '{"userId":"me","id":"Label_1"}', json = '{"name":"Bills"}' }
+effects = ["write_data"]
+
+[[case]]
+argv = ["gws", "gmail", "users", "labels", "update", "--params", '{"userId":"me","id":"Label_1"}', "--json", '{"name":"Bills"}']
+action = "gmail_users_labels_update"
+fields = { params = '{"userId":"me","id":"Label_1"}', json = '{"name":"Bills"}' }
+effects = ["write_data"]
+
+[[case]]
+argv = ["gws", "gmail", "users", "labels", "delete", "--params", '{"userId":"me","id":"Label_1"}']
+action = "gmail_users_labels_delete"
+fields = { params = '{"userId":"me","id":"Label_1"}' }
+effects = ["delete_data"]
+
+[[case]]
+argv = ["gws", "gmail", "users", "history", "list", "--params", '{"userId":"me","startHistoryId":"1"}']
+action = "gmail_users_history_list"
+fields = { params = '{"userId":"me","startHistoryId":"1"}' }
+effects = ["read_data"]
+
+[[case]]
+argv = ["gws", "gmail", "users", "settings", "filters", "list", "--params", '{"userId":"me"}']
+action = "gmail_users_settings_filters_list"
+fields = { params = '{"userId":"me"}' }
+effects = ["read_data"]
+
+[[case]]
+argv = ["gws", "gmail", "users", "settings", "filters", "get", "--params", '{"userId":"me","id":"f1"}']
+action = "gmail_users_settings_filters_get"
+fields = { params = '{"userId":"me","id":"f1"}' }
+effects = ["read_data"]
+
+# A filter can forward mail, so filters create is deliberately unmodeled.
+[[case]]
+argv = ["gws", "gmail", "users", "settings", "filters", "create", "--params", '{"userId":"me"}', "--json", '{"action":{"forward":"x@example.com"}}']
+action = "unmodeled"
+
+# ==================================================================================================
+# Calendar
+# ==================================================================================================
+
+[[case]]
+argv = ["gws", "calendar", "events", "list", "--params", '{"calendarId":"primary","timeMin":"2026-11-11T00:00:00Z"}']
+action = "calendar_events_list"
+fields = { params = '{"calendarId":"primary","timeMin":"2026-11-11T00:00:00Z"}' }
+effects = ["read_data"]
+
+[[case]]
+argv = ["gws", "calendar", "events", "get", "--params", '{"calendarId":"primary","eventId":"e1"}']
+action = "calendar_events_get"
+fields = { params = '{"calendarId":"primary","eventId":"e1"}' }
+effects = ["read_data"]
+
+[[case]]
+argv = ["gws", "calendar", "events", "instances", "--params", '{"calendarId":"primary","eventId":"e1"}']
+action = "calendar_events_instances"
+fields = { params = '{"calendarId":"primary","eventId":"e1"}' }
+effects = ["read_data"]
+
+# Without sendUpdates the API's default is to send no notification (disc: calendar.events.insert
+# sendUpdates, "The default is false"; Google notes some emails might still be sent).
+[[case]]
+argv = ["gws", "calendar", "events", "insert", "--params", '{"calendarId":"primary"}', "--json", '{"summary":"Review","start":{"date":"2026-11-12"},"end":{"date":"2026-11-13"}}']
+action = "calendar_events_insert"
+fields = { params = '{"calendarId":"primary"}', json = '{"summary":"Review","start":{"date":"2026-11-12"},"end":{"date":"2026-11-13"}}' }
+effects = ["write_data"]
+
+# `sendUpdates` in --params asks Google to email the guests, so `send_email` is added.
+[[case]]
+argv = ["gws", "calendar", "events", "insert", "--params", '{"calendarId":"primary","sendUpdates":"all"}', "--json", '{"summary":"Review"}']
+action = "calendar_events_insert"
+fields = { params = '{"calendarId":"primary","sendUpdates":"all"}', json = '{"summary":"Review"}' }
+effects = ["send_email", "write_data"]
+
+# Any value of sendUpdates is flagged, `none` too: an over-approximation.
+[[case]]
+argv = ["gws", "calendar", "events", "patch", "--params", '{"calendarId":"primary","eventId":"e1","sendUpdates":"none"}', "--json", '{"summary":"x"}']
+action = "calendar_events_patch"
+fields = { params = '{"calendarId":"primary","eventId":"e1","sendUpdates":"none"}', json = '{"summary":"x"}' }
+effects = ["send_email", "write_data"]
+
+# The deprecated `sendNotifications` is flagged as well.
+[[case]]
+argv = ["gws", "calendar", "events", "update", "--params", '{"calendarId":"primary","eventId":"e1","sendNotifications":true}', "--json", '{"summary":"x"}']
+action = "calendar_events_update"
+fields = { params = '{"calendarId":"primary","eventId":"e1","sendNotifications":true}', json = '{"summary":"x"}' }
+effects = ["send_email", "write_data"]
+
+# A `\u` escape could spell the key, so it is flagged.
+[[case]]
+argv = ["gws", "calendar", "events", "move", "--params", '{"calendarId":"primary","eventId":"e1","destination":"c2","sendUpdates":"all"}']
+action = "calendar_events_move"
+fields = { params = '{"calendarId":"primary","eventId":"e1","destination":"c2","sendUpdates":"all"}' }
+effects = ["send_email", "write_data"]
+
+# events move has no request body.
+[[case]]
+argv = ["gws", "calendar", "events", "move", "--json", "{}"]
+action = "unmodeled"
+
+[[case]]
+argv = ["gws", "calendar", "events", "import", "--params", '{"calendarId":"primary"}', "--json", '{"iCalUID":"x@example.com"}']
+action = "calendar_events_import"
+fields = { params = '{"calendarId":"primary"}', json = '{"iCalUID":"x@example.com"}' }
+effects = ["write_data"]
+
+[[case]]
+argv = ["gws", "calendar", "events", "delete", "--params", '{"calendarId":"primary","eventId":"e1","sendUpdates":"all"}']
+action = "calendar_events_delete"
+fields = { params = '{"calendarId":"primary","eventId":"e1","sendUpdates":"all"}' }
+effects = ["delete_data", "send_email"]
+
+[[case]]
+argv = ["gws", "calendar", "events", "delete", "--params", '{"calendarId":"primary","eventId":"e1","sendUpdates":"all"}', "--dry-run"]
+action = "calendar_events_delete"
+fields = { params = '{"calendarId":"primary","eventId":"e1","sendUpdates":"all"}', dry_run = true }
+
+# quickAdd and watch are unmodeled (camelCase; push channel).
+[[case]]
+argv = ["gws", "calendar", "events", "quickAdd", "--params", '{"calendarId":"primary","text":"Lunch"}']
+action = "unmodeled"
+
+# `+agenda` and `+insert` are helpers; unmodeled (help/gws_calendar_+agenda.txt).
+[[case]]
+argv = ["gws", "calendar", "+agenda"]
+action = "unmodeled"
+
+# The calendarList resource is camelCase, so listing the user's calendars is unmodeled.
+[[case]]
+argv = ["gws", "calendar", "calendarList", "list"]
+action = "unmodeled"
+
+[[case]]
+argv = ["gws", "calendar", "calendars", "get", "--params", '{"calendarId":"primary"}']
+action = "calendar_calendars_get"
+fields = { params = '{"calendarId":"primary"}' }
+effects = ["read_data"]
+
+[[case]]
+argv = ["gws", "calendar", "calendars", "insert", "--json", '{"summary":"Team"}']
+action = "calendar_calendars_insert"
+fields = { json = '{"summary":"Team"}' }
+effects = ["write_data"]
+
+[[case]]
+argv = ["gws", "calendar", "calendars", "patch", "--params", '{"calendarId":"c1"}', "--json", '{"summary":"Team 2"}']
+action = "calendar_calendars_patch"
+fields = { params = '{"calendarId":"c1"}', json = '{"summary":"Team 2"}' }
+effects = ["write_data"]
+
+[[case]]
+argv = ["gws", "calendar", "calendars", "update", "--params", '{"calendarId":"c1"}', "--json", '{"summary":"Team 3"}']
+action = "calendar_calendars_update"
+fields = { params = '{"calendarId":"c1"}', json = '{"summary":"Team 3"}' }
+effects = ["write_data"]
+
+# clear deletes every event of a primary calendar (help/gws_calendar_calendars_clear.txt).
+[[case]]
+argv = ["gws", "calendar", "calendars", "clear", "--params", '{"calendarId":"primary"}']
+action = "calendar_calendars_clear"
+fields = { params = '{"calendarId":"primary"}' }
+effects = ["delete_data"]
+
+[[case]]
+argv = ["gws", "calendar", "calendars", "delete", "--params", '{"calendarId":"c1"}']
+action = "calendar_calendars_delete"
+fields = { params = '{"calendarId":"c1"}' }
+effects = ["delete_data"]
+
+[[case]]
+argv = ["gws", "calendar", "acl", "list", "--params", '{"calendarId":"primary"}']
+action = "calendar_acl_list"
+fields = { params = '{"calendarId":"primary"}' }
+effects = ["read_data"]
+
+[[case]]
+argv = ["gws", "calendar", "acl", "get", "--params", '{"calendarId":"primary","ruleId":"user:alex@example.com"}']
+action = "calendar_acl_get"
+fields = { params = '{"calendarId":"primary","ruleId":"user:alex@example.com"}' }
+effects = ["read_data"]
+
+# An ACL rule with scope type `default` is public, and `default` is the default scope (disc:
+# AclRule.scope.type). Every ACL write adds `make_public`.
+[[case]]
+argv = ["gws", "calendar", "acl", "insert", "--params", '{"calendarId":"primary"}', "--json", '{"role":"reader","scope":{"type":"user","value":"alex@example.com"}}']
+action = "calendar_acl_insert"
+fields = { params = '{"calendarId":"primary"}', json = '{"role":"reader","scope":{"type":"user","value":"alex@example.com"}}' }
+effects = ["make_public", "share_external"]
+
+[[case]]
+argv = ["gws", "calendar", "acl", "patch", "--params", '{"calendarId":"primary","ruleId":"default"}', "--json", '{"role":"writer"}']
+action = "calendar_acl_patch"
+fields = { params = '{"calendarId":"primary","ruleId":"default"}', json = '{"role":"writer"}' }
+effects = ["make_public", "share_external"]
+
+[[case]]
+argv = ["gws", "calendar", "acl", "update", "--params", '{"calendarId":"primary","ruleId":"r1"}', "--json", '{"role":"reader","scope":{"type":"default"}}', "--dry-run"]
+action = "calendar_acl_update"
+fields = { params = '{"calendarId":"primary","ruleId":"r1"}', json = '{"role":"reader","scope":{"type":"default"}}', dry_run = true }
+
+[[case]]
+argv = ["gws", "calendar", "acl", "delete", "--params", '{"calendarId":"primary","ruleId":"r1"}']
+action = "calendar_acl_delete"
+fields = { params = '{"calendarId":"primary","ruleId":"r1"}' }
+effects = ["delete_data"]
+
+# freebusy query is a POST with a body, but it only reads (disc: calendar.freebusy.query).
+[[case]]
+argv = ["gws", "calendar", "freebusy", "query", "--json", '{"timeMin":"2026-11-11T00:00:00Z","timeMax":"2026-11-12T00:00:00Z","items":[{"id":"primary"}]}']
+action = "calendar_freebusy_query"
+fields = { json = '{"timeMin":"2026-11-11T00:00:00Z","timeMax":"2026-11-12T00:00:00Z","items":[{"id":"primary"}]}' }
+effects = ["read_data"]
+
+[[case]]
+argv = ["gws", "calendar", "colors", "get"]
+action = "calendar_colors_get"
+effects = ["read_data"]
+
+[[case]]
+argv = ["gws", "calendar", "settings", "list"]
+action = "calendar_settings_list"
+effects = ["read_data"]
+
+[[case]]
+argv = ["gws", "calendar", "settings", "get", "--params", '{"setting":"timezone"}']
+action = "calendar_settings_get"
+fields = { params = '{"setting":"timezone"}' }
+effects = ["read_data"]
+
+# ==================================================================================================
+# Sheets
+# ==================================================================================================
+
+# The help example `gws sheets spreadsheets get --params '{"spreadsheetId": "..."}'` (help/gws.txt).
+[[case]]
+argv = ["gws", "sheets", "spreadsheets", "get", "--params", '{"spreadsheetId": "s1"}']
+action = "sheets_spreadsheets_get"
+fields = { params = '{"spreadsheetId": "s1"}' }
+effects = ["read_data"]
+
+[[case]]
+argv = ["gws", "sheets", "spreadsheets", "create", "--json", '{"properties":{"title":"Budget"}}']
+action = "sheets_spreadsheets_create"
+fields = { json = '{"properties":{"title":"Budget"}}' }
+effects = ["write_data"]
+
+[[case]]
+argv = ["gws", "sheets", "spreadsheets", "values", "get", "--params", '{"spreadsheetId":"s1","range":"Sheet1!A1:C10"}']
+action = "sheets_spreadsheets_values_get"
+fields = { params = '{"spreadsheetId":"s1","range":"Sheet1!A1:C10"}' }
+effects = ["read_data"]
+
+[[case]]
+argv = ["gws", "sheets", "spreadsheets", "values", "append", "--params", '{"spreadsheetId":"s1","range":"A1","valueInputOption":"RAW"}', "--json", '{"values":[["a","b"]]}']
+action = "sheets_spreadsheets_values_append"
+fields = { params = '{"spreadsheetId":"s1","range":"A1","valueInputOption":"RAW"}', json = '{"values":[["a","b"]]}' }
+effects = ["write_data"]
+
+[[case]]
+argv = ["gws", "sheets", "spreadsheets", "values", "update", "--params", '{"spreadsheetId":"s1","range":"A1","valueInputOption":"RAW"}', "--json", '{"values":[["x"]]}']
+action = "sheets_spreadsheets_values_update"
+fields = { params = '{"spreadsheetId":"s1","range":"A1","valueInputOption":"RAW"}', json = '{"values":[["x"]]}' }
+effects = ["write_data"]
+
+# values clear erases the values in a range (disc: sheets.spreadsheets.values.clear).
+[[case]]
+argv = ["gws", "sheets", "spreadsheets", "values", "clear", "--params", '{"spreadsheetId":"s1","range":"A1:Z"}', "--json", "{}"]
+action = "sheets_spreadsheets_values_clear"
+fields = { params = '{"spreadsheetId":"s1","range":"A1:Z"}', json = "{}" }
+effects = ["delete_data"]
+
+# batchUpdate, values batchGet, and the helpers `+read` and `+append` are unmodeled.
+[[case]]
+argv = ["gws", "sheets", "spreadsheets", "batchUpdate", "--params", '{"spreadsheetId":"s1"}', "--json", '{"requests":[]}']
+action = "unmodeled"
+
+[[case]]
+argv = ["gws", "sheets", "spreadsheets", "values", "batchGet", "--params", '{"spreadsheetId":"s1"}']
+action = "unmodeled"
+
+[[case]]
+argv = ["gws", "sheets", "+append", "--spreadsheet", "s1", "--values", "a,b"]
+action = "unmodeled"
+
+# ==================================================================================================
+# Docs
+# ==================================================================================================
+
+[[case]]
+argv = ["gws", "docs", "documents", "get", "--params", '{"documentId":"d1"}']
+action = "docs_documents_get"
+fields = { params = '{"documentId":"d1"}' }
+effects = ["read_data"]
+
+[[case]]
+argv = ["gws", "docs", "documents", "create", "--json", '{"title":"Notes"}']
+action = "docs_documents_create"
+fields = { json = '{"title":"Notes"}' }
+effects = ["write_data"]
+
+# documents batchUpdate is the only way to edit a document's text; camelCase, so unmodeled.
+[[case]]
+argv = ["gws", "docs", "documents", "batchUpdate", "--params", '{"documentId":"d1"}', "--json", '{"requests":[]}']
+action = "unmodeled"
+
+[[case]]
+argv = ["gws", "docs", "+write", "--document", "d1", "--text", "hello"]
+action = "unmodeled"
+
+# A service the grammar does not cover is unmodeled.
+[[case]]
+argv = ["gws", "chat", "spaces", "list"]
+action = "unmodeled"
