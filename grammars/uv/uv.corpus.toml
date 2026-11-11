@@ -1362,3 +1362,25 @@ argv = ["uv", "--offline", "pip", "compile", "-orequirements.txt", "requirements
 action = "pip_compile"
 fields = { offline = true, output_file = "requirements.txt", src_file = ["requirements.in"] }
 effects = ["build_code", "write_file"]
+
+# --- independent verifier cases, round 3 ---
+# The `python ls` alias reaches the same request operand.
+[[case]]
+argv = ["uv", "python", "ls", "/tmp/x/python3"]
+action = "python_list"
+fields = { request = "/tmp/x/python3" }
+effects = ["run_program"]
+
+# `--only-downloads` skips the query in uv, but the grammar over-approximates (safe direction).
+[[case]]
+argv = ["uv", "python", "list", "--only-downloads", "3.13"]
+action = "python_list"
+fields = { only_downloads = true, request = "3.13" }
+effects = ["run_program"]
+
+# With no request, `python list` stays read_only (it queries discovered interpreters, a stated residual).
+[[case]]
+argv = ["uv", "python", "list", "--only-installed"]
+action = "python_list"
+fields = { only_installed = true }
+effects = ["read_only"]
