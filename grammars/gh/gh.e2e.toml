@@ -1,0 +1,182 @@
+# End-to-end cases for gh.grammar.toml. The harness runs each argv through the Shell of a real box,
+# where `gh` is a stub that prints its arguments and exits 0.
+#
+# The policy lets an agent read, comment, and open pull requests in the current repository, and
+# refuses merges, deletes, admin bypass, public repositories, and API writes.
+
+policy = '''
+@id("gh_actions")
+permit (principal, action in Tool::gh::Action::"*", resource);
+
+@id("gh_no_merge")
+@description("An agent may not merge pull requests.")
+forbid (principal, action in Tool::gh::Action::"*", resource)
+when { context.input.effects.contains(Tool::gh::Effect::"merge") };
+
+@id("gh_no_delete")
+@description("An agent may not delete anything on GitHub.")
+forbid (principal, action in Tool::gh::Action::"*", resource)
+when { context.input.effects.contains(Tool::gh::Effect::"delete_remote") };
+
+@id("gh_no_public")
+@description("An agent may not make a repository public.")
+forbid (principal, action in Tool::gh::Action::"*", resource)
+when { context.input.effects.contains(Tool::gh::Effect::"make_public") };
+
+@id("gh_api_read_only")
+@description("gh api is read only.")
+forbid (principal, action == Tool::gh::Action::"api", resource)
+when { context.input.effects.contains(Tool::gh::Effect::"write_remote") };
+'''
+
+# A read runs the program
+[[case]]
+argv = ["gh", "pr", "list", "--json", "number,title", "-R", "cli/cli"]
+exit = 0
+stdout = "stub-argv: [pr] [list] [--json] [number,title] [-R] [cli/cli]"
+
+# A merge is refused by its effect
+[[case]]
+argv = ["gh", "pr", "merge", "123", "--squash"]
+exit = 126
+stderr = "[policy: gh_no_merge]: An agent may not merge pull requests."
+
+# `--disable-auto` removes `merge`, so it runs
+[[case]]
+argv = ["gh", "pr", "merge", "123", "--disable-auto"]
+exit = 0
+stdout = "stub-argv: [pr] [merge] [123] [--disable-auto]"
+
+# `-f` turns `gh api` into a POST, which the API rule refuses
+[[case]]
+argv = ["gh", "api", "repos/o/r/issues/1/comments", "-f", "body=hi"]
+exit = 126
+stderr = "[policy: gh_api_read_only]"
+
+# `-X GET` keeps the same fields a read, so it runs
+[[case]]
+argv = ["gh", "api", "-X", "GET", "search/issues", "-f", "q=is:open"]
+exit = 0
+stdout = "stub-argv: [api] [-X] [GET] [search/issues] [-f] [q=is:open]"
+
+# `--visibility public` is refused
+[[case]]
+argv = ["gh", "repo", "edit", "o/r", "--visibility", "public", "--accept-visibility-change-consequences"]
+exit = 126
+stderr = "[policy: gh_no_public]"
+
+# The config alias `gh co` is unmodeled, and nothing permits it
+[[case]]
+argv = ["gh", "co", "123"]
+exit = 126
+stderr = "[default-deny]: No permit policy matched this request."
+
+# An undeclared flag is unmodeled
+[[case]]
+argv = ["gh", "repo", "delete", "o/r", "-y"]
+exit = 126
+stderr = "[default-deny]"
+
+# The README's example rules load, and the repository rule refuses another -R
+[[case]]
+argv = ["gh", "pr", "list", "-R", "other/repo"]
+exit = 126
+stderr = "[policy: gh_one_repo]"
+policy = '''
+// Let the agent use every modeled gh command.
+@id("gh_actions")
+permit (principal, action in Tool::gh::Action::"*", resource);
+
+// No merges, and never an admin bypass.
+@id("gh_no_merge")
+@description("An agent may not merge pull requests.")
+forbid (principal, action in Tool::gh::Action::"*", resource)
+when { context.input.effects.contains(Tool::gh::Effect::"merge") ||
+       context.input.effects.contains(Tool::gh::Effect::"admin_bypass") };
+
+// Nothing is deleted, and no repository becomes public.
+@id("gh_no_delete_or_public")
+@description("An agent may not delete on GitHub or make a repository public.")
+forbid (principal, action in Tool::gh::Action::"*", resource)
+when { context.input.effects.contains(Tool::gh::Effect::"delete_remote") ||
+       context.input.effects.contains(Tool::gh::Effect::"make_public") };
+
+// gh api is for reads only.
+@id("gh_api_read_only")
+@description("gh api is read only.")
+forbid (principal, action == Tool::gh::Action::"api", resource)
+when { context.input.effects.contains(Tool::gh::Effect::"write_remote") };
+
+// Stay in one repository when -R is given.
+@id("gh_one_repo")
+@description("An agent may only target my-org/my-repo.")
+forbid (principal, action in Tool::gh::Action::"*", resource)
+when { context.input.effects.contains(Tool::gh::Effect::"target_override") &&
+       !(context.input has repo && context.input.repo == "my-org/my-repo") };
+'''
+
+[[case]]
+argv = ["gh", "pr", "view", "1", "-R", "my-org/my-repo"]
+exit = 0
+stdout = "stub-argv: [pr] [view] [1] [-R] [my-org/my-repo]"
+policy = '''
+// Let the agent use every modeled gh command.
+@id("gh_actions")
+permit (principal, action in Tool::gh::Action::"*", resource);
+
+// No merges, and never an admin bypass.
+@id("gh_no_merge")
+@description("An agent may not merge pull requests.")
+forbid (principal, action in Tool::gh::Action::"*", resource)
+when { context.input.effects.contains(Tool::gh::Effect::"merge") ||
+       context.input.effects.contains(Tool::gh::Effect::"admin_bypass") };
+
+// Nothing is deleted, and no repository becomes public.
+@id("gh_no_delete_or_public")
+@description("An agent may not delete on GitHub or make a repository public.")
+forbid (principal, action in Tool::gh::Action::"*", resource)
+when { context.input.effects.contains(Tool::gh::Effect::"delete_remote") ||
+       context.input.effects.contains(Tool::gh::Effect::"make_public") };
+
+// gh api is for reads only.
+@id("gh_api_read_only")
+@description("gh api is read only.")
+forbid (principal, action == Tool::gh::Action::"api", resource)
+when { context.input.effects.contains(Tool::gh::Effect::"write_remote") };
+
+// Stay in one repository when -R is given.
+@id("gh_one_repo")
+@description("An agent may only target my-org/my-repo.")
+forbid (principal, action in Tool::gh::Action::"*", resource)
+when { context.input.effects.contains(Tool::gh::Effect::"target_override") &&
+       !(context.input has repo && context.input.repo == "my-org/my-repo") };
+'''
+
+# A published release is refused; `--draft` removes `publish`, so a draft runs
+[[case]]
+argv = ["gh", "release", "create", "v1.0.0", "--generate-notes"]
+exit = 126
+stderr = "[policy: gh_no_publish]"
+policy = '''
+@id("gh_actions")
+permit (principal, action in Tool::gh::Action::"*", resource);
+
+@id("gh_no_publish")
+@description("An agent may save a release only as a draft.")
+forbid (principal, action == Tool::gh::Action::"release_create", resource)
+when { context.input.effects.contains(Tool::gh::Effect::"publish") };
+'''
+
+[[case]]
+argv = ["gh", "release", "create", "v1.0.0", "--generate-notes", "--draft"]
+exit = 0
+stdout = "stub-argv: [release] [create] [v1.0.0] [--generate-notes] [--draft]"
+policy = '''
+@id("gh_actions")
+permit (principal, action in Tool::gh::Action::"*", resource);
+
+@id("gh_no_publish")
+@description("An agent may save a release only as a draft.")
+forbid (principal, action == Tool::gh::Action::"release_create", resource)
+when { context.input.effects.contains(Tool::gh::Effect::"publish") };
+'''
