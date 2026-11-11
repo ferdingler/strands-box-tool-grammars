@@ -126,7 +126,7 @@ action = "unmodeled"
 argv = ["uv", "init", "myproj", "--lib"]
 action = "init"
 fields = { path = "myproj", lib = true }
-effects = ["modify_project", "network"]
+effects = ["modify_project", "network", "write_file"]
 
 [[case]]
 argv = ["uv", "init", "--vcs=none", "--name", "demo"]
@@ -346,7 +346,7 @@ effects = ["build_code", "network"]
 argv = ["uv", "export", "--format", "requirements.txt", "-o", "requirements.txt", "--frozen"]
 action = "export"
 fields = { format = "requirements.txt", output_file = "requirements.txt", frozen = true }
-effects = ["build_code", "network"]
+effects = ["build_code", "network", "write_file"]
 
 [[case]]
 argv = ["uv", "export", "--no-hashes"]
@@ -368,7 +368,7 @@ effects = ["modify_environment", "network"]
 argv = ["uv", "venv", ".venv", "--python", "3.12", "--seed"]
 action = "venv"
 fields = { path = ".venv", python = "3.12", seed = true }
-effects = ["modify_environment", "network"]
+effects = ["modify_environment", "network", "run_program", "write_file"]
 
 # `-c/--clear` removes what is at the path (help).
 [[case]]
@@ -387,7 +387,7 @@ effects = ["modify_environment", "network"]
 argv = ["uv", "v", "env2"]
 action = "venv"
 fields = { path = "env2" }
-effects = ["modify_environment", "network"]
+effects = ["modify_environment", "network", "write_file"]
 
 [[case]]
 argv = ["uv", "venv", "a", "b"]
@@ -403,7 +403,7 @@ effects = ["build_code", "network"]
 argv = ["uv", "build", "--wheel", "-o", "dist"]
 action = "build"
 fields = { wheel = true, out_dir = "dist" }
-effects = ["build_code", "network"]
+effects = ["build_code", "network", "write_file"]
 
 [[case]]
 argv = ["uv", "build", "--clear"]
@@ -664,7 +664,7 @@ effects = ["modify_user", "network"]
 argv = ["uv", "python", "find", ">=3.11"]
 action = "python_find"
 fields = { request = ">=3.11" }
-effects = ["read_only"]
+effects = ["run_program"]
 
 [[case]]
 argv = ["uv", "python", "pin"]
@@ -675,19 +675,19 @@ effects = ["read_only"]
 argv = ["uv", "python", "pin", "3.12"]
 action = "python_pin"
 fields = { request = "3.12" }
-effects = ["modify_project", "network"]
+effects = ["modify_project", "network", "run_program"]
 
 [[case]]
 argv = ["uv", "python", "pin", "--rm"]
 action = "python_pin"
 fields = { rm = true }
-effects = ["modify_project"]
+effects = ["delete_data", "modify_project"]
 
 [[case]]
 argv = ["uv", "python", "pin", "--global", "3.13"]
 action = "python_pin"
 fields = { global = true, request = "3.13" }
-effects = ["modify_user", "network"]
+effects = ["modify_user", "network", "run_program"]
 
 [[case]]
 argv = ["uv", "python", "pin", "--global"]
@@ -795,7 +795,7 @@ action = "unmodeled"
 argv = ["uv", "pip", "compile", "requirements.in", "-o", "requirements.txt", "--universal"]
 action = "pip_compile"
 fields = { src_file = ["requirements.in"], output_file = "requirements.txt", universal = true }
-effects = ["build_code", "network"]
+effects = ["build_code", "network", "write_file"]
 
 [[case]]
 argv = ["uv", "pip", "uninstall", "requests"]
@@ -1012,7 +1012,7 @@ effects = ["build_code", "modify_environment", "modify_project", "network", "oth
 
 # --- independent verifier cases ---
 # Written by the verifier from uv 0.13.7 source (crates/uv-cli/src/lib.rs) and clap behaviour, not from
-# the grammar. Cases marked EXPECT-FAIL state what uv does; the grammar disagrees (see VERIFY.md).
+# the grammar. Cases marked "Fixed after verification" were failing at cb8a475 (see VERIFY.md).
 
 # External subcommand: every word after the program goes to it, global flags included (clap
 # `external_subcommand`, `RunArgs::command`). Probe: `uv run echo -q hi --no-sync` prints `-q hi --no-sync`.
@@ -1107,7 +1107,7 @@ effects = ["read_only"]
 argv = ["uv", "v", "--clear", ".venv"]
 action = "venv"
 fields = { clear = true, path = ".venv" }
-effects = ["delete_data", "modify_environment", "network"]
+effects = ["delete_data", "modify_environment", "network", "write_file"]
 
 [[case]]
 argv = ["uv", "cache", "clear", "requests"]
@@ -1203,23 +1203,23 @@ action = "sync"
 fields = { frozen = true, directory = "/tmp/other" }
 effects = ["build_code", "modify_environment", "network", "other_directory"]
 
-# EXPECT-FAIL: `--python <path>` executes that file to query it (InterpreterInfo::query,
+# Fixed after verification (VERIFY.md F1-F4): `--python <path>` executes that file to query it (InterpreterInfo::query,
 # crates/uv-python-interpreter/src/interpreter.rs `Command::new(interpreter)`; probe on uv 0.12.5 ran
 # ./fakepy). The command line names a program that runs, so `run_program` applies.
 [[case]]
 argv = ["uv", "pip", "list", "--python", "./fakepy"]
 action = "pip_list"
 fields = { python = "./fakepy" }
-effects = ["read_only", "run_program"]
+effects = ["run_program"]
 
-# EXPECT-FAIL: same, through the `python find` request operand.
+# Fixed after verification (VERIFY.md F1-F4): same, through the `python find` request operand.
 [[case]]
 argv = ["uv", "python", "find", "./fakepy"]
 action = "python_find"
 fields = { request = "./fakepy" }
-effects = ["read_only", "run_program"]
+effects = ["run_program"]
 
-# EXPECT-FAIL: `pip install --python <system interpreter>` installs into that interpreter ("it can modify
+# Fixed after verification (VERIFY.md F1-F4): `pip install --python <system interpreter>` installs into that interpreter ("it can modify
 # the system Python installation", PipInstallArgs::python doc).
 [[case]]
 argv = ["uv", "pip", "install", "--python", "/usr/bin/python3", "x"]
@@ -1227,17 +1227,47 @@ action = "pip_install"
 fields = { python = "/usr/bin/python3", package = ["x"] }
 effects = ["build_code", "modify_environment", "network", "run_program", "system_python"]
 
-# EXPECT-FAIL: `export -o FILE` writes FILE even with `--frozen`.
+# Fixed after verification (VERIFY.md F1-F4): `export -o FILE` writes FILE even with `--frozen`.
 [[case]]
 argv = ["uv", "export", "--frozen", "-o", "pyproject.toml"]
 action = "export"
 fields = { frozen = true, output_file = "pyproject.toml" }
-effects = ["build_code", "modify_project", "network"]
+effects = ["build_code", "network", "write_file"]
 
-# EXPECT-FAIL: `python find --script` may download a Python (ScriptInterpreter::discover ->
+# Fixed after verification (VERIFY.md F1-F4): `python find --script` may download a Python (ScriptInterpreter::discover ->
 # PythonInstallation::find_or_download, crates/uv-python-discovery/src/script.rs).
 [[case]]
 argv = ["uv", "python", "find", "--script", "s.py"]
 action = "python_find"
 fields = { script = "s.py" }
-effects = ["modify_user", "network", "read_only"]
+effects = ["modify_user", "network"]
+
+# A version request in `--python` is also an executable query: a bare name is looked up on PATH, and
+# `like` cannot tell a version from a name (`uv help python`: `<executable-name>`), so it adds
+# `run_program` and drops `read_only`.
+[[case]]
+argv = ["uv", "pip", "list", "-p", "3.12"]
+action = "pip_list"
+fields = { python = "3.12" }
+effects = ["run_program"]
+
+# `-t/--target` and `--prefix` write into a named directory; `--python` in `pip sync` may pick a system
+# interpreter (PipInstallArgs::python doc).
+[[case]]
+argv = ["uv", "pip", "sync", "--target", "vendor", "-p", "python3", "requirements.txt"]
+action = "pip_sync"
+fields = { target = "vendor", python = "python3", src_file = ["requirements.txt"] }
+effects = ["build_code", "modify_environment", "network", "run_program", "system_python", "write_file"]
+
+[[case]]
+argv = ["uv", "pip", "uninstall", "-p", "/usr/bin/python3", "requests"]
+action = "pip_uninstall"
+fields = { python = "/usr/bin/python3", package = ["requests"] }
+effects = ["delete_data", "modify_environment", "run_program", "system_python"]
+
+# `python install -i` writes into the named directory.
+[[case]]
+argv = ["uv", "python", "install", "-i", "/opt/py", "3.12"]
+action = "python_install"
+fields = { install_dir = "/opt/py", targets = ["3.12"] }
+effects = ["modify_user", "network", "write_file"]

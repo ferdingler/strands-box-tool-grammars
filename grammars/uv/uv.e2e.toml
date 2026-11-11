@@ -105,3 +105,24 @@ permit (principal, action in Tool::uv::Action::"*", resource);
 forbid (principal, action == Tool::uv::Action::"sync", resource)
 when { context.input.effects.contains(Tool::uv::Effect::"modify_project") };
 '''
+
+# A read-only allowlist does not reach `--python <file>`, because uv executes that file
+[[case]]
+argv = ["uv", "pip", "list", "--python", "./fakepy"]
+exit = 126
+stderr = "[default-deny]"
+policy = '''
+@id("uv_read_only")
+permit (principal, action in Tool::uv::Action::"*", resource)
+when { context.input.effects.contains(Tool::uv::Effect::"read_only") };
+'''
+
+[[case]]
+argv = ["uv", "pip", "freeze"]
+exit = 0
+stdout = "stub-argv: [pip] [freeze]"
+policy = '''
+@id("uv_read_only")
+permit (principal, action in Tool::uv::Action::"*", resource)
+when { context.input.effects.contains(Tool::uv::Effect::"read_only") };
+'''

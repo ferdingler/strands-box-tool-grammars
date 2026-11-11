@@ -10,6 +10,9 @@ publish, change user state) and decide it.
 | Version checked | uv 0.13.7 (commit `316c827e0`), against `uv <command> --help` and the clap definitions in `crates/uv-cli` at that tag |
 | Policy namespace | `Tool::uv` |
 
+To change the grammar, edit `gen/head.toml` or `gen/gen.py` and run `python3 grammars/uv/gen/gen.py`,
+which rewrites `uv.grammar.toml`.
+
 ## Install uv
 
 Use the official standalone installer or a release archive from
@@ -63,21 +66,22 @@ take them accept them.
 
 | Effect | Meaning | Added by | Removed by |
 |---|---|---|---|
-| `read_only` | Makes no change to files, environments, or settings | list, show, find, dir, `version` alone, `python pin` alone | a value or `--bump` on `version`, a request or `--rm` on `python pin` |
+| `read_only` | Makes no change to files, environments, or settings | list, show, find, dir, `version` alone, `python pin` alone | any `-p/--python`, a request to `python find`/`pin`, `python find --script`, a value or `--bump` on `version`, `--rm` on `python pin` |
 | `network` | uv may contact indexes, Git hosts, or Python download servers | resolving, installing, downloading, publishing, `--outdated` | global `--offline` (not on `publish`) |
-| `run_program` | Runs a program the line names | `run`, `tool run` | nothing |
+| `run_program` | Runs a program the line names | `run`, `tool run`, every `-p/--python` value, a `python find`/`python pin` request | nothing |
 | `build_code` | May run a package build backend (arbitrary code) | every command that resolves or installs, and `build` | nothing; `--no-build` still builds editables |
 | `modify_environment` | Creates or changes a Python environment | `sync`, `add`, `remove`, `run`, `venv`, `pip install/sync/uninstall`, `tool run`, `version` with a value | `--dry-run`, `--check`, `--no-sync` (on `add`, `remove`, `version`) |
 | `modify_project` | Writes pyproject.toml, uv.lock, or .python-version | `init`, `add`, `remove`, `sync`, `lock`, `tree`, `export`, `run`, `version` with a value, `python pin` | `--locked`, `--frozen` (where they keep uv.lock unchanged), `--check`, `--dry-run` |
-| `modify_user` | Changes tools, managed Pythons, shell files, or uv itself | `tool install/upgrade/uninstall`, `python install/upgrade/uninstall`, `update-shell`, `self update`, `python pin --global` | `self update --dry-run` |
-| `delete_data` | Deletes cache entries, tools, Pythons, packages, or a directory's contents | `cache clean/prune`, uninstalls, `venv --clear`, `build --clear` | `pip uninstall --dry-run` |
+| `modify_user` | Changes tools, managed Pythons, shell files, or uv itself | `tool install/upgrade/uninstall`, `python install/upgrade/uninstall`, `update-shell`, `self update`, `python pin --global`, `python find --script` | `self update --dry-run` |
+| `delete_data` | Deletes cache entries, tools, Pythons, packages, or a directory's contents | `cache clean/prune`, uninstalls, `venv --clear`, `build --clear`, `python pin --rm` | `pip uninstall --dry-run` |
 | `publish` | Uploads distributions | `publish` | `publish --dry-run` |
 | `credentials` | The line carries a secret | `publish -p/-t`, `self update --token`, an index URL with `user@` in it | nothing |
 | `disable_tls_verification` | Insecure connections to a host | `--allow-insecure-host`, `--trusted-host` | nothing |
 | `override_index` | Uses an index or upload URL that the line names | `--index`, `--default-index`, `-i`, `--extra-index-url`, `-f`, `publish --index/--publish-url/--check-url` | nothing |
 | `override_config` | Uses a named config file, or ignores the discovered ones | `--config-file`, `--no-config` | nothing |
 | `other_directory` | Runs against another directory or project | `--directory`, `--project` | nothing |
-| `system_python` | Changes a system Python, not a virtual environment | `pip install/sync/uninstall --system` or `--break-system-packages` | nothing |
+| `system_python` | May change a system Python, not a virtual environment | `pip install/sync/uninstall` with `--system`, `--break-system-packages`, or any `-p/--python` | nothing |
+| `write_file` | Writes into, or removes from, a file or directory the line names | `export -o`, `pip compile -o`, `build -o`, `pip install/sync/uninstall -t/--prefix`, `python install/upgrade/uninstall -i`, the `init` and `venv` path | nothing |
 
 ## Example policy rules
 
@@ -129,6 +133,13 @@ These are deliberately not modeled, so their lines are `unmodeled` and fall to d
   global `--offline` could not truthfully remove `network` there.
 
 ## Known limits
+
+- `-p/--python` and a `python find`/`pin` request always add `run_program`. uv executes the
+  interpreter a request names to query it, and a bare name is looked up on `PATH`. A `like` pattern
+  cannot tell `3.12` from `mypython3` or `./x`, so even a version request counts. In the `pip`
+  commands that change an environment it also adds `system_python`.
+- `publish` can authenticate with ambient credentials (keyring, trusted publishing through OIDC, or
+  `UV_PUBLISH_*` variables). Those add no `credentials` effect, which only marks a secret on the line.
 
 - Environment variables (`UV_INDEX_URL`, `UV_OFFLINE`, `UV_PUBLISH_TOKEN`, `UV_INSECURE_HOST`, ...)
   and configuration files (`[tool.uv]` in pyproject.toml, `uv.toml`) can change what a line does.
