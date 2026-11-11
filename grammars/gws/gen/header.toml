@@ -1,0 +1,80 @@
+# Tool grammar for the Google Workspace CLI.
+#
+#   Project     googleworkspace/cli (https://github.com/googleworkspace/cli)
+#   Executable  gws, a native Rust binary
+#   Checked     gws 0.22.5 (tag v0.22.5, commit 705fb0ecac6f4249679958f6325b809b63fdde17)
+#   Discovery   gws builds its command tree at run time from Google's public Discovery documents.
+#               Checked against: drive v3 revision 20261106, gmail v1 20261106, calendar v3 20261109,
+#               sheets v4 20261109, docs v1 20261106. Google can add or remove a method without a gws
+#               release; a removed method then fails in gws, and a new one is unmodeled here.
+#
+# Shape: `gws <service> <resource> [<sub-resource>...] <method> [options]`. Every option of a method
+# comes after the method name. The grammar does not accept options before or between the command
+# words, although gws accepts `--dry-run`, `--format`, and `--sanitize` there: such a line is
+# unmodeled.
+#
+# --params and --json hold JSON. The grammar records each as one string field and cannot read its
+# content. The only exceptions are the `like` patterns below. Each one is a substring test that
+# over-flags: every letter case of the key word, and any `\u` escape. They flag `make_public` on
+# `drive permissions create` (`anyone`) and `drive revisions update` (`publish`), `share_external`
+# on `drive files create|copy|update` (`parents`, which covers `addParents`, and `inherit`, which
+# covers `inheritedPermissionsDisabled`), `change_sharing_rules` on the same three (`writers`, `requires`)
+# and on `drive drives create|update` (`restrict`), `send_email` on `drive permissions update`
+# (`transfer`, for `transferOwnership`), `trash_data` on Gmail
+# `modify` (`trash`), and `send_email` on calendar event writes (`sendUpdates`, `sendNotifications`,
+# and their snake_case forms). A policy that needs the
+# target file, message, or recipient must read the string with `like`, and must allow for JSON
+# escapes (`a`) and for any key order.
+#
+# What the grammar cannot see:
+#   - Environment variables: GOOGLE_WORKSPACE_CLI_TOKEN, GOOGLE_WORKSPACE_CLI_CREDENTIALS_FILE
+#     (which account is used), GOOGLE_WORKSPACE_CLI_CONFIG_DIR, GOOGLE_WORKSPACE_CLI_SANITIZE_TEMPLATE
+#     and GOOGLE_WORKSPACE_CLI_SANITIZE_MODE (send responses through Model Armor),
+#     GOOGLE_WORKSPACE_PROJECT_ID (quota project), and the proxy variables.
+#   - A `.env` file: gws loads one from the working directory or a parent, and it can set any of
+#     the variables above.
+#   - Files under ~/.config/gws: stored credentials, the token cache, the OAuth client, and a
+#     Discovery cache that lives 24 hours.
+#   - Which Google account and which file, message, or calendar a command acts on: they are in
+#     the credentials and in the --params JSON.
+#   - Child processes: `gws auth setup` runs gcloud. It is unmodeled.
+#
+# Deliberately unmodeled (no action, or an undeclared option): helper commands such as
+# `gmail +send` (`+` cannot start a command word), every camelCase method or resource such as
+# `files emptyTrash`, `documents batchUpdate`, `spreadsheets batchUpdate`, `calendarList` (a command
+# word is lowercase), `--api-version` and the `<service>:<version>` form (they change which API
+# the method names mean), `--sanitize`, `watch` methods (they register a push channel to a URL),
+# `gws auth login|logout|setup|export`, `gws generate-skills`, and every service not listed here.
+
+format  = 1
+version = 1
+name    = "gws"
+program = "gws"
+
+[effects]
+read_data        = "Reads data from the user's Google Workspace account"
+write_data       = "Creates or changes Workspace data (a file, message, label, event, calendar, sheet, or document)"
+delete_data      = "Permanently deletes or clears Workspace data, including a permission or ACL rule"
+trash_data       = "Moves a Gmail message or thread to the trash, where it can be restored"
+send_email       = "Sends email: a message, a draft, a Drive share or calendar ACL notification, or event notifications"
+share_external   = "Grants or changes access for another user, group, domain, or anyone, or gives a file or event the audience of a folder or calendar"
+make_public      = "Can grant access to anyone: a Drive permission or revision publish, a Drive permission update, or any calendar ACL write"
+change_sharing_rules = "Changes who may reshare, copy, or download a file, or a shared drive's sharing limits; grants no access itself"
+upload_file      = "Sends the content of a local file (--upload) to Google"
+write_local_file = "Writes the response to a local file (-o, --output)"
+read_credentials = "Reads the stored Google credentials and asks Google which account they belong to"
+
+# --------------------------------------------------------------------------------------------------
+# Auth and schema (hand-written commands, not from Discovery)
+# --------------------------------------------------------------------------------------------------
+
+# `gws auth status` takes no option. login, logout, setup, and export are unmodeled.
+[shell.auth_status]
+usage = "gws auth status"
+adds  = ["read_credentials"]
+
+# `gws schema <service.resource.method>` prints a method's schema from the public Discovery
+# document. It reads no account data.
+[shell.schema]
+usage = "gws schema [options] <method_path>"
+options.resolve_refs = { flag = ["--resolve-refs"] }

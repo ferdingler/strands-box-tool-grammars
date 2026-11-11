@@ -59,13 +59,14 @@ request body also takes `--json <JSON>`. A method that supports media upload als
 | Family | Methods | Effects |
 |---|---|---|
 | `drive files` | `list`, `get`, `export`, `download` | `read_data` |
-| | `copy`, `create`, `update` | `write_data`, plus `share_external` when the body or `--params` names `parents` (such as `addParents`) |
+| | `copy`, `create`, `update` | `write_data`, plus `share_external` when the body names `parents` or `inherit` (or update's `--params` names `parents`, as in `addParents`), and `change_sharing_rules` when the body names `writers` or `requires` |
 | | `delete` | `delete_data` |
 | `drive permissions` | `list`, `get` | `read_data` |
 | | `create` | `share_external`, `send_email`, plus `make_public` when the body may name `anyone` |
-| | `update` | `share_external`, `make_public` |
+| | `update` | `share_external`, `make_public`, plus `send_email` when `--params` names `transfer` (`transferOwnership`) |
 | | `delete` | `delete_data` |
 | `drive drives`, `comments`, `replies`, `revisions` | `list`, `get` / `create`, `update`, `hide`, `unhide` / `delete` | `read_data` / `write_data` / `delete_data` |
+| | `drives create`, `drives update` | `write_data`, plus `change_sharing_rules` when the body names `restrict` (`restrictions`) |
 | | `revisions update` | `write_data`, plus `make_public` and `share_external` when the body names `publish` (such as `published`) |
 | `drive about get`, `drive changes list` | | `read_data` |
 | `gmail users messages` | `list`, `get`, `attachments get` | `read_data` |
@@ -78,7 +79,7 @@ request body also takes `--json <JSON>`. A method that supports media upload als
 | `gmail users labels` | `list`, `get` / `create`, `patch`, `update` / `delete` | `read_data` / `write_data` / `delete_data` |
 | `gmail users history list`, `gmail users settings filters list`, `get` | | `read_data` |
 | `calendar events` | `list`, `get`, `instances` | `read_data` |
-| | `insert`, `patch`, `update`, `move`, `import` | `write_data`, plus `send_email` (not on `import`) when `--params` names `sendUpdates` or `sendNotifications` |
+| | `insert`, `patch`, `update`, `move`, `import` | `write_data`, plus `send_email` (not on `import`) when `--params` names `sendUpdates` or `sendNotifications`; `move` always adds `share_external` |
 | | `delete` | `delete_data`, plus `send_email` as above |
 | `calendar calendars` | `get` / `insert`, `patch`, `update` / `clear`, `delete` | `read_data` / `write_data` / `delete_data` |
 | `calendar acl` | `list`, `get` / `insert`, `patch`, `update` / `delete` | `read_data` / `share_external`, `make_public`, `send_email` / `delete_data` |
@@ -101,8 +102,9 @@ Each action is the command words joined with `_`, such as `drive_permissions_cre
 | `delete_data` | Deletes for good, or clears: a file, message, thread, draft, label, event, calendar's events, sheet range, permission, or ACL rule. |
 | `trash_data` | Moves a Gmail message or thread to the trash, where it can be restored. |
 | `send_email` | Sends a message or a draft, or a notification that Google sends for the agent: a Drive share (on by default), a calendar ACL change (on by default), or an event change that `--params` asks for. |
-| `share_external` | Grants or changes access for another user, group, domain, or anyone, publishes a revision, or puts a file in a folder whose audience it then gets. A whole-domain share is `share_external` only, not `make_public`. The grammar cannot tell your own domain from another one. |
+| `share_external` | Grants or changes access for another user, group, domain, or anyone, publishes a revision, gives a file a folder's audience (`parents`, or turning inherited permissions back on), or moves an event to a calendar with its own audience. A whole-domain share is `share_external` only, not `make_public`. The grammar cannot tell your own domain from another one. |
 | `make_public` | Can grant access to anyone. See the limits below for how it is decided. |
+| `change_sharing_rules` | Changes who may reshare or copy a file (`writersCanShare`, `copyRequiresWriterPermission`) or a shared drive's sharing limits (`restrictions`). It grants no access itself. |
 | `upload_file` | Sends a local file's content to Google (`--upload`). |
 | `write_local_file` | Writes the response to a local file (`-o`, `--output`). |
 | `read_credentials` | Reads the stored credentials and asks Google which account they belong to. |
@@ -182,8 +184,13 @@ These lines are unmodeled, so a policy refuses them unless it permits `unmodeled
   it, because it can widen an existing `anyone` permission. `revisions update` adds it when the
   body contains `publish` in any letter case, or any `\u`. It does **not** catch a file that becomes
   public because it is created, copied, or moved into a folder or shared drive that is already
-  shared with anyone: the grammar cannot see a folder's sharing. Such a line has `share_external`
-  (the `parents` check), so forbid `share_external` if that matters.
+  shared with anyone, or that turns inherited permissions back on
+  (`inheritedPermissionsDisabled: false`): the grammar cannot see a folder's sharing. Such a line
+  has `share_external` (the `parents` and `inherit` checks), so forbid `share_external` if that
+  matters.
+- **An ownership transfer** (`permissions update` with `transferOwnership` in `--params`) adds
+  `send_email`, because Google can notify the new owner. This is not verified against a live
+  account.
 - **A whole-domain share** (`type: domain`) is `share_external` only, not `make_public`.
 - **`send_email` on Drive shares is always added.** `sendNotificationEmail` defaults to true for a
   user or group, and `emailMessage` carries any text. A `false` in `--params` cannot be proven with
@@ -209,3 +216,7 @@ These lines are unmodeled, so a policy refuses them unless it permits `unmodeled
 - **`gws schema --resolve-refs <path>`** reads the flag as the path in gws and fails. The grammar
   reads the path correctly, so the decision can differ from what gws does, but gws makes no
   request.
+
+## Regenerate
+
+`gws.grammar.toml` is generated: from this directory, run `python3 -I gen/gen_grammar.py > gws.grammar.toml`.

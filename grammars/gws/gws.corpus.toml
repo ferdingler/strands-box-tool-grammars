@@ -882,7 +882,7 @@ effects = ["send_email", "write_data"]
 argv = ["gws", "calendar", "events", "move", "--params", '{"calendarId":"primary","eventId":"e1","destination":"c2","sendUpdates":"all"}']
 action = "calendar_events_move"
 fields = { params = '{"calendarId":"primary","eventId":"e1","destination":"c2","sendUpdates":"all"}' }
-effects = ["send_email", "write_data"]
+effects = ["send_email", "write_data", "share_external"]
 
 # events move has no request body.
 [[case]]
@@ -1186,6 +1186,34 @@ fields = { params = '{"calendarId":"primary","send_updates":"all"}', json = '{"s
 effects = ["send_email", "write_data"]
 
 
+# R2-1: `inheritedPermissionsDisabled: false` restores the parent folder's permissions (disc: drive
+# v3 File.inheritedPermissionsDisabled), so any letter case of `inherit` adds share_external.
+[[case]]
+argv = ["gws", "drive", "files", "create", "--json", '{"name":"a","InheritedPermissionsDisabled":false}']
+action = "drive_files_create"
+fields = { json = '{"name":"a","InheritedPermissionsDisabled":false}' }
+effects = ["share_external", "write_data"]
+
+# R2-2: `copyRequiresWriterPermission` (any case of `requires`) is change_sharing_rules.
+[[case]]
+argv = ["gws", "drive", "files", "copy", "--params", '{"fileId":"f1"}', "--json", '{"copy_requires_writer_permission":false}']
+action = "drive_files_copy"
+fields = { params = '{"fileId":"f1"}', json = '{"copy_requires_writer_permission":false}' }
+effects = ["change_sharing_rules", "write_data"]
+
+# R2-5: an ownership transfer can email the new owner, so `transfer` in --params adds send_email.
+[[case]]
+argv = ["gws", "drive", "permissions", "update", "--params", '{"fileId":"f1","permissionId":"p1","transferOwnership":true}', "--json", '{"role":"owner"}']
+action = "drive_permissions_update"
+fields = { params = '{"fileId":"f1","permissionId":"p1","transferOwnership":true}', json = '{"role":"owner"}' }
+effects = ["make_public", "send_email", "share_external"]
+
+# A dry run removes change_sharing_rules too.
+[[case]]
+argv = ["gws", "drive", "drives", "update", "--dry-run", "--params", '{"driveId":"d1"}', "--json", '{"restrictions":{"domainUsersOnly":false}}']
+action = "drive_drives_update"
+fields = { dry_run = true, params = '{"driveId":"d1"}', json = '{"restrictions":{"domainUsersOnly":false}}' }
+
 # A service the grammar does not cover is unmodeled.
 [[case]]
 argv = ["gws", "chat", "spaces", "list"]
@@ -1433,7 +1461,7 @@ effects = ["share_external", "send_email"]
 argv = ["gws", "drive", "permissions", "update", "--params", '{"fileId":"f1","permissionId":"p1","transferOwnership":true}', "--json", '{"role":"owner"}']
 action = "drive_permissions_update"
 fields = { params = '{"fileId":"f1","permissionId":"p1","transferOwnership":true}', json = '{"role":"owner"}' }
-effects = ["share_external", "make_public"]
+effects = ["share_external", "make_public", "send_email"]
 
 # V-3 fix on patch, with sendNotifications false still flagged (cannot prove false with like).
 [[case]]
@@ -1483,25 +1511,27 @@ action = "calendar_events_insert"
 fields = { params = '{"calendarId":"primary"}', json = '{"summary":"x","attendees":[{"email":"a@example.org"}]}' }
 effects = ["write_data"]
 
-# Noted, not failed (MINOR): settings that loosen who may share, but grant no access themselves.
+# Settings that loosen who may share, but grant no access themselves: change_sharing_rules
+# (author fix for R2-2, R2-3).
 [[case]]
 argv = ["gws", "drive", "files", "update", "--params", '{"fileId":"f1"}', "--json", '{"writersCanShare":true,"copyRequiresWriterPermission":false}']
 action = "drive_files_update"
 fields = { params = '{"fileId":"f1"}', json = '{"writersCanShare":true,"copyRequiresWriterPermission":false}' }
-effects = ["write_data"]
+effects = ["write_data", "change_sharing_rules"]
 
 [[case]]
 argv = ["gws", "drive", "drives", "update", "--params", '{"driveId":"d1"}', "--json", '{"restrictions":{"domainUsersOnly":false,"driveMembersOnly":false}}']
 action = "drive_drives_update"
 fields = { params = '{"driveId":"d1"}', json = '{"restrictions":{"domainUsersOnly":false,"driveMembersOnly":false}}' }
-effects = ["write_data"]
+effects = ["write_data", "change_sharing_rules"]
 
-# Noted, not failed (MINOR): moving an event to another calendar gives it that calendar's ACL.
+# Moving an event to another calendar gives it that calendar's ACL: share_external (author fix
+# for R2-4).
 [[case]]
 argv = ["gws", "calendar", "events", "move", "--params", '{"calendarId":"primary","eventId":"e","destination":"public@group.calendar.google.com"}']
 action = "calendar_events_move"
 fields = { params = '{"calendarId":"primary","eventId":"e","destination":"public@group.calendar.google.com"}' }
-effects = ["write_data"]
+effects = ["write_data", "share_external"]
 
 # --- round 2 case that FAILS on 568a40d (pins R2-1) ---
 # File.inheritedPermissionsDisabled=false re-enables inherited permissions (Discovery drive v3

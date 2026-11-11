@@ -17,7 +17,10 @@
 # content. The only exceptions are the `like` patterns below. Each one is a substring test that
 # over-flags: every letter case of the key word, and any `\u` escape. They flag `make_public` on
 # `drive permissions create` (`anyone`) and `drive revisions update` (`publish`), `share_external`
-# on `drive files create|copy|update` (`parents`, which covers `addParents`), `trash_data` on Gmail
+# on `drive files create|copy|update` (`parents`, which covers `addParents`, and `inherit`, which
+# covers `inheritedPermissionsDisabled`), `change_sharing_rules` on the same three (`writers`, `requires`)
+# and on `drive drives create|update` (`restrict`), `send_email` on `drive permissions update`
+# (`transfer`, for `transferOwnership`), `trash_data` on Gmail
 # `modify` (`trash`), and `send_email` on calendar event writes (`sendUpdates`, `sendNotifications`,
 # and their snake_case forms). A policy that needs the
 # target file, message, or recipient must read the string with `like`, and must allow for JSON
@@ -54,8 +57,9 @@ write_data       = "Creates or changes Workspace data (a file, message, label, e
 delete_data      = "Permanently deletes or clears Workspace data, including a permission or ACL rule"
 trash_data       = "Moves a Gmail message or thread to the trash, where it can be restored"
 send_email       = "Sends email: a message, a draft, a Drive share or calendar ACL notification, or event notifications"
-share_external   = "Grants or changes access for another user, group, domain, or anyone, or puts a file in a folder whose audience it then gets"
+share_external   = "Grants or changes access for another user, group, domain, or anyone, or gives a file or event the audience of a folder or calendar"
 make_public      = "Can grant access to anyone: a Drive permission or revision publish, a Drive permission update, or any calendar ACL write"
+change_sharing_rules = "Changes who may reshare, copy, or download a file, or a shared drive's sharing limits; grants no access itself"
 upload_file      = "Sends the content of a local file (--upload) to Google"
 write_local_file = "Writes the response to a local file (-o, --output)"
 read_credentials = "Reads the stored Google credentials and asks Google which account they belong to"
@@ -88,7 +92,7 @@ options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
 options.page_limit = { flag = ["--page-limit"], value = "required" }
 options.page_delay = { flag = ["--page-delay"], value = "required" }
-options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "upload_file", "write_local_file"] }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
 
 [shell.drive_files_list]
 usage = "gws drive files list [options]"
@@ -99,7 +103,7 @@ options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
 options.page_limit = { flag = ["--page-limit"], value = "required" }
 options.page_delay = { flag = ["--page-delay"], value = "required" }
-options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "upload_file", "write_local_file"] }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
 
 [shell.drive_files_get]
 usage = "gws drive files get [options]"
@@ -110,7 +114,7 @@ options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
 options.page_limit = { flag = ["--page-limit"], value = "required" }
 options.page_delay = { flag = ["--page-delay"], value = "required" }
-options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "upload_file", "write_local_file"] }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
 
 [shell.drive_files_export]
 usage = "gws drive files export [options]"
@@ -121,7 +125,7 @@ options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
 options.page_limit = { flag = ["--page-limit"], value = "required" }
 options.page_delay = { flag = ["--page-delay"], value = "required" }
-options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "upload_file", "write_local_file"] }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
 
 [shell.drive_files_download]
 usage = "gws drive files download [options]"
@@ -132,7 +136,7 @@ options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
 options.page_limit = { flag = ["--page-limit"], value = "required" }
 options.page_delay = { flag = ["--page-delay"], value = "required" }
-options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "upload_file", "write_local_file"] }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
 
 [shell.drive_files_copy]
 usage = "gws drive files copy [options]"
@@ -156,6 +160,73 @@ options.json = { flag = ["--json"], value = "required", when = [
     '*PArEnts*', '*PArEntS*', '*PArEnTs*', '*PArEnTS*', '*PArENts*', '*PArENtS*', '*PArENTs*', '*PArENTS*',
     '*PARents*', '*PARentS*', '*PARenTs*', '*PARenTS*', '*PAReNts*', '*PAReNtS*', '*PAReNTs*', '*PAReNTS*',
     '*PAREnts*', '*PAREntS*', '*PAREnTs*', '*PAREnTS*', '*PARENts*', '*PARENtS*', '*PARENTs*', '*PARENTS*',
+    '*\u*', '*inherit*', '*inheriT*', '*inherIt*', '*inherIT*', '*inheRit*', '*inheRiT*', '*inheRIt*',
+    '*inheRIT*', '*inhErit*', '*inhEriT*', '*inhErIt*', '*inhErIT*', '*inhERit*', '*inhERiT*', '*inhERIt*',
+    '*inhERIT*', '*inHerit*', '*inHeriT*', '*inHerIt*', '*inHerIT*', '*inHeRit*', '*inHeRiT*', '*inHeRIt*',
+    '*inHeRIT*', '*inHErit*', '*inHEriT*', '*inHErIt*', '*inHErIT*', '*inHERit*', '*inHERiT*', '*inHERIt*',
+    '*inHERIT*', '*iNherit*', '*iNheriT*', '*iNherIt*', '*iNherIT*', '*iNheRit*', '*iNheRiT*', '*iNheRIt*',
+    '*iNheRIT*', '*iNhErit*', '*iNhEriT*', '*iNhErIt*', '*iNhErIT*', '*iNhERit*', '*iNhERiT*', '*iNhERIt*',
+    '*iNhERIT*', '*iNHerit*', '*iNHeriT*', '*iNHerIt*', '*iNHerIT*', '*iNHeRit*', '*iNHeRiT*', '*iNHeRIt*',
+    '*iNHeRIT*', '*iNHErit*', '*iNHEriT*', '*iNHErIt*', '*iNHErIT*', '*iNHERit*', '*iNHERiT*', '*iNHERIt*',
+    '*iNHERIT*', '*Inherit*', '*InheriT*', '*InherIt*', '*InherIT*', '*InheRit*', '*InheRiT*', '*InheRIt*',
+    '*InheRIT*', '*InhErit*', '*InhEriT*', '*InhErIt*', '*InhErIT*', '*InhERit*', '*InhERiT*', '*InhERIt*',
+    '*InhERIT*', '*InHerit*', '*InHeriT*', '*InHerIt*', '*InHerIT*', '*InHeRit*', '*InHeRiT*', '*InHeRIt*',
+    '*InHeRIT*', '*InHErit*', '*InHEriT*', '*InHErIt*', '*InHErIT*', '*InHERit*', '*InHERiT*', '*InHERIt*',
+    '*InHERIT*', '*INherit*', '*INheriT*', '*INherIt*', '*INherIT*', '*INheRit*', '*INheRiT*', '*INheRIt*',
+    '*INheRIT*', '*INhErit*', '*INhEriT*', '*INhErIt*', '*INhErIT*', '*INhERit*', '*INhERiT*', '*INhERIt*',
+    '*INhERIT*', '*INHerit*', '*INHeriT*', '*INHerIt*', '*INHerIT*', '*INHeRit*', '*INHeRiT*', '*INHeRIt*',
+    '*INHeRIT*', '*INHErit*', '*INHEriT*', '*INHErIt*', '*INHErIT*', '*INHERit*', '*INHERiT*', '*INHERIt*',
+    '*INHERIT*',
+  ] },
+  { adds = ["change_sharing_rules"], like = [
+    '*writers*', '*writerS*', '*writeRs*', '*writeRS*', '*writErs*', '*writErS*', '*writERs*', '*writERS*',
+    '*wriTers*', '*wriTerS*', '*wriTeRs*', '*wriTeRS*', '*wriTErs*', '*wriTErS*', '*wriTERs*', '*wriTERS*',
+    '*wrIters*', '*wrIterS*', '*wrIteRs*', '*wrIteRS*', '*wrItErs*', '*wrItErS*', '*wrItERs*', '*wrItERS*',
+    '*wrITers*', '*wrITerS*', '*wrITeRs*', '*wrITeRS*', '*wrITErs*', '*wrITErS*', '*wrITERs*', '*wrITERS*',
+    '*wRiters*', '*wRiterS*', '*wRiteRs*', '*wRiteRS*', '*wRitErs*', '*wRitErS*', '*wRitERs*', '*wRitERS*',
+    '*wRiTers*', '*wRiTerS*', '*wRiTeRs*', '*wRiTeRS*', '*wRiTErs*', '*wRiTErS*', '*wRiTERs*', '*wRiTERS*',
+    '*wRIters*', '*wRIterS*', '*wRIteRs*', '*wRIteRS*', '*wRItErs*', '*wRItErS*', '*wRItERs*', '*wRItERS*',
+    '*wRITers*', '*wRITerS*', '*wRITeRs*', '*wRITeRS*', '*wRITErs*', '*wRITErS*', '*wRITERs*', '*wRITERS*',
+    '*Writers*', '*WriterS*', '*WriteRs*', '*WriteRS*', '*WritErs*', '*WritErS*', '*WritERs*', '*WritERS*',
+    '*WriTers*', '*WriTerS*', '*WriTeRs*', '*WriTeRS*', '*WriTErs*', '*WriTErS*', '*WriTERs*', '*WriTERS*',
+    '*WrIters*', '*WrIterS*', '*WrIteRs*', '*WrIteRS*', '*WrItErs*', '*WrItErS*', '*WrItERs*', '*WrItERS*',
+    '*WrITers*', '*WrITerS*', '*WrITeRs*', '*WrITeRS*', '*WrITErs*', '*WrITErS*', '*WrITERs*', '*WrITERS*',
+    '*WRiters*', '*WRiterS*', '*WRiteRs*', '*WRiteRS*', '*WRitErs*', '*WRitErS*', '*WRitERs*', '*WRitERS*',
+    '*WRiTers*', '*WRiTerS*', '*WRiTeRs*', '*WRiTeRS*', '*WRiTErs*', '*WRiTErS*', '*WRiTERs*', '*WRiTERS*',
+    '*WRIters*', '*WRIterS*', '*WRIteRs*', '*WRIteRS*', '*WRItErs*', '*WRItErS*', '*WRItERs*', '*WRItERS*',
+    '*WRITers*', '*WRITerS*', '*WRITeRs*', '*WRITeRS*', '*WRITErs*', '*WRITErS*', '*WRITERs*', '*WRITERS*',
+    '*requires*', '*requireS*', '*requirEs*', '*requirES*', '*requiRes*', '*requiReS*', '*requiREs*', '*requiRES*',
+    '*requIres*', '*requIreS*', '*requIrEs*', '*requIrES*', '*requIRes*', '*requIReS*', '*requIREs*', '*requIRES*',
+    '*reqUires*', '*reqUireS*', '*reqUirEs*', '*reqUirES*', '*reqUiRes*', '*reqUiReS*', '*reqUiREs*', '*reqUiRES*',
+    '*reqUIres*', '*reqUIreS*', '*reqUIrEs*', '*reqUIrES*', '*reqUIRes*', '*reqUIReS*', '*reqUIREs*', '*reqUIRES*',
+    '*reQuires*', '*reQuireS*', '*reQuirEs*', '*reQuirES*', '*reQuiRes*', '*reQuiReS*', '*reQuiREs*', '*reQuiRES*',
+    '*reQuIres*', '*reQuIreS*', '*reQuIrEs*', '*reQuIrES*', '*reQuIRes*', '*reQuIReS*', '*reQuIREs*', '*reQuIRES*',
+    '*reQUires*', '*reQUireS*', '*reQUirEs*', '*reQUirES*', '*reQUiRes*', '*reQUiReS*', '*reQUiREs*', '*reQUiRES*',
+    '*reQUIres*', '*reQUIreS*', '*reQUIrEs*', '*reQUIrES*', '*reQUIRes*', '*reQUIReS*', '*reQUIREs*', '*reQUIRES*',
+    '*rEquires*', '*rEquireS*', '*rEquirEs*', '*rEquirES*', '*rEquiRes*', '*rEquiReS*', '*rEquiREs*', '*rEquiRES*',
+    '*rEquIres*', '*rEquIreS*', '*rEquIrEs*', '*rEquIrES*', '*rEquIRes*', '*rEquIReS*', '*rEquIREs*', '*rEquIRES*',
+    '*rEqUires*', '*rEqUireS*', '*rEqUirEs*', '*rEqUirES*', '*rEqUiRes*', '*rEqUiReS*', '*rEqUiREs*', '*rEqUiRES*',
+    '*rEqUIres*', '*rEqUIreS*', '*rEqUIrEs*', '*rEqUIrES*', '*rEqUIRes*', '*rEqUIReS*', '*rEqUIREs*', '*rEqUIRES*',
+    '*rEQuires*', '*rEQuireS*', '*rEQuirEs*', '*rEQuirES*', '*rEQuiRes*', '*rEQuiReS*', '*rEQuiREs*', '*rEQuiRES*',
+    '*rEQuIres*', '*rEQuIreS*', '*rEQuIrEs*', '*rEQuIrES*', '*rEQuIRes*', '*rEQuIReS*', '*rEQuIREs*', '*rEQuIRES*',
+    '*rEQUires*', '*rEQUireS*', '*rEQUirEs*', '*rEQUirES*', '*rEQUiRes*', '*rEQUiReS*', '*rEQUiREs*', '*rEQUiRES*',
+    '*rEQUIres*', '*rEQUIreS*', '*rEQUIrEs*', '*rEQUIrES*', '*rEQUIRes*', '*rEQUIReS*', '*rEQUIREs*', '*rEQUIRES*',
+    '*Requires*', '*RequireS*', '*RequirEs*', '*RequirES*', '*RequiRes*', '*RequiReS*', '*RequiREs*', '*RequiRES*',
+    '*RequIres*', '*RequIreS*', '*RequIrEs*', '*RequIrES*', '*RequIRes*', '*RequIReS*', '*RequIREs*', '*RequIRES*',
+    '*ReqUires*', '*ReqUireS*', '*ReqUirEs*', '*ReqUirES*', '*ReqUiRes*', '*ReqUiReS*', '*ReqUiREs*', '*ReqUiRES*',
+    '*ReqUIres*', '*ReqUIreS*', '*ReqUIrEs*', '*ReqUIrES*', '*ReqUIRes*', '*ReqUIReS*', '*ReqUIREs*', '*ReqUIRES*',
+    '*ReQuires*', '*ReQuireS*', '*ReQuirEs*', '*ReQuirES*', '*ReQuiRes*', '*ReQuiReS*', '*ReQuiREs*', '*ReQuiRES*',
+    '*ReQuIres*', '*ReQuIreS*', '*ReQuIrEs*', '*ReQuIrES*', '*ReQuIRes*', '*ReQuIReS*', '*ReQuIREs*', '*ReQuIRES*',
+    '*ReQUires*', '*ReQUireS*', '*ReQUirEs*', '*ReQUirES*', '*ReQUiRes*', '*ReQUiReS*', '*ReQUiREs*', '*ReQUiRES*',
+    '*ReQUIres*', '*ReQUIreS*', '*ReQUIrEs*', '*ReQUIrES*', '*ReQUIRes*', '*ReQUIReS*', '*ReQUIREs*', '*ReQUIRES*',
+    '*REquires*', '*REquireS*', '*REquirEs*', '*REquirES*', '*REquiRes*', '*REquiReS*', '*REquiREs*', '*REquiRES*',
+    '*REquIres*', '*REquIreS*', '*REquIrEs*', '*REquIrES*', '*REquIRes*', '*REquIReS*', '*REquIREs*', '*REquIRES*',
+    '*REqUires*', '*REqUireS*', '*REqUirEs*', '*REqUirES*', '*REqUiRes*', '*REqUiReS*', '*REqUiREs*', '*REqUiRES*',
+    '*REqUIres*', '*REqUIreS*', '*REqUIrEs*', '*REqUIrES*', '*REqUIRes*', '*REqUIReS*', '*REqUIREs*', '*REqUIRES*',
+    '*REQuires*', '*REQuireS*', '*REQuirEs*', '*REQuirES*', '*REQuiRes*', '*REQuiReS*', '*REQuiREs*', '*REQuiRES*',
+    '*REQuIres*', '*REQuIreS*', '*REQuIrEs*', '*REQuIrES*', '*REQuIRes*', '*REQuIReS*', '*REQuIREs*', '*REQuIRES*',
+    '*REQUires*', '*REQUireS*', '*REQUirEs*', '*REQUirES*', '*REQUiRes*', '*REQUiReS*', '*REQUiREs*', '*REQUiRES*',
+    '*REQUIres*', '*REQUIreS*', '*REQUIrEs*', '*REQUIrES*', '*REQUIRes*', '*REQUIReS*', '*REQUIREs*', '*REQUIRES*',
     '*\u*',
   ] },
 ] }
@@ -164,7 +235,7 @@ options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
 options.page_limit = { flag = ["--page-limit"], value = "required" }
 options.page_delay = { flag = ["--page-delay"], value = "required" }
-options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "upload_file", "write_local_file"] }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
 
 [shell.drive_files_create]
 usage = "gws drive files create [options]"
@@ -188,6 +259,73 @@ options.json = { flag = ["--json"], value = "required", when = [
     '*PArEnts*', '*PArEntS*', '*PArEnTs*', '*PArEnTS*', '*PArENts*', '*PArENtS*', '*PArENTs*', '*PArENTS*',
     '*PARents*', '*PARentS*', '*PARenTs*', '*PARenTS*', '*PAReNts*', '*PAReNtS*', '*PAReNTs*', '*PAReNTS*',
     '*PAREnts*', '*PAREntS*', '*PAREnTs*', '*PAREnTS*', '*PARENts*', '*PARENtS*', '*PARENTs*', '*PARENTS*',
+    '*\u*', '*inherit*', '*inheriT*', '*inherIt*', '*inherIT*', '*inheRit*', '*inheRiT*', '*inheRIt*',
+    '*inheRIT*', '*inhErit*', '*inhEriT*', '*inhErIt*', '*inhErIT*', '*inhERit*', '*inhERiT*', '*inhERIt*',
+    '*inhERIT*', '*inHerit*', '*inHeriT*', '*inHerIt*', '*inHerIT*', '*inHeRit*', '*inHeRiT*', '*inHeRIt*',
+    '*inHeRIT*', '*inHErit*', '*inHEriT*', '*inHErIt*', '*inHErIT*', '*inHERit*', '*inHERiT*', '*inHERIt*',
+    '*inHERIT*', '*iNherit*', '*iNheriT*', '*iNherIt*', '*iNherIT*', '*iNheRit*', '*iNheRiT*', '*iNheRIt*',
+    '*iNheRIT*', '*iNhErit*', '*iNhEriT*', '*iNhErIt*', '*iNhErIT*', '*iNhERit*', '*iNhERiT*', '*iNhERIt*',
+    '*iNhERIT*', '*iNHerit*', '*iNHeriT*', '*iNHerIt*', '*iNHerIT*', '*iNHeRit*', '*iNHeRiT*', '*iNHeRIt*',
+    '*iNHeRIT*', '*iNHErit*', '*iNHEriT*', '*iNHErIt*', '*iNHErIT*', '*iNHERit*', '*iNHERiT*', '*iNHERIt*',
+    '*iNHERIT*', '*Inherit*', '*InheriT*', '*InherIt*', '*InherIT*', '*InheRit*', '*InheRiT*', '*InheRIt*',
+    '*InheRIT*', '*InhErit*', '*InhEriT*', '*InhErIt*', '*InhErIT*', '*InhERit*', '*InhERiT*', '*InhERIt*',
+    '*InhERIT*', '*InHerit*', '*InHeriT*', '*InHerIt*', '*InHerIT*', '*InHeRit*', '*InHeRiT*', '*InHeRIt*',
+    '*InHeRIT*', '*InHErit*', '*InHEriT*', '*InHErIt*', '*InHErIT*', '*InHERit*', '*InHERiT*', '*InHERIt*',
+    '*InHERIT*', '*INherit*', '*INheriT*', '*INherIt*', '*INherIT*', '*INheRit*', '*INheRiT*', '*INheRIt*',
+    '*INheRIT*', '*INhErit*', '*INhEriT*', '*INhErIt*', '*INhErIT*', '*INhERit*', '*INhERiT*', '*INhERIt*',
+    '*INhERIT*', '*INHerit*', '*INHeriT*', '*INHerIt*', '*INHerIT*', '*INHeRit*', '*INHeRiT*', '*INHeRIt*',
+    '*INHeRIT*', '*INHErit*', '*INHEriT*', '*INHErIt*', '*INHErIT*', '*INHERit*', '*INHERiT*', '*INHERIt*',
+    '*INHERIT*',
+  ] },
+  { adds = ["change_sharing_rules"], like = [
+    '*writers*', '*writerS*', '*writeRs*', '*writeRS*', '*writErs*', '*writErS*', '*writERs*', '*writERS*',
+    '*wriTers*', '*wriTerS*', '*wriTeRs*', '*wriTeRS*', '*wriTErs*', '*wriTErS*', '*wriTERs*', '*wriTERS*',
+    '*wrIters*', '*wrIterS*', '*wrIteRs*', '*wrIteRS*', '*wrItErs*', '*wrItErS*', '*wrItERs*', '*wrItERS*',
+    '*wrITers*', '*wrITerS*', '*wrITeRs*', '*wrITeRS*', '*wrITErs*', '*wrITErS*', '*wrITERs*', '*wrITERS*',
+    '*wRiters*', '*wRiterS*', '*wRiteRs*', '*wRiteRS*', '*wRitErs*', '*wRitErS*', '*wRitERs*', '*wRitERS*',
+    '*wRiTers*', '*wRiTerS*', '*wRiTeRs*', '*wRiTeRS*', '*wRiTErs*', '*wRiTErS*', '*wRiTERs*', '*wRiTERS*',
+    '*wRIters*', '*wRIterS*', '*wRIteRs*', '*wRIteRS*', '*wRItErs*', '*wRItErS*', '*wRItERs*', '*wRItERS*',
+    '*wRITers*', '*wRITerS*', '*wRITeRs*', '*wRITeRS*', '*wRITErs*', '*wRITErS*', '*wRITERs*', '*wRITERS*',
+    '*Writers*', '*WriterS*', '*WriteRs*', '*WriteRS*', '*WritErs*', '*WritErS*', '*WritERs*', '*WritERS*',
+    '*WriTers*', '*WriTerS*', '*WriTeRs*', '*WriTeRS*', '*WriTErs*', '*WriTErS*', '*WriTERs*', '*WriTERS*',
+    '*WrIters*', '*WrIterS*', '*WrIteRs*', '*WrIteRS*', '*WrItErs*', '*WrItErS*', '*WrItERs*', '*WrItERS*',
+    '*WrITers*', '*WrITerS*', '*WrITeRs*', '*WrITeRS*', '*WrITErs*', '*WrITErS*', '*WrITERs*', '*WrITERS*',
+    '*WRiters*', '*WRiterS*', '*WRiteRs*', '*WRiteRS*', '*WRitErs*', '*WRitErS*', '*WRitERs*', '*WRitERS*',
+    '*WRiTers*', '*WRiTerS*', '*WRiTeRs*', '*WRiTeRS*', '*WRiTErs*', '*WRiTErS*', '*WRiTERs*', '*WRiTERS*',
+    '*WRIters*', '*WRIterS*', '*WRIteRs*', '*WRIteRS*', '*WRItErs*', '*WRItErS*', '*WRItERs*', '*WRItERS*',
+    '*WRITers*', '*WRITerS*', '*WRITeRs*', '*WRITeRS*', '*WRITErs*', '*WRITErS*', '*WRITERs*', '*WRITERS*',
+    '*requires*', '*requireS*', '*requirEs*', '*requirES*', '*requiRes*', '*requiReS*', '*requiREs*', '*requiRES*',
+    '*requIres*', '*requIreS*', '*requIrEs*', '*requIrES*', '*requIRes*', '*requIReS*', '*requIREs*', '*requIRES*',
+    '*reqUires*', '*reqUireS*', '*reqUirEs*', '*reqUirES*', '*reqUiRes*', '*reqUiReS*', '*reqUiREs*', '*reqUiRES*',
+    '*reqUIres*', '*reqUIreS*', '*reqUIrEs*', '*reqUIrES*', '*reqUIRes*', '*reqUIReS*', '*reqUIREs*', '*reqUIRES*',
+    '*reQuires*', '*reQuireS*', '*reQuirEs*', '*reQuirES*', '*reQuiRes*', '*reQuiReS*', '*reQuiREs*', '*reQuiRES*',
+    '*reQuIres*', '*reQuIreS*', '*reQuIrEs*', '*reQuIrES*', '*reQuIRes*', '*reQuIReS*', '*reQuIREs*', '*reQuIRES*',
+    '*reQUires*', '*reQUireS*', '*reQUirEs*', '*reQUirES*', '*reQUiRes*', '*reQUiReS*', '*reQUiREs*', '*reQUiRES*',
+    '*reQUIres*', '*reQUIreS*', '*reQUIrEs*', '*reQUIrES*', '*reQUIRes*', '*reQUIReS*', '*reQUIREs*', '*reQUIRES*',
+    '*rEquires*', '*rEquireS*', '*rEquirEs*', '*rEquirES*', '*rEquiRes*', '*rEquiReS*', '*rEquiREs*', '*rEquiRES*',
+    '*rEquIres*', '*rEquIreS*', '*rEquIrEs*', '*rEquIrES*', '*rEquIRes*', '*rEquIReS*', '*rEquIREs*', '*rEquIRES*',
+    '*rEqUires*', '*rEqUireS*', '*rEqUirEs*', '*rEqUirES*', '*rEqUiRes*', '*rEqUiReS*', '*rEqUiREs*', '*rEqUiRES*',
+    '*rEqUIres*', '*rEqUIreS*', '*rEqUIrEs*', '*rEqUIrES*', '*rEqUIRes*', '*rEqUIReS*', '*rEqUIREs*', '*rEqUIRES*',
+    '*rEQuires*', '*rEQuireS*', '*rEQuirEs*', '*rEQuirES*', '*rEQuiRes*', '*rEQuiReS*', '*rEQuiREs*', '*rEQuiRES*',
+    '*rEQuIres*', '*rEQuIreS*', '*rEQuIrEs*', '*rEQuIrES*', '*rEQuIRes*', '*rEQuIReS*', '*rEQuIREs*', '*rEQuIRES*',
+    '*rEQUires*', '*rEQUireS*', '*rEQUirEs*', '*rEQUirES*', '*rEQUiRes*', '*rEQUiReS*', '*rEQUiREs*', '*rEQUiRES*',
+    '*rEQUIres*', '*rEQUIreS*', '*rEQUIrEs*', '*rEQUIrES*', '*rEQUIRes*', '*rEQUIReS*', '*rEQUIREs*', '*rEQUIRES*',
+    '*Requires*', '*RequireS*', '*RequirEs*', '*RequirES*', '*RequiRes*', '*RequiReS*', '*RequiREs*', '*RequiRES*',
+    '*RequIres*', '*RequIreS*', '*RequIrEs*', '*RequIrES*', '*RequIRes*', '*RequIReS*', '*RequIREs*', '*RequIRES*',
+    '*ReqUires*', '*ReqUireS*', '*ReqUirEs*', '*ReqUirES*', '*ReqUiRes*', '*ReqUiReS*', '*ReqUiREs*', '*ReqUiRES*',
+    '*ReqUIres*', '*ReqUIreS*', '*ReqUIrEs*', '*ReqUIrES*', '*ReqUIRes*', '*ReqUIReS*', '*ReqUIREs*', '*ReqUIRES*',
+    '*ReQuires*', '*ReQuireS*', '*ReQuirEs*', '*ReQuirES*', '*ReQuiRes*', '*ReQuiReS*', '*ReQuiREs*', '*ReQuiRES*',
+    '*ReQuIres*', '*ReQuIreS*', '*ReQuIrEs*', '*ReQuIrES*', '*ReQuIRes*', '*ReQuIReS*', '*ReQuIREs*', '*ReQuIRES*',
+    '*ReQUires*', '*ReQUireS*', '*ReQUirEs*', '*ReQUirES*', '*ReQUiRes*', '*ReQUiReS*', '*ReQUiREs*', '*ReQUiRES*',
+    '*ReQUIres*', '*ReQUIreS*', '*ReQUIrEs*', '*ReQUIrES*', '*ReQUIRes*', '*ReQUIReS*', '*ReQUIREs*', '*ReQUIRES*',
+    '*REquires*', '*REquireS*', '*REquirEs*', '*REquirES*', '*REquiRes*', '*REquiReS*', '*REquiREs*', '*REquiRES*',
+    '*REquIres*', '*REquIreS*', '*REquIrEs*', '*REquIrES*', '*REquIRes*', '*REquIReS*', '*REquIREs*', '*REquIRES*',
+    '*REqUires*', '*REqUireS*', '*REqUirEs*', '*REqUirES*', '*REqUiRes*', '*REqUiReS*', '*REqUiREs*', '*REqUiRES*',
+    '*REqUIres*', '*REqUIreS*', '*REqUIrEs*', '*REqUIrES*', '*REqUIRes*', '*REqUIReS*', '*REqUIREs*', '*REqUIRES*',
+    '*REQuires*', '*REQuireS*', '*REQuirEs*', '*REQuirES*', '*REQuiRes*', '*REQuiReS*', '*REQuiREs*', '*REQuiRES*',
+    '*REQuIres*', '*REQuIreS*', '*REQuIrEs*', '*REQuIrES*', '*REQuIRes*', '*REQuIReS*', '*REQuIREs*', '*REQuIRES*',
+    '*REQUires*', '*REQUireS*', '*REQUirEs*', '*REQUirES*', '*REQUiRes*', '*REQUiReS*', '*REQUiREs*', '*REQUiRES*',
+    '*REQUIres*', '*REQUIreS*', '*REQUIrEs*', '*REQUIrES*', '*REQUIRes*', '*REQUIReS*', '*REQUIREs*', '*REQUIRES*',
     '*\u*',
   ] },
 ] }
@@ -198,7 +336,7 @@ options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
 options.page_limit = { flag = ["--page-limit"], value = "required" }
 options.page_delay = { flag = ["--page-delay"], value = "required" }
-options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "upload_file", "write_local_file"] }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
 
 [shell.drive_files_update]
 usage = "gws drive files update [options]"
@@ -242,6 +380,73 @@ options.json = { flag = ["--json"], value = "required", when = [
     '*PArEnts*', '*PArEntS*', '*PArEnTs*', '*PArEnTS*', '*PArENts*', '*PArENtS*', '*PArENTs*', '*PArENTS*',
     '*PARents*', '*PARentS*', '*PARenTs*', '*PARenTS*', '*PAReNts*', '*PAReNtS*', '*PAReNTs*', '*PAReNTS*',
     '*PAREnts*', '*PAREntS*', '*PAREnTs*', '*PAREnTS*', '*PARENts*', '*PARENtS*', '*PARENTs*', '*PARENTS*',
+    '*\u*', '*inherit*', '*inheriT*', '*inherIt*', '*inherIT*', '*inheRit*', '*inheRiT*', '*inheRIt*',
+    '*inheRIT*', '*inhErit*', '*inhEriT*', '*inhErIt*', '*inhErIT*', '*inhERit*', '*inhERiT*', '*inhERIt*',
+    '*inhERIT*', '*inHerit*', '*inHeriT*', '*inHerIt*', '*inHerIT*', '*inHeRit*', '*inHeRiT*', '*inHeRIt*',
+    '*inHeRIT*', '*inHErit*', '*inHEriT*', '*inHErIt*', '*inHErIT*', '*inHERit*', '*inHERiT*', '*inHERIt*',
+    '*inHERIT*', '*iNherit*', '*iNheriT*', '*iNherIt*', '*iNherIT*', '*iNheRit*', '*iNheRiT*', '*iNheRIt*',
+    '*iNheRIT*', '*iNhErit*', '*iNhEriT*', '*iNhErIt*', '*iNhErIT*', '*iNhERit*', '*iNhERiT*', '*iNhERIt*',
+    '*iNhERIT*', '*iNHerit*', '*iNHeriT*', '*iNHerIt*', '*iNHerIT*', '*iNHeRit*', '*iNHeRiT*', '*iNHeRIt*',
+    '*iNHeRIT*', '*iNHErit*', '*iNHEriT*', '*iNHErIt*', '*iNHErIT*', '*iNHERit*', '*iNHERiT*', '*iNHERIt*',
+    '*iNHERIT*', '*Inherit*', '*InheriT*', '*InherIt*', '*InherIT*', '*InheRit*', '*InheRiT*', '*InheRIt*',
+    '*InheRIT*', '*InhErit*', '*InhEriT*', '*InhErIt*', '*InhErIT*', '*InhERit*', '*InhERiT*', '*InhERIt*',
+    '*InhERIT*', '*InHerit*', '*InHeriT*', '*InHerIt*', '*InHerIT*', '*InHeRit*', '*InHeRiT*', '*InHeRIt*',
+    '*InHeRIT*', '*InHErit*', '*InHEriT*', '*InHErIt*', '*InHErIT*', '*InHERit*', '*InHERiT*', '*InHERIt*',
+    '*InHERIT*', '*INherit*', '*INheriT*', '*INherIt*', '*INherIT*', '*INheRit*', '*INheRiT*', '*INheRIt*',
+    '*INheRIT*', '*INhErit*', '*INhEriT*', '*INhErIt*', '*INhErIT*', '*INhERit*', '*INhERiT*', '*INhERIt*',
+    '*INhERIT*', '*INHerit*', '*INHeriT*', '*INHerIt*', '*INHerIT*', '*INHeRit*', '*INHeRiT*', '*INHeRIt*',
+    '*INHeRIT*', '*INHErit*', '*INHEriT*', '*INHErIt*', '*INHErIT*', '*INHERit*', '*INHERiT*', '*INHERIt*',
+    '*INHERIT*',
+  ] },
+  { adds = ["change_sharing_rules"], like = [
+    '*writers*', '*writerS*', '*writeRs*', '*writeRS*', '*writErs*', '*writErS*', '*writERs*', '*writERS*',
+    '*wriTers*', '*wriTerS*', '*wriTeRs*', '*wriTeRS*', '*wriTErs*', '*wriTErS*', '*wriTERs*', '*wriTERS*',
+    '*wrIters*', '*wrIterS*', '*wrIteRs*', '*wrIteRS*', '*wrItErs*', '*wrItErS*', '*wrItERs*', '*wrItERS*',
+    '*wrITers*', '*wrITerS*', '*wrITeRs*', '*wrITeRS*', '*wrITErs*', '*wrITErS*', '*wrITERs*', '*wrITERS*',
+    '*wRiters*', '*wRiterS*', '*wRiteRs*', '*wRiteRS*', '*wRitErs*', '*wRitErS*', '*wRitERs*', '*wRitERS*',
+    '*wRiTers*', '*wRiTerS*', '*wRiTeRs*', '*wRiTeRS*', '*wRiTErs*', '*wRiTErS*', '*wRiTERs*', '*wRiTERS*',
+    '*wRIters*', '*wRIterS*', '*wRIteRs*', '*wRIteRS*', '*wRItErs*', '*wRItErS*', '*wRItERs*', '*wRItERS*',
+    '*wRITers*', '*wRITerS*', '*wRITeRs*', '*wRITeRS*', '*wRITErs*', '*wRITErS*', '*wRITERs*', '*wRITERS*',
+    '*Writers*', '*WriterS*', '*WriteRs*', '*WriteRS*', '*WritErs*', '*WritErS*', '*WritERs*', '*WritERS*',
+    '*WriTers*', '*WriTerS*', '*WriTeRs*', '*WriTeRS*', '*WriTErs*', '*WriTErS*', '*WriTERs*', '*WriTERS*',
+    '*WrIters*', '*WrIterS*', '*WrIteRs*', '*WrIteRS*', '*WrItErs*', '*WrItErS*', '*WrItERs*', '*WrItERS*',
+    '*WrITers*', '*WrITerS*', '*WrITeRs*', '*WrITeRS*', '*WrITErs*', '*WrITErS*', '*WrITERs*', '*WrITERS*',
+    '*WRiters*', '*WRiterS*', '*WRiteRs*', '*WRiteRS*', '*WRitErs*', '*WRitErS*', '*WRitERs*', '*WRitERS*',
+    '*WRiTers*', '*WRiTerS*', '*WRiTeRs*', '*WRiTeRS*', '*WRiTErs*', '*WRiTErS*', '*WRiTERs*', '*WRiTERS*',
+    '*WRIters*', '*WRIterS*', '*WRIteRs*', '*WRIteRS*', '*WRItErs*', '*WRItErS*', '*WRItERs*', '*WRItERS*',
+    '*WRITers*', '*WRITerS*', '*WRITeRs*', '*WRITeRS*', '*WRITErs*', '*WRITErS*', '*WRITERs*', '*WRITERS*',
+    '*requires*', '*requireS*', '*requirEs*', '*requirES*', '*requiRes*', '*requiReS*', '*requiREs*', '*requiRES*',
+    '*requIres*', '*requIreS*', '*requIrEs*', '*requIrES*', '*requIRes*', '*requIReS*', '*requIREs*', '*requIRES*',
+    '*reqUires*', '*reqUireS*', '*reqUirEs*', '*reqUirES*', '*reqUiRes*', '*reqUiReS*', '*reqUiREs*', '*reqUiRES*',
+    '*reqUIres*', '*reqUIreS*', '*reqUIrEs*', '*reqUIrES*', '*reqUIRes*', '*reqUIReS*', '*reqUIREs*', '*reqUIRES*',
+    '*reQuires*', '*reQuireS*', '*reQuirEs*', '*reQuirES*', '*reQuiRes*', '*reQuiReS*', '*reQuiREs*', '*reQuiRES*',
+    '*reQuIres*', '*reQuIreS*', '*reQuIrEs*', '*reQuIrES*', '*reQuIRes*', '*reQuIReS*', '*reQuIREs*', '*reQuIRES*',
+    '*reQUires*', '*reQUireS*', '*reQUirEs*', '*reQUirES*', '*reQUiRes*', '*reQUiReS*', '*reQUiREs*', '*reQUiRES*',
+    '*reQUIres*', '*reQUIreS*', '*reQUIrEs*', '*reQUIrES*', '*reQUIRes*', '*reQUIReS*', '*reQUIREs*', '*reQUIRES*',
+    '*rEquires*', '*rEquireS*', '*rEquirEs*', '*rEquirES*', '*rEquiRes*', '*rEquiReS*', '*rEquiREs*', '*rEquiRES*',
+    '*rEquIres*', '*rEquIreS*', '*rEquIrEs*', '*rEquIrES*', '*rEquIRes*', '*rEquIReS*', '*rEquIREs*', '*rEquIRES*',
+    '*rEqUires*', '*rEqUireS*', '*rEqUirEs*', '*rEqUirES*', '*rEqUiRes*', '*rEqUiReS*', '*rEqUiREs*', '*rEqUiRES*',
+    '*rEqUIres*', '*rEqUIreS*', '*rEqUIrEs*', '*rEqUIrES*', '*rEqUIRes*', '*rEqUIReS*', '*rEqUIREs*', '*rEqUIRES*',
+    '*rEQuires*', '*rEQuireS*', '*rEQuirEs*', '*rEQuirES*', '*rEQuiRes*', '*rEQuiReS*', '*rEQuiREs*', '*rEQuiRES*',
+    '*rEQuIres*', '*rEQuIreS*', '*rEQuIrEs*', '*rEQuIrES*', '*rEQuIRes*', '*rEQuIReS*', '*rEQuIREs*', '*rEQuIRES*',
+    '*rEQUires*', '*rEQUireS*', '*rEQUirEs*', '*rEQUirES*', '*rEQUiRes*', '*rEQUiReS*', '*rEQUiREs*', '*rEQUiRES*',
+    '*rEQUIres*', '*rEQUIreS*', '*rEQUIrEs*', '*rEQUIrES*', '*rEQUIRes*', '*rEQUIReS*', '*rEQUIREs*', '*rEQUIRES*',
+    '*Requires*', '*RequireS*', '*RequirEs*', '*RequirES*', '*RequiRes*', '*RequiReS*', '*RequiREs*', '*RequiRES*',
+    '*RequIres*', '*RequIreS*', '*RequIrEs*', '*RequIrES*', '*RequIRes*', '*RequIReS*', '*RequIREs*', '*RequIRES*',
+    '*ReqUires*', '*ReqUireS*', '*ReqUirEs*', '*ReqUirES*', '*ReqUiRes*', '*ReqUiReS*', '*ReqUiREs*', '*ReqUiRES*',
+    '*ReqUIres*', '*ReqUIreS*', '*ReqUIrEs*', '*ReqUIrES*', '*ReqUIRes*', '*ReqUIReS*', '*ReqUIREs*', '*ReqUIRES*',
+    '*ReQuires*', '*ReQuireS*', '*ReQuirEs*', '*ReQuirES*', '*ReQuiRes*', '*ReQuiReS*', '*ReQuiREs*', '*ReQuiRES*',
+    '*ReQuIres*', '*ReQuIreS*', '*ReQuIrEs*', '*ReQuIrES*', '*ReQuIRes*', '*ReQuIReS*', '*ReQuIREs*', '*ReQuIRES*',
+    '*ReQUires*', '*ReQUireS*', '*ReQUirEs*', '*ReQUirES*', '*ReQUiRes*', '*ReQUiReS*', '*ReQUiREs*', '*ReQUiRES*',
+    '*ReQUIres*', '*ReQUIreS*', '*ReQUIrEs*', '*ReQUIrES*', '*ReQUIRes*', '*ReQUIReS*', '*ReQUIREs*', '*ReQUIRES*',
+    '*REquires*', '*REquireS*', '*REquirEs*', '*REquirES*', '*REquiRes*', '*REquiReS*', '*REquiREs*', '*REquiRES*',
+    '*REquIres*', '*REquIreS*', '*REquIrEs*', '*REquIrES*', '*REquIRes*', '*REquIReS*', '*REquIREs*', '*REquIRES*',
+    '*REqUires*', '*REqUireS*', '*REqUirEs*', '*REqUirES*', '*REqUiRes*', '*REqUiReS*', '*REqUiREs*', '*REqUiRES*',
+    '*REqUIres*', '*REqUIreS*', '*REqUIrEs*', '*REqUIrES*', '*REqUIRes*', '*REqUIReS*', '*REqUIREs*', '*REqUIRES*',
+    '*REQuires*', '*REQuireS*', '*REQuirEs*', '*REQuirES*', '*REQuiRes*', '*REQuiReS*', '*REQuiREs*', '*REQuiRES*',
+    '*REQuIres*', '*REQuIreS*', '*REQuIrEs*', '*REQuIrES*', '*REQuIRes*', '*REQuIReS*', '*REQuIREs*', '*REQuIRES*',
+    '*REQUires*', '*REQUireS*', '*REQUirEs*', '*REQUirES*', '*REQUiRes*', '*REQUiReS*', '*REQUiREs*', '*REQUiRES*',
+    '*REQUIres*', '*REQUIreS*', '*REQUIrEs*', '*REQUIrES*', '*REQUIRes*', '*REQUIReS*', '*REQUIREs*', '*REQUIRES*',
     '*\u*',
   ] },
 ] }
@@ -252,7 +457,7 @@ options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
 options.page_limit = { flag = ["--page-limit"], value = "required" }
 options.page_delay = { flag = ["--page-delay"], value = "required" }
-options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "upload_file", "write_local_file"] }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
 
 [shell.drive_files_delete]
 usage = "gws drive files delete [options]"
@@ -263,7 +468,7 @@ options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
 options.page_limit = { flag = ["--page-limit"], value = "required" }
 options.page_delay = { flag = ["--page-delay"], value = "required" }
-options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "upload_file", "write_local_file"] }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
 
 [shell.drive_permissions_list]
 usage = "gws drive permissions list [options]"
@@ -274,7 +479,7 @@ options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
 options.page_limit = { flag = ["--page-limit"], value = "required" }
 options.page_delay = { flag = ["--page-delay"], value = "required" }
-options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "upload_file", "write_local_file"] }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
 
 [shell.drive_permissions_get]
 usage = "gws drive permissions get [options]"
@@ -285,7 +490,7 @@ options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
 options.page_limit = { flag = ["--page-limit"], value = "required" }
 options.page_delay = { flag = ["--page-delay"], value = "required" }
-options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "upload_file", "write_local_file"] }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
 
 [shell.drive_permissions_create]
 usage = "gws drive permissions create [options]"
@@ -309,19 +514,55 @@ options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
 options.page_limit = { flag = ["--page-limit"], value = "required" }
 options.page_delay = { flag = ["--page-delay"], value = "required" }
-options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "upload_file", "write_local_file"] }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
 
 [shell.drive_permissions_update]
 usage = "gws drive permissions update [options]"
 adds  = ["share_external", "make_public"]
-options.params    = { flag = ["--params"], value = "required" }
+options.params = { flag = ["--params"], value = "required", when = [
+  { adds = ["send_email"], like = [
+    '*transfer*', '*transfeR*', '*transfEr*', '*transfER*', '*transFer*', '*transFeR*', '*transFEr*', '*transFER*',
+    '*tranSfer*', '*tranSfeR*', '*tranSfEr*', '*tranSfER*', '*tranSFer*', '*tranSFeR*', '*tranSFEr*', '*tranSFER*',
+    '*traNsfer*', '*traNsfeR*', '*traNsfEr*', '*traNsfER*', '*traNsFer*', '*traNsFeR*', '*traNsFEr*', '*traNsFER*',
+    '*traNSfer*', '*traNSfeR*', '*traNSfEr*', '*traNSfER*', '*traNSFer*', '*traNSFeR*', '*traNSFEr*', '*traNSFER*',
+    '*trAnsfer*', '*trAnsfeR*', '*trAnsfEr*', '*trAnsfER*', '*trAnsFer*', '*trAnsFeR*', '*trAnsFEr*', '*trAnsFER*',
+    '*trAnSfer*', '*trAnSfeR*', '*trAnSfEr*', '*trAnSfER*', '*trAnSFer*', '*trAnSFeR*', '*trAnSFEr*', '*trAnSFER*',
+    '*trANsfer*', '*trANsfeR*', '*trANsfEr*', '*trANsfER*', '*trANsFer*', '*trANsFeR*', '*trANsFEr*', '*trANsFER*',
+    '*trANSfer*', '*trANSfeR*', '*trANSfEr*', '*trANSfER*', '*trANSFer*', '*trANSFeR*', '*trANSFEr*', '*trANSFER*',
+    '*tRansfer*', '*tRansfeR*', '*tRansfEr*', '*tRansfER*', '*tRansFer*', '*tRansFeR*', '*tRansFEr*', '*tRansFER*',
+    '*tRanSfer*', '*tRanSfeR*', '*tRanSfEr*', '*tRanSfER*', '*tRanSFer*', '*tRanSFeR*', '*tRanSFEr*', '*tRanSFER*',
+    '*tRaNsfer*', '*tRaNsfeR*', '*tRaNsfEr*', '*tRaNsfER*', '*tRaNsFer*', '*tRaNsFeR*', '*tRaNsFEr*', '*tRaNsFER*',
+    '*tRaNSfer*', '*tRaNSfeR*', '*tRaNSfEr*', '*tRaNSfER*', '*tRaNSFer*', '*tRaNSFeR*', '*tRaNSFEr*', '*tRaNSFER*',
+    '*tRAnsfer*', '*tRAnsfeR*', '*tRAnsfEr*', '*tRAnsfER*', '*tRAnsFer*', '*tRAnsFeR*', '*tRAnsFEr*', '*tRAnsFER*',
+    '*tRAnSfer*', '*tRAnSfeR*', '*tRAnSfEr*', '*tRAnSfER*', '*tRAnSFer*', '*tRAnSFeR*', '*tRAnSFEr*', '*tRAnSFER*',
+    '*tRANsfer*', '*tRANsfeR*', '*tRANsfEr*', '*tRANsfER*', '*tRANsFer*', '*tRANsFeR*', '*tRANsFEr*', '*tRANsFER*',
+    '*tRANSfer*', '*tRANSfeR*', '*tRANSfEr*', '*tRANSfER*', '*tRANSFer*', '*tRANSFeR*', '*tRANSFEr*', '*tRANSFER*',
+    '*Transfer*', '*TransfeR*', '*TransfEr*', '*TransfER*', '*TransFer*', '*TransFeR*', '*TransFEr*', '*TransFER*',
+    '*TranSfer*', '*TranSfeR*', '*TranSfEr*', '*TranSfER*', '*TranSFer*', '*TranSFeR*', '*TranSFEr*', '*TranSFER*',
+    '*TraNsfer*', '*TraNsfeR*', '*TraNsfEr*', '*TraNsfER*', '*TraNsFer*', '*TraNsFeR*', '*TraNsFEr*', '*TraNsFER*',
+    '*TraNSfer*', '*TraNSfeR*', '*TraNSfEr*', '*TraNSfER*', '*TraNSFer*', '*TraNSFeR*', '*TraNSFEr*', '*TraNSFER*',
+    '*TrAnsfer*', '*TrAnsfeR*', '*TrAnsfEr*', '*TrAnsfER*', '*TrAnsFer*', '*TrAnsFeR*', '*TrAnsFEr*', '*TrAnsFER*',
+    '*TrAnSfer*', '*TrAnSfeR*', '*TrAnSfEr*', '*TrAnSfER*', '*TrAnSFer*', '*TrAnSFeR*', '*TrAnSFEr*', '*TrAnSFER*',
+    '*TrANsfer*', '*TrANsfeR*', '*TrANsfEr*', '*TrANsfER*', '*TrANsFer*', '*TrANsFeR*', '*TrANsFEr*', '*TrANsFER*',
+    '*TrANSfer*', '*TrANSfeR*', '*TrANSfEr*', '*TrANSfER*', '*TrANSFer*', '*TrANSFeR*', '*TrANSFEr*', '*TrANSFER*',
+    '*TRansfer*', '*TRansfeR*', '*TRansfEr*', '*TRansfER*', '*TRansFer*', '*TRansFeR*', '*TRansFEr*', '*TRansFER*',
+    '*TRanSfer*', '*TRanSfeR*', '*TRanSfEr*', '*TRanSfER*', '*TRanSFer*', '*TRanSFeR*', '*TRanSFEr*', '*TRanSFER*',
+    '*TRaNsfer*', '*TRaNsfeR*', '*TRaNsfEr*', '*TRaNsfER*', '*TRaNsFer*', '*TRaNsFeR*', '*TRaNsFEr*', '*TRaNsFER*',
+    '*TRaNSfer*', '*TRaNSfeR*', '*TRaNSfEr*', '*TRaNSfER*', '*TRaNSFer*', '*TRaNSFeR*', '*TRaNSFEr*', '*TRaNSFER*',
+    '*TRAnsfer*', '*TRAnsfeR*', '*TRAnsfEr*', '*TRAnsfER*', '*TRAnsFer*', '*TRAnsFeR*', '*TRAnsFEr*', '*TRAnsFER*',
+    '*TRAnSfer*', '*TRAnSfeR*', '*TRAnSfEr*', '*TRAnSfER*', '*TRAnSFer*', '*TRAnSFeR*', '*TRAnSFEr*', '*TRAnSFER*',
+    '*TRANsfer*', '*TRANsfeR*', '*TRANsfEr*', '*TRANsfER*', '*TRANsFer*', '*TRANsFeR*', '*TRANsFEr*', '*TRANsFER*',
+    '*TRANSfer*', '*TRANSfeR*', '*TRANSfEr*', '*TRANSfER*', '*TRANSFer*', '*TRANSFeR*', '*TRANSFEr*', '*TRANSFER*',
+    '*\u*',
+  ] },
+] }
 options.json      = { flag = ["--json"], value = "required" }
 options.output    = { flag = ["-o", "--output"], value = "required", adds = ["write_local_file"] }
 options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
 options.page_limit = { flag = ["--page-limit"], value = "required" }
 options.page_delay = { flag = ["--page-delay"], value = "required" }
-options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "upload_file", "write_local_file"] }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
 
 [shell.drive_permissions_delete]
 usage = "gws drive permissions delete [options]"
@@ -332,7 +573,7 @@ options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
 options.page_limit = { flag = ["--page-limit"], value = "required" }
 options.page_delay = { flag = ["--page-delay"], value = "required" }
-options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "upload_file", "write_local_file"] }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
 
 [shell.drive_drives_list]
 usage = "gws drive drives list [options]"
@@ -343,7 +584,7 @@ options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
 options.page_limit = { flag = ["--page-limit"], value = "required" }
 options.page_delay = { flag = ["--page-delay"], value = "required" }
-options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "upload_file", "write_local_file"] }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
 
 [shell.drive_drives_get]
 usage = "gws drive drives get [options]"
@@ -354,31 +595,103 @@ options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
 options.page_limit = { flag = ["--page-limit"], value = "required" }
 options.page_delay = { flag = ["--page-delay"], value = "required" }
-options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "upload_file", "write_local_file"] }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
 
 [shell.drive_drives_create]
 usage = "gws drive drives create [options]"
 adds  = ["write_data"]
 options.params    = { flag = ["--params"], value = "required" }
-options.json      = { flag = ["--json"], value = "required" }
+options.json = { flag = ["--json"], value = "required", when = [
+  { adds = ["change_sharing_rules"], like = [
+    '*restrict*', '*restricT*', '*restriCt*', '*restriCT*', '*restrIct*', '*restrIcT*', '*restrICt*', '*restrICT*',
+    '*restRict*', '*restRicT*', '*restRiCt*', '*restRiCT*', '*restRIct*', '*restRIcT*', '*restRICt*', '*restRICT*',
+    '*resTrict*', '*resTricT*', '*resTriCt*', '*resTriCT*', '*resTrIct*', '*resTrIcT*', '*resTrICt*', '*resTrICT*',
+    '*resTRict*', '*resTRicT*', '*resTRiCt*', '*resTRiCT*', '*resTRIct*', '*resTRIcT*', '*resTRICt*', '*resTRICT*',
+    '*reStrict*', '*reStricT*', '*reStriCt*', '*reStriCT*', '*reStrIct*', '*reStrIcT*', '*reStrICt*', '*reStrICT*',
+    '*reStRict*', '*reStRicT*', '*reStRiCt*', '*reStRiCT*', '*reStRIct*', '*reStRIcT*', '*reStRICt*', '*reStRICT*',
+    '*reSTrict*', '*reSTricT*', '*reSTriCt*', '*reSTriCT*', '*reSTrIct*', '*reSTrIcT*', '*reSTrICt*', '*reSTrICT*',
+    '*reSTRict*', '*reSTRicT*', '*reSTRiCt*', '*reSTRiCT*', '*reSTRIct*', '*reSTRIcT*', '*reSTRICt*', '*reSTRICT*',
+    '*rEstrict*', '*rEstricT*', '*rEstriCt*', '*rEstriCT*', '*rEstrIct*', '*rEstrIcT*', '*rEstrICt*', '*rEstrICT*',
+    '*rEstRict*', '*rEstRicT*', '*rEstRiCt*', '*rEstRiCT*', '*rEstRIct*', '*rEstRIcT*', '*rEstRICt*', '*rEstRICT*',
+    '*rEsTrict*', '*rEsTricT*', '*rEsTriCt*', '*rEsTriCT*', '*rEsTrIct*', '*rEsTrIcT*', '*rEsTrICt*', '*rEsTrICT*',
+    '*rEsTRict*', '*rEsTRicT*', '*rEsTRiCt*', '*rEsTRiCT*', '*rEsTRIct*', '*rEsTRIcT*', '*rEsTRICt*', '*rEsTRICT*',
+    '*rEStrict*', '*rEStricT*', '*rEStriCt*', '*rEStriCT*', '*rEStrIct*', '*rEStrIcT*', '*rEStrICt*', '*rEStrICT*',
+    '*rEStRict*', '*rEStRicT*', '*rEStRiCt*', '*rEStRiCT*', '*rEStRIct*', '*rEStRIcT*', '*rEStRICt*', '*rEStRICT*',
+    '*rESTrict*', '*rESTricT*', '*rESTriCt*', '*rESTriCT*', '*rESTrIct*', '*rESTrIcT*', '*rESTrICt*', '*rESTrICT*',
+    '*rESTRict*', '*rESTRicT*', '*rESTRiCt*', '*rESTRiCT*', '*rESTRIct*', '*rESTRIcT*', '*rESTRICt*', '*rESTRICT*',
+    '*Restrict*', '*RestricT*', '*RestriCt*', '*RestriCT*', '*RestrIct*', '*RestrIcT*', '*RestrICt*', '*RestrICT*',
+    '*RestRict*', '*RestRicT*', '*RestRiCt*', '*RestRiCT*', '*RestRIct*', '*RestRIcT*', '*RestRICt*', '*RestRICT*',
+    '*ResTrict*', '*ResTricT*', '*ResTriCt*', '*ResTriCT*', '*ResTrIct*', '*ResTrIcT*', '*ResTrICt*', '*ResTrICT*',
+    '*ResTRict*', '*ResTRicT*', '*ResTRiCt*', '*ResTRiCT*', '*ResTRIct*', '*ResTRIcT*', '*ResTRICt*', '*ResTRICT*',
+    '*ReStrict*', '*ReStricT*', '*ReStriCt*', '*ReStriCT*', '*ReStrIct*', '*ReStrIcT*', '*ReStrICt*', '*ReStrICT*',
+    '*ReStRict*', '*ReStRicT*', '*ReStRiCt*', '*ReStRiCT*', '*ReStRIct*', '*ReStRIcT*', '*ReStRICt*', '*ReStRICT*',
+    '*ReSTrict*', '*ReSTricT*', '*ReSTriCt*', '*ReSTriCT*', '*ReSTrIct*', '*ReSTrIcT*', '*ReSTrICt*', '*ReSTrICT*',
+    '*ReSTRict*', '*ReSTRicT*', '*ReSTRiCt*', '*ReSTRiCT*', '*ReSTRIct*', '*ReSTRIcT*', '*ReSTRICt*', '*ReSTRICT*',
+    '*REstrict*', '*REstricT*', '*REstriCt*', '*REstriCT*', '*REstrIct*', '*REstrIcT*', '*REstrICt*', '*REstrICT*',
+    '*REstRict*', '*REstRicT*', '*REstRiCt*', '*REstRiCT*', '*REstRIct*', '*REstRIcT*', '*REstRICt*', '*REstRICT*',
+    '*REsTrict*', '*REsTricT*', '*REsTriCt*', '*REsTriCT*', '*REsTrIct*', '*REsTrIcT*', '*REsTrICt*', '*REsTrICT*',
+    '*REsTRict*', '*REsTRicT*', '*REsTRiCt*', '*REsTRiCT*', '*REsTRIct*', '*REsTRIcT*', '*REsTRICt*', '*REsTRICT*',
+    '*REStrict*', '*REStricT*', '*REStriCt*', '*REStriCT*', '*REStrIct*', '*REStrIcT*', '*REStrICt*', '*REStrICT*',
+    '*REStRict*', '*REStRicT*', '*REStRiCt*', '*REStRiCT*', '*REStRIct*', '*REStRIcT*', '*REStRICt*', '*REStRICT*',
+    '*RESTrict*', '*RESTricT*', '*RESTriCt*', '*RESTriCT*', '*RESTrIct*', '*RESTrIcT*', '*RESTrICt*', '*RESTrICT*',
+    '*RESTRict*', '*RESTRicT*', '*RESTRiCt*', '*RESTRiCT*', '*RESTRIct*', '*RESTRIcT*', '*RESTRICt*', '*RESTRICT*',
+    '*\u*',
+  ] },
+] }
 options.output    = { flag = ["-o", "--output"], value = "required", adds = ["write_local_file"] }
 options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
 options.page_limit = { flag = ["--page-limit"], value = "required" }
 options.page_delay = { flag = ["--page-delay"], value = "required" }
-options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "upload_file", "write_local_file"] }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
 
 [shell.drive_drives_update]
 usage = "gws drive drives update [options]"
 adds  = ["write_data"]
 options.params    = { flag = ["--params"], value = "required" }
-options.json      = { flag = ["--json"], value = "required" }
+options.json = { flag = ["--json"], value = "required", when = [
+  { adds = ["change_sharing_rules"], like = [
+    '*restrict*', '*restricT*', '*restriCt*', '*restriCT*', '*restrIct*', '*restrIcT*', '*restrICt*', '*restrICT*',
+    '*restRict*', '*restRicT*', '*restRiCt*', '*restRiCT*', '*restRIct*', '*restRIcT*', '*restRICt*', '*restRICT*',
+    '*resTrict*', '*resTricT*', '*resTriCt*', '*resTriCT*', '*resTrIct*', '*resTrIcT*', '*resTrICt*', '*resTrICT*',
+    '*resTRict*', '*resTRicT*', '*resTRiCt*', '*resTRiCT*', '*resTRIct*', '*resTRIcT*', '*resTRICt*', '*resTRICT*',
+    '*reStrict*', '*reStricT*', '*reStriCt*', '*reStriCT*', '*reStrIct*', '*reStrIcT*', '*reStrICt*', '*reStrICT*',
+    '*reStRict*', '*reStRicT*', '*reStRiCt*', '*reStRiCT*', '*reStRIct*', '*reStRIcT*', '*reStRICt*', '*reStRICT*',
+    '*reSTrict*', '*reSTricT*', '*reSTriCt*', '*reSTriCT*', '*reSTrIct*', '*reSTrIcT*', '*reSTrICt*', '*reSTrICT*',
+    '*reSTRict*', '*reSTRicT*', '*reSTRiCt*', '*reSTRiCT*', '*reSTRIct*', '*reSTRIcT*', '*reSTRICt*', '*reSTRICT*',
+    '*rEstrict*', '*rEstricT*', '*rEstriCt*', '*rEstriCT*', '*rEstrIct*', '*rEstrIcT*', '*rEstrICt*', '*rEstrICT*',
+    '*rEstRict*', '*rEstRicT*', '*rEstRiCt*', '*rEstRiCT*', '*rEstRIct*', '*rEstRIcT*', '*rEstRICt*', '*rEstRICT*',
+    '*rEsTrict*', '*rEsTricT*', '*rEsTriCt*', '*rEsTriCT*', '*rEsTrIct*', '*rEsTrIcT*', '*rEsTrICt*', '*rEsTrICT*',
+    '*rEsTRict*', '*rEsTRicT*', '*rEsTRiCt*', '*rEsTRiCT*', '*rEsTRIct*', '*rEsTRIcT*', '*rEsTRICt*', '*rEsTRICT*',
+    '*rEStrict*', '*rEStricT*', '*rEStriCt*', '*rEStriCT*', '*rEStrIct*', '*rEStrIcT*', '*rEStrICt*', '*rEStrICT*',
+    '*rEStRict*', '*rEStRicT*', '*rEStRiCt*', '*rEStRiCT*', '*rEStRIct*', '*rEStRIcT*', '*rEStRICt*', '*rEStRICT*',
+    '*rESTrict*', '*rESTricT*', '*rESTriCt*', '*rESTriCT*', '*rESTrIct*', '*rESTrIcT*', '*rESTrICt*', '*rESTrICT*',
+    '*rESTRict*', '*rESTRicT*', '*rESTRiCt*', '*rESTRiCT*', '*rESTRIct*', '*rESTRIcT*', '*rESTRICt*', '*rESTRICT*',
+    '*Restrict*', '*RestricT*', '*RestriCt*', '*RestriCT*', '*RestrIct*', '*RestrIcT*', '*RestrICt*', '*RestrICT*',
+    '*RestRict*', '*RestRicT*', '*RestRiCt*', '*RestRiCT*', '*RestRIct*', '*RestRIcT*', '*RestRICt*', '*RestRICT*',
+    '*ResTrict*', '*ResTricT*', '*ResTriCt*', '*ResTriCT*', '*ResTrIct*', '*ResTrIcT*', '*ResTrICt*', '*ResTrICT*',
+    '*ResTRict*', '*ResTRicT*', '*ResTRiCt*', '*ResTRiCT*', '*ResTRIct*', '*ResTRIcT*', '*ResTRICt*', '*ResTRICT*',
+    '*ReStrict*', '*ReStricT*', '*ReStriCt*', '*ReStriCT*', '*ReStrIct*', '*ReStrIcT*', '*ReStrICt*', '*ReStrICT*',
+    '*ReStRict*', '*ReStRicT*', '*ReStRiCt*', '*ReStRiCT*', '*ReStRIct*', '*ReStRIcT*', '*ReStRICt*', '*ReStRICT*',
+    '*ReSTrict*', '*ReSTricT*', '*ReSTriCt*', '*ReSTriCT*', '*ReSTrIct*', '*ReSTrIcT*', '*ReSTrICt*', '*ReSTrICT*',
+    '*ReSTRict*', '*ReSTRicT*', '*ReSTRiCt*', '*ReSTRiCT*', '*ReSTRIct*', '*ReSTRIcT*', '*ReSTRICt*', '*ReSTRICT*',
+    '*REstrict*', '*REstricT*', '*REstriCt*', '*REstriCT*', '*REstrIct*', '*REstrIcT*', '*REstrICt*', '*REstrICT*',
+    '*REstRict*', '*REstRicT*', '*REstRiCt*', '*REstRiCT*', '*REstRIct*', '*REstRIcT*', '*REstRICt*', '*REstRICT*',
+    '*REsTrict*', '*REsTricT*', '*REsTriCt*', '*REsTriCT*', '*REsTrIct*', '*REsTrIcT*', '*REsTrICt*', '*REsTrICT*',
+    '*REsTRict*', '*REsTRicT*', '*REsTRiCt*', '*REsTRiCT*', '*REsTRIct*', '*REsTRIcT*', '*REsTRICt*', '*REsTRICT*',
+    '*REStrict*', '*REStricT*', '*REStriCt*', '*REStriCT*', '*REStrIct*', '*REStrIcT*', '*REStrICt*', '*REStrICT*',
+    '*REStRict*', '*REStRicT*', '*REStRiCt*', '*REStRiCT*', '*REStRIct*', '*REStRIcT*', '*REStRICt*', '*REStRICT*',
+    '*RESTrict*', '*RESTricT*', '*RESTriCt*', '*RESTriCT*', '*RESTrIct*', '*RESTrIcT*', '*RESTrICt*', '*RESTrICT*',
+    '*RESTRict*', '*RESTRicT*', '*RESTRiCt*', '*RESTRiCT*', '*RESTRIct*', '*RESTRIcT*', '*RESTRICt*', '*RESTRICT*',
+    '*\u*',
+  ] },
+] }
 options.output    = { flag = ["-o", "--output"], value = "required", adds = ["write_local_file"] }
 options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
 options.page_limit = { flag = ["--page-limit"], value = "required" }
 options.page_delay = { flag = ["--page-delay"], value = "required" }
-options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "upload_file", "write_local_file"] }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
 
 [shell.drive_drives_hide]
 usage = "gws drive drives hide [options]"
@@ -389,7 +702,7 @@ options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
 options.page_limit = { flag = ["--page-limit"], value = "required" }
 options.page_delay = { flag = ["--page-delay"], value = "required" }
-options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "upload_file", "write_local_file"] }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
 
 [shell.drive_drives_unhide]
 usage = "gws drive drives unhide [options]"
@@ -400,7 +713,7 @@ options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
 options.page_limit = { flag = ["--page-limit"], value = "required" }
 options.page_delay = { flag = ["--page-delay"], value = "required" }
-options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "upload_file", "write_local_file"] }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
 
 [shell.drive_drives_delete]
 usage = "gws drive drives delete [options]"
@@ -411,7 +724,7 @@ options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
 options.page_limit = { flag = ["--page-limit"], value = "required" }
 options.page_delay = { flag = ["--page-delay"], value = "required" }
-options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "upload_file", "write_local_file"] }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
 
 [shell.drive_comments_list]
 usage = "gws drive comments list [options]"
@@ -422,7 +735,7 @@ options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
 options.page_limit = { flag = ["--page-limit"], value = "required" }
 options.page_delay = { flag = ["--page-delay"], value = "required" }
-options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "upload_file", "write_local_file"] }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
 
 [shell.drive_comments_get]
 usage = "gws drive comments get [options]"
@@ -433,7 +746,7 @@ options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
 options.page_limit = { flag = ["--page-limit"], value = "required" }
 options.page_delay = { flag = ["--page-delay"], value = "required" }
-options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "upload_file", "write_local_file"] }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
 
 [shell.drive_comments_create]
 usage = "gws drive comments create [options]"
@@ -445,7 +758,7 @@ options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
 options.page_limit = { flag = ["--page-limit"], value = "required" }
 options.page_delay = { flag = ["--page-delay"], value = "required" }
-options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "upload_file", "write_local_file"] }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
 
 [shell.drive_comments_update]
 usage = "gws drive comments update [options]"
@@ -457,7 +770,7 @@ options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
 options.page_limit = { flag = ["--page-limit"], value = "required" }
 options.page_delay = { flag = ["--page-delay"], value = "required" }
-options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "upload_file", "write_local_file"] }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
 
 [shell.drive_comments_delete]
 usage = "gws drive comments delete [options]"
@@ -468,7 +781,7 @@ options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
 options.page_limit = { flag = ["--page-limit"], value = "required" }
 options.page_delay = { flag = ["--page-delay"], value = "required" }
-options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "upload_file", "write_local_file"] }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
 
 [shell.drive_replies_list]
 usage = "gws drive replies list [options]"
@@ -479,7 +792,7 @@ options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
 options.page_limit = { flag = ["--page-limit"], value = "required" }
 options.page_delay = { flag = ["--page-delay"], value = "required" }
-options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "upload_file", "write_local_file"] }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
 
 [shell.drive_replies_get]
 usage = "gws drive replies get [options]"
@@ -490,7 +803,7 @@ options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
 options.page_limit = { flag = ["--page-limit"], value = "required" }
 options.page_delay = { flag = ["--page-delay"], value = "required" }
-options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "upload_file", "write_local_file"] }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
 
 [shell.drive_replies_create]
 usage = "gws drive replies create [options]"
@@ -502,7 +815,7 @@ options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
 options.page_limit = { flag = ["--page-limit"], value = "required" }
 options.page_delay = { flag = ["--page-delay"], value = "required" }
-options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "upload_file", "write_local_file"] }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
 
 [shell.drive_replies_update]
 usage = "gws drive replies update [options]"
@@ -514,7 +827,7 @@ options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
 options.page_limit = { flag = ["--page-limit"], value = "required" }
 options.page_delay = { flag = ["--page-delay"], value = "required" }
-options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "upload_file", "write_local_file"] }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
 
 [shell.drive_replies_delete]
 usage = "gws drive replies delete [options]"
@@ -525,7 +838,7 @@ options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
 options.page_limit = { flag = ["--page-limit"], value = "required" }
 options.page_delay = { flag = ["--page-delay"], value = "required" }
-options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "upload_file", "write_local_file"] }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
 
 [shell.drive_revisions_list]
 usage = "gws drive revisions list [options]"
@@ -536,7 +849,7 @@ options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
 options.page_limit = { flag = ["--page-limit"], value = "required" }
 options.page_delay = { flag = ["--page-delay"], value = "required" }
-options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "upload_file", "write_local_file"] }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
 
 [shell.drive_revisions_get]
 usage = "gws drive revisions get [options]"
@@ -547,7 +860,7 @@ options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
 options.page_limit = { flag = ["--page-limit"], value = "required" }
 options.page_delay = { flag = ["--page-delay"], value = "required" }
-options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "upload_file", "write_local_file"] }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
 
 [shell.drive_revisions_update]
 usage = "gws drive revisions update [options]"
@@ -579,7 +892,7 @@ options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
 options.page_limit = { flag = ["--page-limit"], value = "required" }
 options.page_delay = { flag = ["--page-delay"], value = "required" }
-options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "upload_file", "write_local_file"] }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
 
 [shell.drive_revisions_delete]
 usage = "gws drive revisions delete [options]"
@@ -590,7 +903,7 @@ options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
 options.page_limit = { flag = ["--page-limit"], value = "required" }
 options.page_delay = { flag = ["--page-delay"], value = "required" }
-options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "upload_file", "write_local_file"] }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
 
 [shell.drive_changes_list]
 usage = "gws drive changes list [options]"
@@ -601,7 +914,7 @@ options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
 options.page_limit = { flag = ["--page-limit"], value = "required" }
 options.page_delay = { flag = ["--page-delay"], value = "required" }
-options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "upload_file", "write_local_file"] }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
 
 # --------------------------------------------------------------------------------------------------
 # Gmail v1
@@ -616,7 +929,7 @@ options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
 options.page_limit = { flag = ["--page-limit"], value = "required" }
 options.page_delay = { flag = ["--page-delay"], value = "required" }
-options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "upload_file", "write_local_file"] }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
 
 [shell.gmail_users_messages_get]
 usage = "gws gmail users messages get [options]"
@@ -627,7 +940,7 @@ options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
 options.page_limit = { flag = ["--page-limit"], value = "required" }
 options.page_delay = { flag = ["--page-delay"], value = "required" }
-options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "upload_file", "write_local_file"] }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
 
 [shell.gmail_users_messages_send]
 usage = "gws gmail users messages send [options]"
@@ -641,7 +954,7 @@ options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
 options.page_limit = { flag = ["--page-limit"], value = "required" }
 options.page_delay = { flag = ["--page-delay"], value = "required" }
-options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "upload_file", "write_local_file"] }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
 
 [shell.gmail_users_messages_modify]
 usage = "gws gmail users messages modify [options]"
@@ -661,7 +974,7 @@ options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
 options.page_limit = { flag = ["--page-limit"], value = "required" }
 options.page_delay = { flag = ["--page-delay"], value = "required" }
-options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "upload_file", "write_local_file"] }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
 
 [shell.gmail_users_messages_import]
 usage = "gws gmail users messages import [options]"
@@ -675,7 +988,7 @@ options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
 options.page_limit = { flag = ["--page-limit"], value = "required" }
 options.page_delay = { flag = ["--page-delay"], value = "required" }
-options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "upload_file", "write_local_file"] }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
 
 [shell.gmail_users_messages_insert]
 usage = "gws gmail users messages insert [options]"
@@ -689,7 +1002,7 @@ options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
 options.page_limit = { flag = ["--page-limit"], value = "required" }
 options.page_delay = { flag = ["--page-delay"], value = "required" }
-options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "upload_file", "write_local_file"] }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
 
 [shell.gmail_users_messages_trash]
 usage = "gws gmail users messages trash [options]"
@@ -700,7 +1013,7 @@ options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
 options.page_limit = { flag = ["--page-limit"], value = "required" }
 options.page_delay = { flag = ["--page-delay"], value = "required" }
-options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "upload_file", "write_local_file"] }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
 
 [shell.gmail_users_messages_untrash]
 usage = "gws gmail users messages untrash [options]"
@@ -711,7 +1024,7 @@ options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
 options.page_limit = { flag = ["--page-limit"], value = "required" }
 options.page_delay = { flag = ["--page-delay"], value = "required" }
-options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "upload_file", "write_local_file"] }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
 
 [shell.gmail_users_messages_delete]
 usage = "gws gmail users messages delete [options]"
@@ -722,7 +1035,7 @@ options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
 options.page_limit = { flag = ["--page-limit"], value = "required" }
 options.page_delay = { flag = ["--page-delay"], value = "required" }
-options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "upload_file", "write_local_file"] }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
 
 [shell.gmail_users_messages_attachments_get]
 usage = "gws gmail users messages attachments get [options]"
@@ -733,7 +1046,7 @@ options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
 options.page_limit = { flag = ["--page-limit"], value = "required" }
 options.page_delay = { flag = ["--page-delay"], value = "required" }
-options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "upload_file", "write_local_file"] }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
 
 [shell.gmail_users_drafts_list]
 usage = "gws gmail users drafts list [options]"
@@ -744,7 +1057,7 @@ options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
 options.page_limit = { flag = ["--page-limit"], value = "required" }
 options.page_delay = { flag = ["--page-delay"], value = "required" }
-options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "upload_file", "write_local_file"] }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
 
 [shell.gmail_users_drafts_get]
 usage = "gws gmail users drafts get [options]"
@@ -755,7 +1068,7 @@ options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
 options.page_limit = { flag = ["--page-limit"], value = "required" }
 options.page_delay = { flag = ["--page-delay"], value = "required" }
-options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "upload_file", "write_local_file"] }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
 
 [shell.gmail_users_drafts_create]
 usage = "gws gmail users drafts create [options]"
@@ -769,7 +1082,7 @@ options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
 options.page_limit = { flag = ["--page-limit"], value = "required" }
 options.page_delay = { flag = ["--page-delay"], value = "required" }
-options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "upload_file", "write_local_file"] }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
 
 [shell.gmail_users_drafts_update]
 usage = "gws gmail users drafts update [options]"
@@ -783,7 +1096,7 @@ options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
 options.page_limit = { flag = ["--page-limit"], value = "required" }
 options.page_delay = { flag = ["--page-delay"], value = "required" }
-options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "upload_file", "write_local_file"] }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
 
 [shell.gmail_users_drafts_send]
 usage = "gws gmail users drafts send [options]"
@@ -797,7 +1110,7 @@ options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
 options.page_limit = { flag = ["--page-limit"], value = "required" }
 options.page_delay = { flag = ["--page-delay"], value = "required" }
-options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "upload_file", "write_local_file"] }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
 
 [shell.gmail_users_drafts_delete]
 usage = "gws gmail users drafts delete [options]"
@@ -808,7 +1121,7 @@ options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
 options.page_limit = { flag = ["--page-limit"], value = "required" }
 options.page_delay = { flag = ["--page-delay"], value = "required" }
-options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "upload_file", "write_local_file"] }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
 
 [shell.gmail_users_threads_list]
 usage = "gws gmail users threads list [options]"
@@ -819,7 +1132,7 @@ options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
 options.page_limit = { flag = ["--page-limit"], value = "required" }
 options.page_delay = { flag = ["--page-delay"], value = "required" }
-options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "upload_file", "write_local_file"] }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
 
 [shell.gmail_users_threads_get]
 usage = "gws gmail users threads get [options]"
@@ -830,7 +1143,7 @@ options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
 options.page_limit = { flag = ["--page-limit"], value = "required" }
 options.page_delay = { flag = ["--page-delay"], value = "required" }
-options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "upload_file", "write_local_file"] }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
 
 [shell.gmail_users_threads_modify]
 usage = "gws gmail users threads modify [options]"
@@ -850,7 +1163,7 @@ options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
 options.page_limit = { flag = ["--page-limit"], value = "required" }
 options.page_delay = { flag = ["--page-delay"], value = "required" }
-options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "upload_file", "write_local_file"] }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
 
 [shell.gmail_users_threads_trash]
 usage = "gws gmail users threads trash [options]"
@@ -861,7 +1174,7 @@ options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
 options.page_limit = { flag = ["--page-limit"], value = "required" }
 options.page_delay = { flag = ["--page-delay"], value = "required" }
-options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "upload_file", "write_local_file"] }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
 
 [shell.gmail_users_threads_untrash]
 usage = "gws gmail users threads untrash [options]"
@@ -872,7 +1185,7 @@ options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
 options.page_limit = { flag = ["--page-limit"], value = "required" }
 options.page_delay = { flag = ["--page-delay"], value = "required" }
-options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "upload_file", "write_local_file"] }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
 
 [shell.gmail_users_threads_delete]
 usage = "gws gmail users threads delete [options]"
@@ -883,7 +1196,7 @@ options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
 options.page_limit = { flag = ["--page-limit"], value = "required" }
 options.page_delay = { flag = ["--page-delay"], value = "required" }
-options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "upload_file", "write_local_file"] }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
 
 [shell.gmail_users_labels_list]
 usage = "gws gmail users labels list [options]"
@@ -894,7 +1207,7 @@ options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
 options.page_limit = { flag = ["--page-limit"], value = "required" }
 options.page_delay = { flag = ["--page-delay"], value = "required" }
-options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "upload_file", "write_local_file"] }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
 
 [shell.gmail_users_labels_get]
 usage = "gws gmail users labels get [options]"
@@ -905,7 +1218,7 @@ options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
 options.page_limit = { flag = ["--page-limit"], value = "required" }
 options.page_delay = { flag = ["--page-delay"], value = "required" }
-options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "upload_file", "write_local_file"] }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
 
 [shell.gmail_users_labels_create]
 usage = "gws gmail users labels create [options]"
@@ -917,7 +1230,7 @@ options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
 options.page_limit = { flag = ["--page-limit"], value = "required" }
 options.page_delay = { flag = ["--page-delay"], value = "required" }
-options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "upload_file", "write_local_file"] }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
 
 [shell.gmail_users_labels_patch]
 usage = "gws gmail users labels patch [options]"
@@ -929,7 +1242,7 @@ options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
 options.page_limit = { flag = ["--page-limit"], value = "required" }
 options.page_delay = { flag = ["--page-delay"], value = "required" }
-options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "upload_file", "write_local_file"] }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
 
 [shell.gmail_users_labels_update]
 usage = "gws gmail users labels update [options]"
@@ -941,7 +1254,7 @@ options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
 options.page_limit = { flag = ["--page-limit"], value = "required" }
 options.page_delay = { flag = ["--page-delay"], value = "required" }
-options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "upload_file", "write_local_file"] }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
 
 [shell.gmail_users_labels_delete]
 usage = "gws gmail users labels delete [options]"
@@ -952,7 +1265,7 @@ options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
 options.page_limit = { flag = ["--page-limit"], value = "required" }
 options.page_delay = { flag = ["--page-delay"], value = "required" }
-options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "upload_file", "write_local_file"] }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
 
 [shell.gmail_users_history_list]
 usage = "gws gmail users history list [options]"
@@ -963,7 +1276,7 @@ options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
 options.page_limit = { flag = ["--page-limit"], value = "required" }
 options.page_delay = { flag = ["--page-delay"], value = "required" }
-options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "upload_file", "write_local_file"] }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
 
 [shell.gmail_users_settings_filters_list]
 usage = "gws gmail users settings filters list [options]"
@@ -974,7 +1287,7 @@ options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
 options.page_limit = { flag = ["--page-limit"], value = "required" }
 options.page_delay = { flag = ["--page-delay"], value = "required" }
-options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "upload_file", "write_local_file"] }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
 
 [shell.gmail_users_settings_filters_get]
 usage = "gws gmail users settings filters get [options]"
@@ -985,7 +1298,7 @@ options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
 options.page_limit = { flag = ["--page-limit"], value = "required" }
 options.page_delay = { flag = ["--page-delay"], value = "required" }
-options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "upload_file", "write_local_file"] }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
 
 # --------------------------------------------------------------------------------------------------
 # Calendar v3
@@ -1000,7 +1313,7 @@ options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
 options.page_limit = { flag = ["--page-limit"], value = "required" }
 options.page_delay = { flag = ["--page-delay"], value = "required" }
-options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "upload_file", "write_local_file"] }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
 
 [shell.calendar_events_get]
 usage = "gws calendar events get [options]"
@@ -1011,7 +1324,7 @@ options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
 options.page_limit = { flag = ["--page-limit"], value = "required" }
 options.page_delay = { flag = ["--page-delay"], value = "required" }
-options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "upload_file", "write_local_file"] }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
 
 [shell.calendar_events_instances]
 usage = "gws calendar events instances [options]"
@@ -1022,7 +1335,7 @@ options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
 options.page_limit = { flag = ["--page-limit"], value = "required" }
 options.page_delay = { flag = ["--page-delay"], value = "required" }
-options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "upload_file", "write_local_file"] }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
 
 [shell.calendar_events_insert]
 usage = "gws calendar events insert [options]"
@@ -1038,7 +1351,7 @@ options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
 options.page_limit = { flag = ["--page-limit"], value = "required" }
 options.page_delay = { flag = ["--page-delay"], value = "required" }
-options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "upload_file", "write_local_file"] }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
 
 [shell.calendar_events_patch]
 usage = "gws calendar events patch [options]"
@@ -1054,7 +1367,7 @@ options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
 options.page_limit = { flag = ["--page-limit"], value = "required" }
 options.page_delay = { flag = ["--page-delay"], value = "required" }
-options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "upload_file", "write_local_file"] }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
 
 [shell.calendar_events_update]
 usage = "gws calendar events update [options]"
@@ -1070,11 +1383,11 @@ options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
 options.page_limit = { flag = ["--page-limit"], value = "required" }
 options.page_delay = { flag = ["--page-delay"], value = "required" }
-options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "upload_file", "write_local_file"] }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
 
 [shell.calendar_events_move]
 usage = "gws calendar events move [options]"
-adds  = ["write_data"]
+adds  = ["write_data", "share_external"]
 options.params = { flag = ["--params"], value = "required", when = [
   { adds = ["send_email"], like = [
     '*sendUpdates*', '*sendNotifications*', '*send_updates*', '*send_notifications*', '*\u*',
@@ -1085,7 +1398,7 @@ options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
 options.page_limit = { flag = ["--page-limit"], value = "required" }
 options.page_delay = { flag = ["--page-delay"], value = "required" }
-options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "upload_file", "write_local_file"] }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
 
 [shell.calendar_events_import]
 usage = "gws calendar events import [options]"
@@ -1097,7 +1410,7 @@ options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
 options.page_limit = { flag = ["--page-limit"], value = "required" }
 options.page_delay = { flag = ["--page-delay"], value = "required" }
-options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "upload_file", "write_local_file"] }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
 
 [shell.calendar_events_delete]
 usage = "gws calendar events delete [options]"
@@ -1112,7 +1425,7 @@ options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
 options.page_limit = { flag = ["--page-limit"], value = "required" }
 options.page_delay = { flag = ["--page-delay"], value = "required" }
-options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "upload_file", "write_local_file"] }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
 
 [shell.calendar_calendars_get]
 usage = "gws calendar calendars get [options]"
@@ -1123,7 +1436,7 @@ options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
 options.page_limit = { flag = ["--page-limit"], value = "required" }
 options.page_delay = { flag = ["--page-delay"], value = "required" }
-options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "upload_file", "write_local_file"] }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
 
 [shell.calendar_calendars_insert]
 usage = "gws calendar calendars insert [options]"
@@ -1135,7 +1448,7 @@ options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
 options.page_limit = { flag = ["--page-limit"], value = "required" }
 options.page_delay = { flag = ["--page-delay"], value = "required" }
-options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "upload_file", "write_local_file"] }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
 
 [shell.calendar_calendars_patch]
 usage = "gws calendar calendars patch [options]"
@@ -1147,7 +1460,7 @@ options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
 options.page_limit = { flag = ["--page-limit"], value = "required" }
 options.page_delay = { flag = ["--page-delay"], value = "required" }
-options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "upload_file", "write_local_file"] }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
 
 [shell.calendar_calendars_update]
 usage = "gws calendar calendars update [options]"
@@ -1159,7 +1472,7 @@ options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
 options.page_limit = { flag = ["--page-limit"], value = "required" }
 options.page_delay = { flag = ["--page-delay"], value = "required" }
-options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "upload_file", "write_local_file"] }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
 
 [shell.calendar_calendars_clear]
 usage = "gws calendar calendars clear [options]"
@@ -1170,7 +1483,7 @@ options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
 options.page_limit = { flag = ["--page-limit"], value = "required" }
 options.page_delay = { flag = ["--page-delay"], value = "required" }
-options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "upload_file", "write_local_file"] }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
 
 [shell.calendar_calendars_delete]
 usage = "gws calendar calendars delete [options]"
@@ -1181,7 +1494,7 @@ options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
 options.page_limit = { flag = ["--page-limit"], value = "required" }
 options.page_delay = { flag = ["--page-delay"], value = "required" }
-options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "upload_file", "write_local_file"] }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
 
 [shell.calendar_acl_list]
 usage = "gws calendar acl list [options]"
@@ -1192,7 +1505,7 @@ options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
 options.page_limit = { flag = ["--page-limit"], value = "required" }
 options.page_delay = { flag = ["--page-delay"], value = "required" }
-options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "upload_file", "write_local_file"] }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
 
 [shell.calendar_acl_get]
 usage = "gws calendar acl get [options]"
@@ -1203,7 +1516,7 @@ options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
 options.page_limit = { flag = ["--page-limit"], value = "required" }
 options.page_delay = { flag = ["--page-delay"], value = "required" }
-options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "upload_file", "write_local_file"] }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
 
 [shell.calendar_acl_insert]
 usage = "gws calendar acl insert [options]"
@@ -1215,7 +1528,7 @@ options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
 options.page_limit = { flag = ["--page-limit"], value = "required" }
 options.page_delay = { flag = ["--page-delay"], value = "required" }
-options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "upload_file", "write_local_file"] }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
 
 [shell.calendar_acl_patch]
 usage = "gws calendar acl patch [options]"
@@ -1227,7 +1540,7 @@ options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
 options.page_limit = { flag = ["--page-limit"], value = "required" }
 options.page_delay = { flag = ["--page-delay"], value = "required" }
-options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "upload_file", "write_local_file"] }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
 
 [shell.calendar_acl_update]
 usage = "gws calendar acl update [options]"
@@ -1239,7 +1552,7 @@ options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
 options.page_limit = { flag = ["--page-limit"], value = "required" }
 options.page_delay = { flag = ["--page-delay"], value = "required" }
-options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "upload_file", "write_local_file"] }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
 
 [shell.calendar_acl_delete]
 usage = "gws calendar acl delete [options]"
@@ -1250,7 +1563,7 @@ options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
 options.page_limit = { flag = ["--page-limit"], value = "required" }
 options.page_delay = { flag = ["--page-delay"], value = "required" }
-options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "upload_file", "write_local_file"] }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
 
 [shell.calendar_freebusy_query]
 usage = "gws calendar freebusy query [options]"
@@ -1262,7 +1575,7 @@ options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
 options.page_limit = { flag = ["--page-limit"], value = "required" }
 options.page_delay = { flag = ["--page-delay"], value = "required" }
-options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "upload_file", "write_local_file"] }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
 
 [shell.calendar_colors_get]
 usage = "gws calendar colors get [options]"
@@ -1273,7 +1586,7 @@ options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
 options.page_limit = { flag = ["--page-limit"], value = "required" }
 options.page_delay = { flag = ["--page-delay"], value = "required" }
-options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "upload_file", "write_local_file"] }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
 
 [shell.calendar_settings_list]
 usage = "gws calendar settings list [options]"
@@ -1284,7 +1597,7 @@ options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
 options.page_limit = { flag = ["--page-limit"], value = "required" }
 options.page_delay = { flag = ["--page-delay"], value = "required" }
-options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "upload_file", "write_local_file"] }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
 
 [shell.calendar_settings_get]
 usage = "gws calendar settings get [options]"
@@ -1295,7 +1608,7 @@ options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
 options.page_limit = { flag = ["--page-limit"], value = "required" }
 options.page_delay = { flag = ["--page-delay"], value = "required" }
-options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "upload_file", "write_local_file"] }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
 
 # --------------------------------------------------------------------------------------------------
 # Sheets v4
@@ -1310,7 +1623,7 @@ options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
 options.page_limit = { flag = ["--page-limit"], value = "required" }
 options.page_delay = { flag = ["--page-delay"], value = "required" }
-options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "upload_file", "write_local_file"] }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
 
 [shell.sheets_spreadsheets_create]
 usage = "gws sheets spreadsheets create [options]"
@@ -1322,7 +1635,7 @@ options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
 options.page_limit = { flag = ["--page-limit"], value = "required" }
 options.page_delay = { flag = ["--page-delay"], value = "required" }
-options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "upload_file", "write_local_file"] }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
 
 [shell.sheets_spreadsheets_values_get]
 usage = "gws sheets spreadsheets values get [options]"
@@ -1333,7 +1646,7 @@ options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
 options.page_limit = { flag = ["--page-limit"], value = "required" }
 options.page_delay = { flag = ["--page-delay"], value = "required" }
-options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "upload_file", "write_local_file"] }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
 
 [shell.sheets_spreadsheets_values_append]
 usage = "gws sheets spreadsheets values append [options]"
@@ -1345,7 +1658,7 @@ options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
 options.page_limit = { flag = ["--page-limit"], value = "required" }
 options.page_delay = { flag = ["--page-delay"], value = "required" }
-options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "upload_file", "write_local_file"] }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
 
 [shell.sheets_spreadsheets_values_update]
 usage = "gws sheets spreadsheets values update [options]"
@@ -1357,7 +1670,7 @@ options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
 options.page_limit = { flag = ["--page-limit"], value = "required" }
 options.page_delay = { flag = ["--page-delay"], value = "required" }
-options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "upload_file", "write_local_file"] }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
 
 [shell.sheets_spreadsheets_values_clear]
 usage = "gws sheets spreadsheets values clear [options]"
@@ -1369,7 +1682,7 @@ options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
 options.page_limit = { flag = ["--page-limit"], value = "required" }
 options.page_delay = { flag = ["--page-delay"], value = "required" }
-options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "upload_file", "write_local_file"] }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
 
 # --------------------------------------------------------------------------------------------------
 # Docs v1
@@ -1384,7 +1697,7 @@ options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
 options.page_limit = { flag = ["--page-limit"], value = "required" }
 options.page_delay = { flag = ["--page-delay"], value = "required" }
-options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "upload_file", "write_local_file"] }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
 
 [shell.docs_documents_create]
 usage = "gws docs documents create [options]"
@@ -1396,5 +1709,5 @@ options.format    = { flag = ["--format"], value = "required" }
 options.page_all  = { flag = ["--page-all"] }
 options.page_limit = { flag = ["--page-limit"], value = "required" }
 options.page_delay = { flag = ["--page-delay"], value = "required" }
-options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "upload_file", "write_local_file"] }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
 
