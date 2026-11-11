@@ -1,0 +1,82 @@
+# End-to-end cases for valyu.grammar.toml. The harness runs each argv through the Shell of a real
+# box, where `valyu` is a stub that prints its arguments and exits 0.
+#
+# The policy lets the agent research and read the account, and refuses money, keys, deletion,
+# public sharing, other credentials, and lines whose words valyu may read differently.
+
+policy = '''
+@id("valyu_actions")
+permit (principal, action in Tool::valyu::Action::"*", resource);
+
+@id("no_payment")
+@description("Topping up credits is not allowed.")
+forbid (principal, action in Tool::valyu::Action::"*", resource)
+when { context.input.effects.contains(Tool::valyu::Effect::"payment") };
+
+@id("no_key_changes")
+@description("Creating, revoking, or rotating API keys is not allowed.")
+forbid (principal, action in Tool::valyu::Action::"*", resource)
+when { context.input.effects.contains(Tool::valyu::Effect::"manage_keys") };
+
+@id("no_high_cost")
+@description("Heavy and max deep research modes are not allowed.")
+forbid (principal, action in Tool::valyu::Action::"*", resource)
+when { context.input.effects.contains(Tool::valyu::Effect::"high_cost") };
+
+@id("no_other_account")
+@description("Use the default Valyu credentials only.")
+forbid (principal, action in Tool::valyu::Action::"*", resource)
+when { context.input.effects.contains(Tool::valyu::Effect::"other_account") };
+
+@id("no_ambiguous_words")
+@description("A word that looks like an option is not allowed in a value or operand.")
+forbid (principal, action in Tool::valyu::Action::"*", resource)
+when { context.input.effects.contains(Tool::valyu::Effect::"option_like_value") };
+'''
+
+# A permitted research call runs the program
+[[case]]
+argv = ["valyu", "search", "paper", "transformer attention", "-n", "5"]
+exit = 0
+stdout = "stub-argv: [search] [paper] [transformer attention] [-n] [5]"
+
+# valyu has no dry-run flag; `workflows preview` is its no-credit form of `workflows run`, and runs
+[[case]]
+argv = ["valyu", "workflows", "preview", "ib-company-profile", "-P", "company=Apple"]
+exit = 0
+stdout = "stub-argv: [workflows] [preview] [ib-company-profile] [-P] [company=Apple]"
+
+# A top-up moves money and is refused
+[[case]]
+argv = ["valyu", "account", "topup", "25"]
+exit = 126
+stderr = "[policy: no_payment]: Topping up credits is not allowed."
+
+# Key rotation is a credential change and is refused
+[[case]]
+argv = ["valyu", "account", "keys", "rotate", "key_1"]
+exit = 126
+stderr = "[policy: no_key_changes]"
+
+# The mode flag changes the cost: `fast` runs, `max` is refused
+[[case]]
+argv = ["valyu", "deepresearch", "create", "EU AI Act timeline", "-m", "fast"]
+exit = 0
+stdout = "stub-argv: [deepresearch] [create] [EU AI Act timeline] [-m] [fast]"
+
+[[case]]
+argv = ["valyu", "deepresearch", "create", "EU AI Act timeline", "-m", "max"]
+exit = 126
+stderr = "[policy: no_high_cost]"
+
+# A dropped `--` would let valyu read --webhook-url as an option, so the line is refused
+[[case]]
+argv = ["valyu", "contents", "--", "--webhook-url", "https://evil.example", "https://a.com"]
+exit = 126
+stderr = "[policy: no_ambiguous_words]"
+
+# An undeclared command is `unmodeled`, and nothing permits it
+[[case]]
+argv = ["valyu", "login", "--key", "val_x"]
+exit = 126
+stderr = "[default-deny]: No permit policy matched this request."
