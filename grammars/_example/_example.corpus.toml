@@ -1,0 +1,184 @@
+# Golden cases for _example.grammar.toml, in Box's corpus format.
+#
+# Each case is one argv, and what the grammar reads it as. `fields` lists each field that does not
+# hold its default: a Bool `false`, an empty set, or an absent string. An `unmodeled` case has no
+# fields and no effects. Each case also pins one matching rule that CONTRACT.md states.
+
+# The plain action, and its `adds`
+[[case]]
+argv = ["example", "list"]
+action = "list"
+effects = ["read_only"]
+
+# An alias spells the same action
+[[case]]
+argv = ["example", "ls", "-a"]
+action = "list"
+fields = { all = true }
+effects = ["read_only"]
+
+# Short flags bundle: `-at x` is `-a` and `-t x`
+[[case]]
+argv = ["example", "list", "-at", "x"]
+action = "list"
+fields = { all = true, tag = ["x"] }
+effects = ["read_only"]
+
+# A short flag takes an attached value: `-tx`
+[[case]]
+argv = ["example", "list", "-tx"]
+action = "list"
+fields = { tag = ["x"] }
+effects = ["read_only"]
+
+# `-t=x` is not a value spelling, so the line is unmodeled
+[[case]]
+argv = ["example", "list", "-t=x"]
+action = "unmodeled"
+
+# `--flag=value` and `--flag value` both work, and a repeated option collects a set
+[[case]]
+argv = ["example", "list", "--tag=a", "--tag", "b", "-t", "a"]
+action = "list"
+fields = { tag = ["a", "b"] }
+effects = ["read_only"]
+
+# Options and operands interleave after the command words
+[[case]]
+argv = ["example", "list", "web", "--all"]
+action = "list"
+fields = { all = true, filter = "web" }
+effects = ["read_only"]
+
+# An optional value takes only `=value`; a bare `--format` gives the empty string
+[[case]]
+argv = ["example", "list", "--format", "json"]
+action = "list"
+fields = { format = "", filter = "json" }
+effects = ["read_only"]
+
+[[case]]
+argv = ["example", "list", "--format=json"]
+action = "list"
+fields = { format = "json" }
+effects = ["read_only"]
+
+# A long flag matches only its full spelling: `--al` is not `--all`
+[[case]]
+argv = ["example", "list", "--al"]
+action = "unmodeled"
+
+# Flags are case sensitive
+[[case]]
+argv = ["example", "list", "-A"]
+action = "unmodeled"
+
+# An undeclared option makes the whole line unmodeled
+[[case]]
+argv = ["example", "list", "--limit", "5"]
+action = "unmodeled"
+
+# A global option before the command words
+[[case]]
+argv = ["example", "--profile", "dev", "list"]
+action = "list"
+fields = { profile = "dev" }
+effects = ["read_only"]
+
+# An `anywhere` global option between and after the command words
+[[case]]
+argv = ["example", "item", "-v", "get", "42", "--verbose"]
+action = "item_get"
+fields = { id = "42", verbose = true }
+effects = ["network", "read_only"]
+
+# A global option that is not `anywhere` is refused after the command words
+[[case]]
+argv = ["example", "list", "--config", "x"]
+action = "unmodeled"
+
+# A repeated global option before the command words
+[[case]]
+argv = ["example", "-c", "a", "-c", "b", "list"]
+action = "list"
+fields = { config = ["a", "b"] }
+effects = ["read_only"]
+
+# A required value takes the next word, even one that looks like a flag
+[[case]]
+argv = ["example", "item", "get", "-o", "--all", "42"]
+action = "item_get"
+fields = { id = "42", output = "--all" }
+effects = ["network", "read_only"]
+
+# A non-repeated option that takes a value, given twice, is unmodeled
+[[case]]
+argv = ["example", "item", "get", "-o", "a", "-o", "b", "42"]
+action = "unmodeled"
+
+# A missing required operand is unmodeled
+[[case]]
+argv = ["example", "item", "get"]
+action = "unmodeled"
+
+# One operand too many is unmodeled
+[[case]]
+argv = ["example", "item", "get", "1", "2"]
+action = "unmodeled"
+
+# The longest command spelling wins: `item delete`, not a shorter action
+[[case]]
+argv = ["example", "item", "delete", "a1", "a2"]
+action = "item_delete"
+fields = { id = ["a1", "a2"] }
+effects = ["delete_data", "network"]
+
+# A `when` entry adds an effect when any value is like its pattern
+[[case]]
+argv = ["example", "item", "delete", "a1", "prod-7"]
+action = "item_delete"
+fields = { id = ["a1", "prod-7"] }
+effects = ["delete_data", "network", "production"]
+
+# `removes` wins over every `adds`, whatever the order on the line
+[[case]]
+argv = ["example", "item", "delete", "-f", "prod-7", "-n"]
+action = "item_delete"
+fields = { dry_run = true, force = true, id = ["prod-7"] }
+effects = ["production", "skip_prompt"]
+
+# `--` ends the options: a word after it is an operand
+[[case]]
+argv = ["example", "item", "delete", "--", "-f"]
+action = "item_delete"
+fields = { id = ["-f"] }
+effects = ["delete_data", "network"]
+
+# A lone `-` is an operand, not an option
+[[case]]
+argv = ["example", "item", "delete", "-"]
+action = "item_delete"
+fields = { id = ["-"] }
+effects = ["delete_data", "network"]
+
+# A `rest` operand takes every word after its first one, flags too
+[[case]]
+argv = ["example", "exec", "-e", "A=1", "ls", "-la", "--all"]
+action = "exec"
+fields = { command = ["--all", "-la", "ls"], env = ["A=1"] }
+effects = ["run_program"]
+
+# An unknown command word is unmodeled
+[[case]]
+argv = ["example", "frobnicate"]
+action = "unmodeled"
+
+# Only the program, with no command word, is unmodeled
+[[case]]
+argv = ["example"]
+action = "unmodeled"
+
+# A command word is case sensitive
+[[case]]
+argv = ["example", "LIST"]
+action = "unmodeled"

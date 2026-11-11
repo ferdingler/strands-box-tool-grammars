@@ -1,0 +1,47 @@
+# A sample grammar for `example`, a fake program. It is not a real CLI.
+# It shows the shape of a collection grammar and proves the harness end to end.
+# This file is the body of `[tool.<name>.grammar]` in box.toml.
+
+format  = 1
+version = 1
+name    = "example"
+program = "example"
+
+[effects]
+read_only   = "Makes no change: reads or lists only"
+delete_data = "Deletes stored data"
+network     = "Contacts the remote service"
+skip_prompt = "Skips the confirmation prompt"
+production  = "Names a production item"
+run_program = "Runs a program that the command line names"
+
+[global]
+options.verbose = { flag = ["-v", "--verbose"], anywhere = true }
+options.profile = { flag = ["--profile"], value = "required", anywhere = true }
+options.config  = { flag = ["-c", "--config"], value = "required", repeated = true }
+
+[shell.list]
+usage   = "example [global options] list [options] [<filter>]"
+aliases = ["ls"]
+adds    = ["read_only"]
+options.all    = { flag = ["-a", "--all"] }
+options.format = { flag = ["--format"], value = "optional" }
+options.tag    = { flag = ["-t", "--tag"], value = "required", repeated = true }
+
+[shell.item_get]
+usage = "example [global options] item get [options] <id>"
+adds  = ["read_only", "network"]
+options.output = { flag = ["-o", "--output"], value = "required" }
+
+[shell.item_delete]
+usage = "example [global options] item delete [options] <id>..."
+adds  = ["delete_data", "network"]
+options.force   = { flag = ["-f", "--force"], adds = ["skip_prompt"] }
+options.dry_run = { flag = ["-n", "--dry-run"], removes = ["delete_data", "network"] }
+operands.id     = { when = [{ like = "prod-*", adds = ["production"] }] }
+
+[shell.exec]
+usage = "example [global options] exec [options] <command>..."
+adds  = ["run_program"]
+options.env     = { flag = ["-e", "--env"], value = "required", repeated = true }
+operands.command = { rest = true }

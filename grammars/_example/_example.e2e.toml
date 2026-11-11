@@ -1,0 +1,55 @@
+# End-to-end cases for _example.grammar.toml. The harness runs each argv through the Shell of a real
+# box, where the program is a stub that prints its arguments and exits 0.
+#
+# `policy` is the policy for every case. A case can set its own `policy` instead.
+# A case checks `exit` (default 0), and the optional substrings `stdout` and `stderr`.
+
+policy = '''
+@id("example_actions")
+permit (principal, action in Tool::example::Action::"*", resource);
+
+@id("no_delete")
+@description("Deleting items is not allowed.")
+forbid (principal, action == Tool::example::Action::"item_delete", resource)
+when { context.input.effects.contains(Tool::example::Effect::"delete_data") };
+'''
+
+# A permitted action runs the program
+[[case]]
+argv = ["example", "list", "-a"]
+exit = 0
+stdout = "stub-argv: [list] [-a]"
+
+# An effect rule refuses the action, and the program does not run
+[[case]]
+argv = ["example", "item", "delete", "prod-1"]
+exit = 126
+stderr = "[policy: no_delete]: Deleting items is not allowed."
+
+# `--dry-run` removes `delete_data`, so the forbid does not apply
+[[case]]
+argv = ["example", "item", "delete", "--dry-run", "prod-1"]
+exit = 0
+stdout = "stub-argv: [item] [delete] [--dry-run] [prod-1]"
+
+# A command the grammar cannot read is `unmodeled`, and nothing permits it
+[[case]]
+argv = ["example", "frobnicate"]
+exit = 126
+stderr = "[default-deny]: No permit policy matched this request."
+
+# An undeclared option also makes the line `unmodeled`
+[[case]]
+argv = ["example", "list", "--al"]
+exit = 126
+stderr = "[default-deny]"
+
+# A policy that permits `unmodeled` by name lets it run
+[[case]]
+argv = ["example", "frobnicate"]
+exit = 0
+stdout = "stub-argv: [frobnicate]"
+policy = '''
+@id("example_unmodeled")
+permit (principal, action == Tool::example::Action::"unmodeled", resource);
+'''
