@@ -1522,3 +1522,25 @@ argv = ["npm", "version", "--ignore-scripts", "false"]
 action = "version"
 fields = { ignore_scripts = true, newversion = "false" }
 effects = ["ambiguous_argv", "git_commit", "modify_lockfile", "modify_package_json"]
+
+# --- independent verifier cases, round 3 (9612d26) ---
+# Actions with no operand: a trailing true/false is a left-over word.
+[[case]]
+argv = ["npm", "dedupe", "--dry-run", "false"]
+action = "unmodeled"
+
+[[case]]
+argv = ["npm", "audit", "fix", "--package-lock-only", "false"]
+action = "unmodeled"
+
+[[case]]
+argv = ["npm", "version", "--ignore-scripts", "false"]
+action = "version"
+fields = { ignore_scripts = true, newversion = "false" }
+effects = ["modify_package_json", "modify_lockfile", "git_commit", "ambiguous_argv"]
+
+[[case]]
+argv = ["npm", "init", "vite", "--no-workspaces-update", "true"]
+action = "init"
+fields = { package_spec = "vite", no_workspaces_update = true, initializer_args = ["true"] }
+effects = ["modify_package_json", "network", "run_program", "ambiguous_argv"]
