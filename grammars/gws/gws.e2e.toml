@@ -1,0 +1,89 @@
+# End-to-end cases for gws.grammar.toml. The harness runs each argv through the Shell of a real box,
+# where the program is a stub that prints its arguments and exits 0.
+#
+# The policy lets the agent read and edit, and forbids sending mail, making a file public, and
+# permanent deletes.
+
+policy = '''
+@id("gws_actions")
+permit (principal, action in Tool::gws::Action::"*", resource);
+
+@id("no_send_email")
+@description("The agent may not send email.")
+forbid (principal, action in Tool::gws::Action::"*", resource)
+when { context.input.effects.contains(Tool::gws::Effect::"send_email") };
+
+@id("no_public_share")
+@description("The agent may not make a file public.")
+forbid (principal, action in Tool::gws::Action::"*", resource)
+when { context.input.effects.contains(Tool::gws::Effect::"make_public") };
+
+@id("no_delete")
+@description("The agent may not delete Workspace data.")
+forbid (principal, action in Tool::gws::Action::"*", resource)
+when { context.input.effects.contains(Tool::gws::Effect::"delete_data") };
+'''
+
+# A read runs.
+[[case]]
+argv = ["gws", "drive", "files", "list", "--params", '{"pageSize":10}']
+exit = 0
+stdout = 'stub-argv: [drive] [files] [list] [--params] [{"pageSize":10}]'
+
+# Sending mail is refused, and the program does not run.
+[[case]]
+argv = ["gws", "gmail", "users", "messages", "send", "--params", '{"userId":"me"}', "--json", '{"raw":"eA=="}']
+exit = 126
+stderr = "[policy: no_send_email]: The agent may not send email."
+
+# --dry-run removes send_email, so the same send runs as a dry run.
+[[case]]
+argv = ["gws", "gmail", "users", "messages", "send", "--dry-run", "--params", '{"userId":"me"}', "--json", '{"raw":"eA=="}']
+exit = 0
+stdout = "stub-argv: [gmail] [users] [messages] [send] [--dry-run]"
+
+# A share with one user is permitted.
+[[case]]
+argv = ["gws", "drive", "permissions", "create", "--params", '{"fileId":"f1"}', "--json", '{"role":"reader","type":"user","emailAddress":"alex@example.com"}']
+exit = 0
+stdout = "stub-argv: [drive] [permissions] [create]"
+
+# A share with anyone is refused.
+[[case]]
+argv = ["gws", "drive", "permissions", "create", "--params", '{"fileId":"f1"}', "--json", '{"role":"reader","type":"anyone"}']
+exit = 126
+stderr = "[policy: no_public_share]: The agent may not make a file public."
+
+# A helper command is unmodeled, and nothing permits it.
+[[case]]
+argv = ["gws", "gmail", "+send", "--to", "alex@example.com", "--subject", "hi", "--body", "hello"]
+exit = 126
+stderr = "[default-deny]: No permit policy matched this request."
+
+# A read-only policy: a permit over effects that are all reads. A read runs.
+[[case]]
+argv = ["gws", "sheets", "spreadsheets", "values", "get", "--params", '{"spreadsheetId":"s1","range":"A1"}']
+exit = 0
+stdout = "stub-argv: [sheets] [spreadsheets] [values] [get]"
+policy = '''
+@id("gws_read_only")
+permit (principal, action in Tool::gws::Action::"*", resource)
+when {
+  [Tool::gws::Effect::"read_data", Tool::gws::Effect::"write_local_file"]
+    .containsAll(context.input.effects)
+};
+'''
+
+# The same read-only policy: a write matches no permit.
+[[case]]
+argv = ["gws", "sheets", "spreadsheets", "values", "update", "--params", '{"spreadsheetId":"s1","range":"A1"}', "--json", '{"values":[["x"]]}']
+exit = 126
+stderr = "[default-deny]"
+policy = '''
+@id("gws_read_only")
+permit (principal, action in Tool::gws::Action::"*", resource)
+when {
+  [Tool::gws::Effect::"read_data", Tool::gws::Effect::"write_local_file"]
+    .containsAll(context.input.effects)
+};
+'''
