@@ -1271,3 +1271,94 @@ argv = ["uv", "python", "install", "-i", "/opt/py", "3.12"]
 action = "python_install"
 fields = { install_dir = "/opt/py", targets = ["3.12"] }
 effects = ["modify_user", "network", "write_file"]
+
+# --- independent verifier cases, round 2 ---
+# Written by the verifier from uv 0.13.7 source and probes on the local uv 0.12.5.
+
+# EXPECT-FAIL (VERIFY.md F8): `uv python list <request>` passes the request to
+# `find_all_python_installations` (crates/uv-python-commands/src/list.rs), which queries the named file.
+# Probe: `uv python list ./fakepy` executed ./fakepy.
+[[case]]
+argv = ["uv", "python", "list", "./fakepy"]
+action = "python_list"
+fields = { request = "./fakepy" }
+effects = ["run_program"]
+
+# `--python=v` long form still adds run_program and drops read_only.
+[[case]]
+argv = ["uv", "pip", "freeze", "--python=./fakepy"]
+action = "pip_freeze"
+fields = { python = "./fakepy" }
+effects = ["run_program"]
+
+# `-pv` attached short value.
+[[case]]
+argv = ["uv", "pip", "show", "-p./fakepy", "requests"]
+action = "pip_show"
+fields = { python = "./fakepy", package = ["requests"] }
+effects = ["run_program"]
+
+# clap accepts `-p=v`; Box reads it as unmodeled, which is the safe direction.
+[[case]]
+argv = ["uv", "pip", "list", "-p=./fakepy"]
+action = "unmodeled"
+
+# The hidden global `--python-preference` is not declared.
+[[case]]
+argv = ["uv", "--python-preference", "only-system", "pip", "list"]
+action = "unmodeled"
+
+# `uv venv -p FILE` and `uv tool install -p FILE` execute FILE.
+[[case]]
+argv = ["uv", "venv", "-p", "./fakepy", "env3"]
+action = "venv"
+fields = { python = "./fakepy", path = "env3" }
+effects = ["modify_environment", "network", "run_program", "write_file"]
+
+[[case]]
+argv = ["uv", "tool", "install", "--python", "./fakepy", "ruff"]
+action = "tool_install"
+fields = { python = "./fakepy", package = "ruff" }
+effects = ["build_code", "modify_user", "network", "run_program"]
+
+# `tool run --from <path>` builds a local project and runs its command.
+[[case]]
+argv = ["uv", "tool", "run", "--from", "./localpkg", "mycmd", "-p", "x"]
+action = "tool_run"
+fields = { from = "./localpkg", command = ["mycmd", "-p", "x"] }
+effects = ["build_code", "modify_environment", "network", "run_program"]
+
+# `uv run --script` runs the script.
+[[case]]
+argv = ["uv", "run", "--script", "s.py", "--python", "3.12"]
+action = "run"
+fields = { script = true, command = ["s.py", "--python", "3.12"] }
+effects = ["build_code", "modify_environment", "modify_project", "network", "run_program"]
+
+# `uv build <sdist>` runs the sdist's build backend.
+[[case]]
+argv = ["uv", "build", "--wheel", "pkg-1.0.tar.gz"]
+action = "build"
+fields = { wheel = true, src = "pkg-1.0.tar.gz" }
+effects = ["build_code", "network"]
+
+# `--target=v` writes into the named directory.
+[[case]]
+argv = ["uv", "pip", "install", "--target=./vendor", "x"]
+action = "pip_install"
+fields = { target = "./vendor", package = ["x"] }
+effects = ["build_code", "modify_environment", "network", "write_file"]
+
+# `pip list --target` reads only; no write_file there.
+[[case]]
+argv = ["uv", "pip", "list", "--target", "./vendor"]
+action = "pip_list"
+fields = { target = "./vendor" }
+effects = ["read_only"]
+
+# `pip compile -o` writes; `--offline` removes network only.
+[[case]]
+argv = ["uv", "--offline", "pip", "compile", "-orequirements.txt", "requirements.in"]
+action = "pip_compile"
+fields = { offline = true, output_file = "requirements.txt", src_file = ["requirements.in"] }
+effects = ["build_code", "write_file"]
