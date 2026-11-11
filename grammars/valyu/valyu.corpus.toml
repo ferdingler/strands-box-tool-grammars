@@ -1073,3 +1073,116 @@ argv = ["valyu", "contents", "job", "cj_1"]
 action = "contents"
 fields = { urls = ["job", "cj_1"] }
 effects = ["network", "spend_credits"]
+
+# --- independent verifier cases, round 2 ---
+# Expectations come from valyu 1.3.2 run with fetch stubbed. Where Box cannot give the exact
+# reading, the expectation is the over-stated reading, and the comment names what valyu did.
+
+# A hidden second -m: valyu sends mode max and webhook "--alert-email-url". Every run is high_cost.
+[[case]]
+argv = ["valyu", "workflows", "run", "slug", "-m", "fast", "--webhook-url", "--json", "--alert-email-url", "-wmmax"]
+action = "workflows_run"
+fields = { slug = "slug", mode = "fast", webhook_url = "--json", alert_email_url = "-wmmax" }
+effects = ["network", "spend_credits", "high_cost", "option_like_value", "other_account", "upload_file", "notify_external"]
+
+# -m standard still keeps high_cost (over-states; valyu sends mode standard)
+[[case]]
+argv = ["valyu", "workflows", "run", "slug", "-m", "standard"]
+action = "workflows_run"
+fields = { slug = "slug", mode = "standard" }
+effects = ["network", "spend_credits", "high_cost"]
+
+# Bare -s, then a top-level option: valyu takes -p prod, then the URL as the summary (stdin URLs)
+[[case]]
+argv = ["valyu", "contents", "-s", "-p", "prod", "https://a.example"]
+action = "contents"
+fields = { summary = "", profile = "prod", urls = ["https://a.example"] }
+effects = ["network", "spend_credits", "option_like_value", "other_account"]
+
+# Attached optional value: clean, as valyu reads it
+[[case]]
+argv = ["valyu", "contents", "-sbullets", "https://a.example"]
+action = "contents"
+fields = { summary = "bullets", urls = ["https://a.example"] }
+effects = ["network", "spend_credits"]
+
+# Bare --summary last: flagged
+[[case]]
+argv = ["valyu", "contents", "https://a.example", "--summary"]
+action = "contents"
+fields = { summary = "", urls = ["https://a.example"] }
+effects = ["network", "spend_credits", "option_like_value"]
+
+# `--profile=` inside a value: valyu uses profile prod (it then errors: no query on stdin here)
+[[case]]
+argv = ["valyu", "answer", "--system-instructions", "--profile=prod", "q"]
+action = "answer"
+fields = { system_instructions = "--profile=prod", query = "q" }
+effects = ["network", "spend_credits", "option_like_value", "other_account", "upload_file"]
+
+# A leaf-unknown dash value is a plain value for valyu too: instructions "-x"
+[[case]]
+argv = ["valyu", "search", "--instructions", "-x", "q"]
+action = "search"
+fields = { instructions = "-x", type_or_query = "q" }
+effects = ["network", "spend_credits"]
+
+# A value that holds `--` after its first character: valyu sends {"a":"--json"}, clean
+[[case]]
+argv = ["valyu", "workflows", "preview", "slug", "-Pa=--json"]
+action = "workflows_preview"
+fields = { slug = "slug", param = ["a=--json"] }
+effects = ["network"]
+
+# `=`-attached hazard value: valyu does not take it (one word), the grammar over-flags it (safe)
+[[case]]
+argv = ["valyu", "search", "--instructions=-p", "q"]
+action = "search"
+fields = { instructions = "-p", type_or_query = "q" }
+effects = ["network", "spend_credits", "option_like_value", "other_account"]
+
+# Cluster of top-level letters inside a value (valyu takes -q and -p prod, then errors)
+[[case]]
+argv = ["valyu", "deepresearch", "create", "q", "--report-format", "-qp", "prod"]
+action = "unmodeled"
+
+[[case]]
+argv = ["valyu", "deepresearch", "create", "q", "--report-format", "-qp"]
+action = "deepresearch_create"
+fields = { query = "q", report_format = "-qp" }
+effects = ["network", "spend_credits", "option_like_value", "other_account", "high_cost", "upload_file", "expose_mcp", "notify_external"]
+
+# A key-management line with a hazard value keeps manage_keys and adds the worst case
+[[case]]
+argv = ["valyu", "account", "keys", "create", "--name", "-p"]
+action = "account_keys_create"
+fields = { name = "-p" }
+effects = ["network", "manage_keys", "option_like_value", "other_account"]
+
+# respond with a hazard value adds upload_file (from --response-file) and other_account
+[[case]]
+argv = ["valyu", "deepresearch", "respond", "t1", "--response", "--json"]
+action = "deepresearch_respond"
+fields = { id = "t1", response = "--json" }
+effects = ["network", "steer_task", "option_like_value", "other_account", "upload_file"]
+
+# `-v` as a value: valyu prints its version and runs nothing; the grammar over-states
+[[case]]
+argv = ["valyu", "batch", "add", "b1", "--tasks-file", "-v"]
+action = "batch_add"
+fields = { id = "b1", tasks_file = "-v" }
+effects = ["network", "spend_credits", "option_like_value", "other_account", "upload_file"]
+
+# `--` then `-y` on delete: valyu reads "-y" as the id and prompts
+[[case]]
+argv = ["valyu", "workflows", "delete", "--", "-y"]
+action = "workflows_delete"
+fields = { slug = "-y" }
+effects = ["network", "delete_data", "option_like_value"]
+
+# Topup has no value option, so -y stays the only prompt skip
+[[case]]
+argv = ["valyu", "account", "topup", "--open", "10"]
+action = "account_topup"
+fields = { open = true, amount = "10" }
+effects = ["network", "payment", "open_browser"]
