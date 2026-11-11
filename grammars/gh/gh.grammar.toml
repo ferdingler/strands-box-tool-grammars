@@ -52,6 +52,7 @@ upload_file       = "Sends the content of a local file to GitHub"
 open_browser      = "Opens a web browser"
 target_override   = "Names the target repository or host on the command line"
 reveal_token      = "Prints a stored authentication token"
+publish           = "Publishes a release, which notifies watchers and can trigger release workflows"
 write_credentials = "May change the stored gh credentials, such as refreshing an expiring token"
 
 # ---------------------------------------------------------------------------------------------
@@ -132,24 +133,26 @@ options.recurse_submodules = { flag = ["--recurse-submodules"] }
 options.worktree           = { flag = ["--worktree"], value = "required" }
 options.repo               = { flag = ["-R", "--repo"], value = "required", adds = ["target_override"] }
 
-# `--head` selects a branch that is already pushed and skips every push and fork. `--dry-run`
-# creates nothing but "may still push git changes". `--web` pushes, then opens the compare page in a
-# browser and creates nothing. `--editor` and `--recover` are not modeled.
+# Without `--head`, gh may fork the base repository on GitHub, rename `origin` to `upstream`, add a
+# git remote, and push, before it creates the pull request (src: create.go, handlePush). It does
+# this also with `--dry-run` and with `--web`, so neither removes `write_remote`. `--head` gives
+# skipPushRefs, so handlePush does nothing: no fork, no remote change, no push. `--dry-run` and
+# `--web` return before the attachment upload. `--editor` and `--recover` are not modeled.
 [shell.pr_create]
 usage   = "gh pr create [options]"
 aliases = ["pr new"]
-adds    = ["write_remote", "git_push"]
+adds    = ["write_remote", "git_push", "write_local"]
 options.assignee   = { flag = ["-a", "--assignee"], value = "required", repeated = true }
 options.attach     = { flag = ["--attach"], value = "required", repeated = true, adds = ["upload_file"] }
 options.base       = { flag = ["-B", "--base"], value = "required" }
 options.body       = { flag = ["-b", "--body"], value = "required" }
 options.body_file  = { flag = ["-F", "--body-file"], value = "required", adds = ["upload_file"] }
 options.draft      = { flag = ["-d", "--draft"] }
-options.dry_run    = { flag = ["--dry-run"], removes = ["write_remote", "upload_file"] }
+options.dry_run    = { flag = ["--dry-run"], removes = ["upload_file"] }
 options.fill       = { flag = ["-f", "--fill"] }
 options.fill_first   = { flag = ["--fill-first"] }
 options.fill_verbose = { flag = ["--fill-verbose"] }
-options.head       = { flag = ["-H", "--head"], value = "required", removes = ["git_push"] }
+options.head       = { flag = ["-H", "--head"], value = "required", removes = ["git_push", "write_local"] }
 options.label      = { flag = ["-l", "--label"], value = "required", repeated = true }
 options.milestone  = { flag = ["-m", "--milestone"], value = "required" }
 options.no_maintainer_edit = { flag = ["--no-maintainer-edit"] }
@@ -157,7 +160,7 @@ options.project    = { flag = ["-p", "--project"], value = "required", repeated 
 options.reviewer   = { flag = ["-r", "--reviewer"], value = "required", repeated = true }
 options.template   = { flag = ["-T", "--template"], value = "required" }
 options.title      = { flag = ["-t", "--title"], value = "required" }
-options.web        = { flag = ["-w", "--web"], adds = ["open_browser"], removes = ["write_remote", "upload_file"] }
+options.web        = { flag = ["-w", "--web"], adds = ["open_browser"], removes = ["upload_file"] }
 options.repo       = { flag = ["-R", "--repo"], value = "required", adds = ["target_override"] }
 
 # `--editor` is not modeled.
@@ -599,14 +602,14 @@ options.template = { flag = ["-t", "--template"], value = "required" }
 options.web      = { flag = ["-w", "--web"], adds = ["open_browser"] }
 options.repo     = { flag = ["-R", "--repo"], value = "required", adds = ["target_override"] }
 
-# Each word after <tag> is a local file that gh uploads as an asset. `--latest=false` is
-# `unmodeled`.
+# Each word after <tag> is a local file that gh uploads as an asset. `--draft` saves the release as
+# a draft and does not publish it (src: release/create/create.go). `--latest=false` is `unmodeled`.
 [shell.release_create]
 usage   = "gh release create [options] [<tag>] [<files>...]"
 aliases = ["release new"]
-adds    = ["write_remote"]
+adds    = ["write_remote", "publish"]
 options.discussion_category = { flag = ["--discussion-category"], value = "required" }
-options.draft               = { flag = ["-d", "--draft"] }
+options.draft               = { flag = ["-d", "--draft"], removes = ["publish"] }
 options.fail_on_no_commits  = { flag = ["--fail-on-no-commits"] }
 options.generate_notes      = { flag = ["--generate-notes"] }
 options.latest              = { flag = ["--latest"] }
@@ -821,11 +824,13 @@ options.no_refresh = { flag = ["--no-refresh"], removes = ["write_credentials"] 
 options.show_token = { flag = ["-t", "--show-token"], adds = ["reveal_token"] }
 options.template   = { flag = ["--template"], value = "required" }
 
+# Without `--no-refresh`, gh refreshes an expiring token through the GitHub token endpoint
+# (src: auth/token/token.go, getTokenWithRefresh).
 [shell.auth_token]
 usage = "gh auth token [options]"
-adds  = ["reveal_token", "write_credentials"]
+adds  = ["reveal_token", "write_credentials", "read_remote"]
 options.hostname   = { flag = ["-h", "--hostname"], value = "required" }
-options.no_refresh = { flag = ["--no-refresh"], removes = ["write_credentials"] }
+options.no_refresh = { flag = ["--no-refresh"], removes = ["write_credentials", "read_remote"] }
 options.user       = { flag = ["-u", "--user"], value = "required" }
 
 # ---------------------------------------------------------------------------------------------

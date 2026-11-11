@@ -164,61 +164,71 @@ action = "unmodeled"
 # ---------------------------------------------------------------------------------------------
 # pr create. help: pr create (alias `new`). src: pkg/cmd/pr/create/create.go
 
-# A plain create may push the current branch
+# A plain create may fork, change local remotes, and push (src: create.go, handlePush)
 [[case]]
 argv = ["gh", "pr", "create", "--title", "The bug is fixed", "--body", "Everything works again"]
 action = "pr_create"
 fields = { title = "The bug is fixed", body = "Everything works again" }
-effects = ["git_push", "write_remote"]
+effects = ["git_push", "write_local", "write_remote"]
 
-# `--head` skips "any forking or pushing behavior" (help), so `git_push` is removed
+# `--head` skips "any forking or pushing behavior" (help; src: skipPushRefs), so `git_push` and
+# `write_local` are removed
 [[case]]
 argv = ["gh", "pr", "new", "--base", "develop", "--head", "monalisa:feature", "--fill"]
 action = "pr_create"
 fields = { base = "develop", head = "monalisa:feature", fill = true }
 effects = ["write_remote"]
 
-# `--dry-run` creates nothing but "may still push git changes" (help)
+# `--dry-run` creates no pull request, but handlePush runs first and may fork the repository on
+# GitHub, change local remotes, and push (help: "May still push git changes"; src: create.go)
 [[case]]
 argv = ["gh", "pr", "create", "--dry-run", "-f"]
 action = "pr_create"
 fields = { dry_run = true, fill = true }
-effects = ["git_push"]
+effects = ["git_push", "write_local", "write_remote"]
 
-# `--web` pushes, then opens the browser and creates nothing (src: create.go, WebMode branch)
+# `--dry-run` with `--head` still keeps `write_remote`: the grammar cannot remove an effect only when
+# two flags are both given
+[[case]]
+argv = ["gh", "pr", "create", "--dry-run", "-H", "feat", "-f"]
+action = "pr_create"
+fields = { dry_run = true, head = "feat", fill = true }
+effects = ["write_remote"]
+
+# `--web` runs handlePush, then opens the browser (src: create.go, WebMode branch)
 [[case]]
 argv = ["gh", "pr", "create", "-w"]
 action = "pr_create"
 fields = { web = true }
-effects = ["git_push", "open_browser"]
+effects = ["git_push", "open_browser", "write_local", "write_remote"]
 
 # `--reviewer` repeats and takes comma lists (help example); `-d` is draft
 [[case]]
 argv = ["gh", "pr", "create", "-d", "--reviewer", "monalisa,hubot", "--reviewer", "myorg/team-name", "-t", "x", "-b", "y"]
 action = "pr_create"
 fields = { draft = true, reviewer = ["monalisa,hubot", "myorg/team-name"], title = "x", body = "y" }
-effects = ["git_push", "write_remote"]
+effects = ["git_push", "write_local", "write_remote"]
 
 # `--attach` and `--body-file` send local file content
 [[case]]
 argv = ["gh", "pr", "create", "--attach", "./before.png", "--attach", "./after.png", "-F", "body.md", "-t", "x"]
 action = "pr_create"
 fields = { attach = ["./after.png", "./before.png"], body_file = "body.md", title = "x" }
-effects = ["git_push", "upload_file", "write_remote"]
+effects = ["git_push", "upload_file", "write_local", "write_remote"]
 
 # `--dry-run` returns before the upload (src: create.go, submitPR)
 [[case]]
 argv = ["gh", "pr", "create", "--dry-run", "--attach", "./a.png", "-t", "x", "-b", "y"]
 action = "pr_create"
 fields = { dry_run = true, attach = ["./a.png"], title = "x", body = "y" }
-effects = ["git_push"]
+effects = ["git_push", "write_local", "write_remote"]
 
 # A required value takes the next word, even one that looks like a flag
 [[case]]
 argv = ["gh", "pr", "create", "--title", "--web", "-b", "y"]
 action = "pr_create"
 fields = { title = "--web", body = "y" }
-effects = ["git_push", "write_remote"]
+effects = ["git_push", "write_local", "write_remote"]
 
 # `--editor` and `--recover` are not modeled
 [[case]]
@@ -810,18 +820,19 @@ action = "release_create"
 fields = { tag = "v1.2.3", generate_notes = true, draft = true }
 effects = ["write_remote"]
 
-# Words after the tag are local files uploaded as assets (help example `gh release create v1.2.3 ./dist/*.tgz`)
+# Without `--draft` the release is published (src: release/create/create.go, `--draft` "instead of
+# publishing it"). Words after the tag are local files uploaded as assets
 [[case]]
 argv = ["gh", "release", "new", "v1.2.3", "dist/a.tgz", "dist/b.zip#Windows build", "-t", "v1.2.3"]
 action = "release_create"
 fields = { tag = "v1.2.3", files = ["dist/a.tgz", "dist/b.zip#Windows build"], title = "v1.2.3" }
-effects = ["upload_file", "write_remote"]
+effects = ["publish", "upload_file", "write_remote"]
 
 [[case]]
 argv = ["gh", "release", "create", "v1", "-F", "CHANGELOG.md", "--latest", "--verify-tag"]
 action = "release_create"
 fields = { tag = "v1", notes_file = "CHANGELOG.md", latest = true, verify_tag = true }
-effects = ["upload_file", "write_remote"]
+effects = ["publish", "upload_file", "write_remote"]
 
 # `--latest=false` is documented but is a value on a flag, which is not modeled
 [[case]]
@@ -1429,7 +1440,7 @@ effects = ["read_remote"]
 argv = ["gh", "auth", "token", "-h", "github.com"]
 action = "auth_token"
 fields = { hostname = "github.com" }
-effects = ["reveal_token", "write_credentials"]
+effects = ["read_remote", "reveal_token", "write_credentials"]
 
 [[case]]
 argv = ["gh", "auth", "status", "-t", "--no-refresh"]

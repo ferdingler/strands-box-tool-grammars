@@ -151,3 +151,32 @@ forbid (principal, action in Tool::gh::Action::"*", resource)
 when { context.input.effects.contains(Tool::gh::Effect::"target_override") &&
        !(context.input has repo && context.input.repo == "my-org/my-repo") };
 '''
+
+# A published release is refused; `--draft` removes `publish`, so a draft runs
+[[case]]
+argv = ["gh", "release", "create", "v1.0.0", "--generate-notes"]
+exit = 126
+stderr = "[policy: gh_no_publish]"
+policy = '''
+@id("gh_actions")
+permit (principal, action in Tool::gh::Action::"*", resource);
+
+@id("gh_no_publish")
+@description("An agent may save a release only as a draft.")
+forbid (principal, action == Tool::gh::Action::"release_create", resource)
+when { context.input.effects.contains(Tool::gh::Effect::"publish") };
+'''
+
+[[case]]
+argv = ["gh", "release", "create", "v1.0.0", "--generate-notes", "--draft"]
+exit = 0
+stdout = "stub-argv: [release] [create] [v1.0.0] [--generate-notes] [--draft]"
+policy = '''
+@id("gh_actions")
+permit (principal, action in Tool::gh::Action::"*", resource);
+
+@id("gh_no_publish")
+@description("An agent may save a release only as a draft.")
+forbid (principal, action == Tool::gh::Action::"release_create", resource)
+when { context.input.effects.contains(Tool::gh::Effect::"publish") };
+'''

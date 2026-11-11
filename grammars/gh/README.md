@@ -73,7 +73,7 @@ repeated filter, so its field is `repo_filter`, a set.
 
 | Effect | Meaning | Added by |
 |---|---|---|
-| `read_remote` | Reads data from GitHub | Every read, and `gh api` |
+| `read_remote` | Reads data from GitHub | Every read, `gh api`, and `auth token` unless `--no-refresh` |
 | `write_remote` | Creates or changes data on GitHub | Every create, edit, comment, close, and `gh api` with `-f`, `-F`, `--input`, or a `-X` other than GET or HEAD |
 | `delete_remote` | Deletes data on GitHub | `repo delete`, `release delete`, `run delete`, `--delete-branch`, `--delete-last`, `gh api -X DELETE` |
 | `merge` | Merges a pull request or turns on auto-merge | `pr merge`, except with `--disable-auto` |
@@ -82,7 +82,8 @@ repeated filter, so its field is `repo_filter`, a set.
 | `make_public` | Makes a repository public | `repo create --public`; `repo edit --visibility` with any value but `private` or `internal` |
 | `trigger_ci` | Starts or reruns a workflow, which runs with the repository's secrets | `workflow run`, `run rerun` |
 | `git_push` | May push local commits or branches | `pr create` (removed by `--head`), `repo create --push` |
-| `write_local` | Writes local files, branches, or remotes | `pr checkout`, `repo clone`, downloads, `--clone`, `--delete-branch`, `repo create --source` or `--remote`, `repo fork --remote` |
+| `publish` | Publishes a release, which notifies watchers and can trigger release workflows | `release create`, except with `--draft` |
+| `write_local` | Writes local files, branches, or remotes | `pr create` (removed by `--head`), `pr checkout`, `repo clone`, downloads, `--clone`, `--delete-branch`, `repo create --source` or `--remote`, `repo fork --remote` |
 | `overwrite_local` | Overwrites or resets existing local files or branches | `pr checkout --force`, `release download --clobber` |
 | `git_passthrough` | Passes extra arguments to git | Words after `--` in `repo clone` and `repo fork` |
 | `upload_file` | Sends a local file's content to GitHub | `--attach`, `--body-file`, `--notes-file`, release assets, `--input`, `-F key=@file` |
@@ -91,9 +92,12 @@ repeated filter, so its field is `repo_filter`, a set.
 | `reveal_token` | Prints a stored token | `auth status --show-token`, `auth token` |
 | `write_credentials` | May change stored credentials (token refresh) | `auth status` and `auth token`, unless `--no-refresh` |
 
-`--dry-run` on `pr create` removes `write_remote` and `upload_file`, but keeps `git_push`, because
-gh says it "may still push git changes". `--web` on a create or comment removes `write_remote`,
-because gh then opens the browser and creates nothing.
+Without `--head`, `pr create` may fork the base repository on GitHub, rename or add local git
+remotes, and push the branch before it creates the pull request. It does this also with `--dry-run`
+and `--web`, so those two remove only `upload_file` and keep `write_remote`, `write_local`, and
+`git_push`. `--head` names a branch that is already pushed and skips all of it. `--web` on
+`issue create` and on a comment removes `write_remote`, because gh then opens the browser and
+creates nothing.
 
 ## Example rules
 
