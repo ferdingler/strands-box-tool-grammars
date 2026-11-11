@@ -1,0 +1,517 @@
+# Tool grammar for the Vercel CLI (https://github.com/vercel/vercel, packages/cli), by Vercel.
+# Executable: `vercel`, a Node.js script (`dist/vc.js` in the npm package `vercel`). The npm
+# package also installs the same file as `vc`. A grammar binds one called name, so `vc` is another
+# program to Box: this grammar does not decide `vc ...`, and a `vc` spawn is a `shell:spawn`.
+# Version checked: Vercel CLI 65.14.0 (npm `vercel@65.14.0`), against `vercel <command> --help`
+# and the published JavaScript CLI in `@vercel/cli-support@65.14.0` (the argument parser is
+# `arg@5.0.0`; the global options are `globalCommandOptions`).
+#
+# What this grammar cannot see:
+# - `vercel` with no command, and `vercel <path>`, deploy the current directory or that path. A
+#   grammar needs a command word, so both are `unmodeled`. Use `vercel deploy [<project_path>]`.
+# - Environment variables: VERCEL_TOKEN (a login token), VERCEL_ORG_ID and VERCEL_PROJECT_ID (the
+#   target team and project), VERCEL_CLI_USE_NATIVE_BINARY, HTTP(S)_PROXY, and agent detection
+#   (CLAUDECODE and others turn on non-interactive mode).
+# - Configuration files: the global directory (`~/.local/share/com.vercel.cli` on Linux,
+#   `~/Library/Application Support/com.vercel.cli` on macOS) holds `auth.json` (the login token) and
+#   `config.json` (the current team, the API URL). `.vercel/project.json` in the project directory
+#   names the linked team and project. `vercel.json` configures the project and its build.
+# - Child processes: the launcher `vc.js` runs a native `vercel` binary (from the optional
+#   `@vercel/vc-native-<platform>` package, or downloaded once into the CLI cache) or the
+#   JavaScript CLI. `build`, `dev`, `deploy --temporary`, and `env run` run project code and build
+#   scripts. An unknown command runs a `vercel-<name>` extension from PATH. The CLI also starts a
+#   background update check and can upgrade a native install. None of these spawns is decided.
+# - The team and project that a command acts on, when no `--scope` or `--project` names them: they
+#   come from `.vercel/project.json`, the global config, or the environment.
+# - `-S` takes a separate value only. `-Sfoo` and `-ep` read here as a value attached to the
+#   flag, but arg@5 refuses them, so the CLI exits with an error and changes nothing.
+
+format  = 1
+version = 1
+name    = "vercel"
+program = "vercel"
+
+[effects]
+read_remote        = "Reads data from the Vercel API and changes nothing"
+deploy             = "Creates a deployment: uploads project files or build output to Vercel"
+deploy_production  = "Can create a production deployment (production target, first or temporary deployment, redeploy of production)"
+change_traffic     = "Changes which deployment a production domain or an alias serves"
+write_remote       = "Creates or changes a Vercel resource: project, link, domain, alias, Git connection, certificate"
+delete_remote      = "Deletes a Vercel resource: deployment, Environment Variable, domain, alias, project, certificate"
+write_secret       = "Sets the value of an Environment Variable on Vercel"
+read_secret        = "Reads decrypted Environment Variable values from Vercel"
+production_env     = "Acts on the production environment's Environment Variables"
+write_local_files  = "Writes files in the project directory: .vercel, env files, build output"
+run_local_code     = "Runs project code, build scripts, or a named command on this machine"
+listen             = "Starts a local server that listens on a network port"
+write_local_config = "Changes the CLI's saved global configuration (the current team)"
+skip_prompt        = "Skips a confirmation prompt"
+token_argument     = "Passes a login token on the command line"
+override_config    = "Reads the local or global CLI configuration from a path the command line names"
+
+# The global options in `globalCommandOptions`. The CLI parses them over the whole command line, so
+# they are accepted before, between, and after the command words.
+# Not declared, so `unmodeled`: -h/--help, -v/--version, --changelog, the hidden -T/--team and
+# --api (another API URL, which would receive the login token).
+# `--cwd` is the key `cwd_option`, because `cwd` is a reserved field.
+[global]
+options.cwd_option      = { flag = ["--cwd"], value = "required", anywhere = true }
+options.local_config    = { flag = ["-A", "--local-config"], value = "required", anywhere = true, adds = ["override_config"] }
+options.global_config   = { flag = ["-Q", "--global-config"], value = "required", anywhere = true, adds = ["override_config"] }
+options.debug           = { flag = ["-d", "--debug"], anywhere = true }
+options.no_color        = { flag = ["--no-color"], anywhere = true }
+options.non_interactive = { flag = ["--non-interactive"], anywhere = true }
+options.scope           = { flag = ["-S", "--scope"], value = "required", anywhere = true }
+options.token           = { flag = ["-t", "--token"], value = "required", anywhere = true, adds = ["token_argument"] }
+
+# ---------------------------------------------------------------- deploy
+
+# A deployment with no explicit target can go to production: the CLI sends a project's first
+# deployment and a `--temporary` deployment to production. So `deploy` has `deploy_production` and
+# `change_traffic` unless `--environment preview` names the preview target, which wins over `--prod`.
+[shell.deploy]
+usage = "vercel [global options] deploy [options] [<project_path>]"
+adds  = ["deploy", "deploy_production", "change_traffic"]
+options.prod                 = { flag = ["--prod"], adds = ["deploy_production", "change_traffic"] }
+options.environment          = { flag = ["--environment"], value = "required", like = ["preview"], removes = ["deploy_production", "change_traffic"] }
+options.skip_domain          = { flag = ["--skip-domain"], removes = ["change_traffic"] }
+options.prebuilt             = { flag = ["--prebuilt"] }
+options.dry                  = { flag = ["--dry"], removes = ["deploy", "deploy_production", "change_traffic"] }
+options.temporary            = { flag = ["--temporary"], adds = ["run_local_code", "write_local_files"] }
+options.force                = { flag = ["--force"] }
+options.with_cache           = { flag = ["--with-cache"] }
+options.env                  = { flag = ["--env"], value = "required", repeated = true }
+options.build_env            = { flag = ["--build-env"], value = "required", repeated = true }
+options.meta                 = { flag = ["--meta"], value = "required", repeated = true }
+options.regions              = { flag = ["--regions"], value = "required" }
+options.archive              = { flag = ["--archive"], value = "required" }
+options.project              = { flag = ["-p", "--project"], value = "required" }
+options.create_if_missing    = { flag = ["--create-if-missing"], adds = ["write_remote"] }
+options.delete_project_after = { flag = ["--delete-project-after"], value = "required" }
+options.verify               = { flag = ["--verify"], adds = ["write_remote"] }
+options.no_wait              = { flag = ["--no-wait"] }
+options.logs                 = { flag = ["--logs"] }
+options.guidance             = { flag = ["--guidance"] }
+options.turbo                = { flag = ["--turbo"] }
+options.json                 = { flag = ["--json"] }
+options.yes                  = { flag = ["-y", "--yes"], adds = ["skip_prompt"] }
+
+# `deploy init`, `deploy continue`, and `deploy describe` are subcommands that `vercel deploy --help`
+# does not list. They are actions here so that `vercel deploy init` is not read as a deploy of a
+# directory named `init`.
+[shell.deploy_init]
+usage = "vercel [global options] deploy init [options]"
+adds  = ["deploy", "deploy_production", "change_traffic"]
+options.prod        = { flag = ["--prod"], adds = ["deploy_production", "change_traffic"] }
+options.environment = { flag = ["--environment"], value = "required", like = ["preview"], removes = ["deploy_production", "change_traffic"] }
+options.skip_domain = { flag = ["--skip-domain"], removes = ["change_traffic"] }
+options.force       = { flag = ["--force"] }
+options.with_cache  = { flag = ["--with-cache"] }
+options.env         = { flag = ["--env"], value = "required", repeated = true }
+options.build_env   = { flag = ["--build-env"], value = "required", repeated = true }
+options.meta        = { flag = ["--meta"], value = "required", repeated = true }
+options.regions     = { flag = ["--regions"], value = "required" }
+options.archive     = { flag = ["--archive"], value = "required" }
+options.project     = { flag = ["-p", "--project"], value = "required" }
+options.json        = { flag = ["--json"] }
+options.yes         = { flag = ["-y", "--yes"], adds = ["skip_prompt"] }
+
+# Continuing a manual deployment uploads its build output and can make it live, so this keeps the
+# production effects: the target was set by `deploy init`.
+[shell.deploy_continue]
+usage = "vercel [global options] deploy continue [options]"
+adds  = ["deploy", "deploy_production", "change_traffic"]
+options.deployment = { flag = ["--deployment"], value = "required" }
+options.archive    = { flag = ["--archive"], value = "required" }
+options.error      = { flag = ["--error"], value = "required" }
+
+[shell.deploy_describe]
+usage = "vercel [global options] deploy describe [options]"
+adds  = ["read_remote", "write_local_files"]
+options.deployment     = { flag = ["--deployment"], value = "required" }
+options.aws_account_id = { flag = ["--aws-account-id"], value = "required" }
+options.json           = { flag = ["--json"] }
+
+# `redeploy` goes to the original deployment's environment unless `-e` names another one.
+[shell.redeploy]
+usage = "vercel [global options] redeploy [options] <deployment>"
+adds  = ["deploy", "deploy_production", "change_traffic"]
+options.environment = { flag = ["-e", "--environment"], value = "required", like = ["preview"], removes = ["deploy_production", "change_traffic"] }
+options.no_wait     = { flag = ["--no-wait"] }
+options.json        = { flag = ["--json"] }
+
+[shell.promote]
+usage = "vercel [global options] promote [options] <deployment>"
+adds  = ["change_traffic"]
+options.timeout = { flag = ["--timeout"], value = "required" }
+options.yes     = { flag = ["-y", "--yes"], adds = ["skip_prompt"] }
+options.json    = { flag = ["--json"] }
+
+[shell.promote_status]
+usage = "vercel [global options] promote status [options] [<project>]"
+adds  = ["read_remote"]
+options.timeout = { flag = ["--timeout"], value = "required" }
+options.yes     = { flag = ["-y", "--yes"], adds = ["skip_prompt"] }
+options.json    = { flag = ["--json"] }
+
+[shell.rollback]
+usage = "vercel [global options] rollback [options] <deployment>"
+adds  = ["change_traffic"]
+options.timeout = { flag = ["--timeout"], value = "required" }
+options.yes     = { flag = ["-y", "--yes"], adds = ["skip_prompt"] }
+options.json    = { flag = ["--json"] }
+
+[shell.rollback_status]
+usage = "vercel [global options] rollback status [options] [<project>]"
+adds  = ["read_remote"]
+options.timeout = { flag = ["--timeout"], value = "required" }
+options.json    = { flag = ["--json"] }
+
+# `vercel remove <project>` deletes every deployment of that project.
+[shell.remove]
+usage   = "vercel [global options] remove [options] <deployment>..."
+aliases = ["rm"]
+adds    = ["delete_remote"]
+options.safe = { flag = ["--safe"] }
+options.yes  = { flag = ["-y", "--yes"], adds = ["skip_prompt"] }
+
+# ---------------------------------------------------------------- read deployments
+
+[shell.list]
+usage   = "vercel [global options] list [options] [<app>]"
+aliases = ["ls"]
+adds    = ["read_remote"]
+options.all         = { flag = ["-a", "--all"] }
+options.environment = { flag = ["-e", "--environment"], value = "required" }
+options.json        = { flag = ["--json"] }
+options.limit       = { flag = ["-n", "--limit"], value = "required" }
+options.meta        = { flag = ["--meta"], value = "required", repeated = true }
+options.next        = { flag = ["--next"], value = "required" }
+options.policy      = { flag = ["--policy"], value = "required", repeated = true }
+options.status      = { flag = ["--status"], value = "required" }
+options.yes         = { flag = ["-y", "--yes"], adds = ["skip_prompt"] }
+
+[shell.inspect]
+usage = "vercel [global options] inspect [options] <deployment>"
+adds  = ["read_remote"]
+options.json    = { flag = ["--json"] }
+options.logs    = { flag = ["--logs"] }
+options.timeout = { flag = ["--timeout"], value = "required" }
+options.wait    = { flag = ["--wait"] }
+
+# `vercel logs` is `vercel logs runtime`.
+[shell.logs]
+usage   = "vercel [global options] logs [options]"
+aliases = ["log"]
+adds    = ["read_remote"]
+options.deployment  = { flag = ["--deployment"], value = "required" }
+options.environment = { flag = ["-e", "--environment"], value = "required" }
+options.json        = { flag = ["--json"] }
+options.limit       = { flag = ["-n", "--limit"], value = "required" }
+options.next        = { flag = ["--next"], value = "required" }
+options.project     = { flag = ["-p", "--project"], value = "required" }
+options.query       = { flag = ["-q", "--query"], value = "required" }
+options.since       = { flag = ["-s", "--since"], value = "required" }
+options.until       = { flag = ["-u", "--until"], value = "required" }
+
+[shell.logs_runtime]
+usage   = "vercel [global options] logs runtime [options]"
+aliases = ["log runtime"]
+adds    = ["read_remote"]
+options.deployment  = { flag = ["--deployment"], value = "required" }
+options.environment = { flag = ["-e", "--environment"], value = "required" }
+options.json        = { flag = ["--json"] }
+options.limit       = { flag = ["-n", "--limit"], value = "required" }
+options.next        = { flag = ["--next"], value = "required" }
+options.project     = { flag = ["-p", "--project"], value = "required" }
+options.query       = { flag = ["-q", "--query"], value = "required" }
+options.since       = { flag = ["-s", "--since"], value = "required" }
+options.until       = { flag = ["-u", "--until"], value = "required" }
+
+[shell.logs_requests]
+usage   = "vercel [global options] logs requests [options]"
+aliases = ["log requests"]
+adds    = ["read_remote"]
+options.deployment  = { flag = ["--deployment"], value = "required" }
+options.environment = { flag = ["-e", "--environment"], value = "required" }
+options.json        = { flag = ["--json"] }
+options.limit       = { flag = ["-n", "--limit"], value = "required" }
+options.next        = { flag = ["--next"], value = "required" }
+options.project     = { flag = ["-p", "--project"], value = "required" }
+options.query       = { flag = ["-q", "--query"], value = "required" }
+options.since       = { flag = ["-s", "--since"], value = "required" }
+options.until       = { flag = ["-u", "--until"], value = "required" }
+
+# ---------------------------------------------------------------- environment variables
+
+# `--json` prints readable values.
+[shell.env_list]
+usage   = "vercel [global options] env list [options]"
+aliases = ["env ls"]
+adds    = ["read_remote"]
+options.environment = { flag = ["-e", "--environment"], value = "required" }
+options.git_branch  = { flag = ["--git-branch"], value = "required" }
+options.guidance    = { flag = ["--guidance"] }
+options.json        = { flag = ["--json"], adds = ["read_secret"] }
+options.project     = { flag = ["-p", "--project"], value = "required" }
+
+[shell.env_add]
+usage = "vercel [global options] env add [options] <name>"
+adds  = ["write_secret"]
+options.environment  = { flag = ["-e", "--environment"], value = "required", repeated = true, like = ["*production*"], adds = ["production_env"] }
+options.force        = { flag = ["--force"] }
+options.git_branch   = { flag = ["--git-branch"], value = "required" }
+options.guidance     = { flag = ["--guidance"] }
+options.json         = { flag = ["--json"] }
+options.no_sensitive = { flag = ["--no-sensitive"] }
+options.project      = { flag = ["-p", "--project"], value = "required" }
+options.sensitive    = { flag = ["--sensitive"] }
+options.type         = { flag = ["--type"], value = "required" }
+options.value        = { flag = ["--value"], value = "required" }
+options.yes          = { flag = ["-y", "--yes"], adds = ["skip_prompt"] }
+
+# The new value applies to every environment the variable covers, so production is always possible.
+[shell.env_update]
+usage = "vercel [global options] env update [options] <name>"
+adds  = ["write_secret", "production_env"]
+options.environment = { flag = ["-e", "--environment"], value = "required" }
+options.git_branch  = { flag = ["--git-branch"], value = "required" }
+options.project     = { flag = ["-p", "--project"], value = "required" }
+options.sensitive   = { flag = ["--sensitive"] }
+options.type        = { flag = ["--type"], value = "required" }
+options.value       = { flag = ["--value"], value = "required" }
+options.yes         = { flag = ["-y", "--yes"], adds = ["skip_prompt"] }
+
+# Without `-e`, the variable is removed from all of its environments.
+[shell.env_remove]
+usage   = "vercel [global options] env remove [options] <name>"
+aliases = ["env rm"]
+adds    = ["delete_remote", "production_env"]
+options.environment = { flag = ["-e", "--environment"], value = "required", like = ["preview", "development"], removes = ["production_env"] }
+options.git_branch  = { flag = ["--git-branch"], value = "required" }
+options.json        = { flag = ["--json"] }
+options.project     = { flag = ["-p", "--project"], value = "required" }
+options.yes         = { flag = ["-y", "--yes"], adds = ["skip_prompt"] }
+
+[shell.env_pull]
+usage = "vercel [global options] env pull [options] [<filename>]"
+adds  = ["read_secret", "write_local_files"]
+options.deployment  = { flag = ["--deployment"], value = "required" }
+options.environment = { flag = ["-e", "--environment"], value = "required", like = ["*production*"], adds = ["production_env"] }
+options.git_branch  = { flag = ["--git-branch"], value = "required" }
+options.project     = { flag = ["-p", "--project"], value = "required" }
+options.yes         = { flag = ["-y", "--yes"], adds = ["skip_prompt"] }
+
+# The CLI splits the line at its first `--`: the words after it are the command to run.
+[shell.env_run]
+usage = "vercel [global options] env run [options] -- <command>..."
+adds  = ["run_local_code", "read_secret"]
+options.environment = { flag = ["-e", "--environment"], value = "required", like = ["*production*"], adds = ["production_env"] }
+options.git_branch  = { flag = ["--git-branch"], value = "required" }
+options.project     = { flag = ["-p", "--project"], value = "required" }
+
+# ---------------------------------------------------------------- local project
+
+[shell.pull]
+usage = "vercel [global options] pull [options] [<project_path>]"
+adds  = ["read_secret", "write_local_files"]
+options.environment = { flag = ["-e", "--environment"], value = "required", like = ["*production*"], adds = ["production_env"] }
+options.git_branch  = { flag = ["--git-branch"], value = "required" }
+options.json        = { flag = ["--json"] }
+options.project     = { flag = ["-p", "--project"], value = "required" }
+options.yes         = { flag = ["-y", "--yes"], adds = ["skip_prompt", "write_remote"] }
+
+# `build` pulls the project's settings and Environment Variables when they are not local.
+[shell.build]
+usage = "vercel [global options] build [options]"
+adds  = ["run_local_code", "read_secret", "write_local_files"]
+options.deployment  = { flag = ["--deployment"], value = "required" }
+options.environment = { flag = ["-e", "--environment"], value = "required", like = ["*production*"], adds = ["production_env"] }
+options.output      = { flag = ["-o", "--output"], value = "required" }
+options.prod        = { flag = ["--prod"], adds = ["production_env"] }
+options.project     = { flag = ["-p", "--project"], value = "required" }
+options.standalone  = { flag = ["--standalone"] }
+options.yes         = { flag = ["-y", "--yes"], adds = ["skip_prompt"] }
+
+[shell.dev]
+usage   = "vercel [global options] dev [options] [<dir>]"
+aliases = ["develop"]
+adds    = ["run_local_code", "read_secret", "listen"]
+options.listen             = { flag = ["--listen"], value = "required" }
+options.local              = { flag = ["--local"] }
+options.project            = { flag = ["--project"], value = "required" }
+options.queue_port         = { flag = ["--queue-port"], value = "required" }
+options.runtime_cache_port = { flag = ["--runtime-cache-port"], value = "required" }
+options.schedules_port     = { flag = ["--schedules-port"], value = "required" }
+options.yes                = { flag = ["-y", "--yes"], adds = ["skip_prompt"] }
+
+# `link` can create a project when none matches.
+[shell.link]
+usage = "vercel [global options] link [options]"
+adds  = ["write_local_files", "write_remote"]
+options.json    = { flag = ["--json"] }
+options.project = { flag = ["-p", "--project"], value = "required" }
+options.repo    = { flag = ["--repo"] }
+options.yes     = { flag = ["-y", "--yes"], adds = ["skip_prompt"] }
+
+[shell.link_add]
+usage = "vercel [global options] link add [options]"
+adds  = ["write_local_files", "write_remote"]
+options.yes = { flag = ["-y", "--yes"], adds = ["skip_prompt"] }
+
+[shell.git_connect]
+usage = "vercel [global options] git connect [options] [<git_url>]"
+adds  = ["write_remote"]
+options.project = { flag = ["-p", "--project"], value = "required" }
+options.yes     = { flag = ["-y", "--yes"], adds = ["skip_prompt"] }
+
+[shell.git_disconnect]
+usage = "vercel [global options] git disconnect [options]"
+adds  = ["write_remote"]
+options.project = { flag = ["-p", "--project"], value = "required" }
+options.yes     = { flag = ["-y", "--yes"], adds = ["skip_prompt"] }
+
+# ---------------------------------------------------------------- aliases
+
+[shell.alias_list]
+usage   = "vercel [global options] alias list [options]"
+aliases = ["alias ls", "aliases list", "aliases ls", "ln list", "ln ls"]
+adds    = ["read_remote"]
+options.json  = { flag = ["--json"] }
+options.limit = { flag = ["-n", "--limit"], value = "required" }
+options.next  = { flag = ["--next"], value = "required" }
+
+# `set` is the default subcommand: `vercel alias <deployment> <alias>` sets an alias.
+[shell.alias_set]
+usage   = "vercel [global options] alias set <deployment> <alias>"
+aliases = ["alias", "aliases set", "aliases", "ln set", "ln"]
+adds    = ["write_remote", "change_traffic"]
+
+[shell.alias_remove]
+usage   = "vercel [global options] alias remove [options] <alias>"
+aliases = ["alias rm", "aliases remove", "aliases rm", "ln remove", "ln rm"]
+adds    = ["delete_remote", "change_traffic"]
+options.yes = { flag = ["-y", "--yes"], adds = ["skip_prompt"] }
+
+# ---------------------------------------------------------------- domains
+
+# `list` is the default subcommand: `vercel domains` lists domains.
+[shell.domains_list]
+usage   = "vercel [global options] domains list [options]"
+aliases = ["domains ls", "domain list", "domain ls", "domains", "domain"]
+adds    = ["read_remote"]
+options.json  = { flag = ["--json"] }
+options.limit = { flag = ["-n", "--limit"], value = "required" }
+options.next  = { flag = ["--next"], value = "required" }
+
+[shell.domains_inspect]
+usage   = "vercel [global options] domains inspect [options] <domain>"
+aliases = ["domain inspect"]
+adds    = ["read_remote"]
+options.json = { flag = ["--json"] }
+
+# Adding a domain to a project makes it serve that project.
+[shell.domains_add]
+usage   = "vercel [global options] domains add [options] <domain> [<project>]"
+aliases = ["domain add"]
+adds    = ["write_remote"]
+operands.project = { adds = ["change_traffic"] }
+options.force                = { flag = ["--force"], adds = ["change_traffic"] }
+options.json                 = { flag = ["--json"] }
+options.redirect             = { flag = ["--redirect"], value = "required", adds = ["change_traffic"] }
+options.redirect_status_code = { flag = ["--redirect-status-code"], value = "required" }
+
+[shell.domains_remove]
+usage   = "vercel [global options] domains remove [options] <domain>"
+aliases = ["domains rm", "domain remove", "domain rm"]
+adds    = ["delete_remote", "change_traffic"]
+options.json = { flag = ["--json"] }
+options.yes  = { flag = ["-y", "--yes"], adds = ["skip_prompt"] }
+
+# ---------------------------------------------------------------- projects
+
+[shell.project_list]
+usage   = "vercel [global options] project list [options]"
+aliases = ["project ls", "projects list", "projects ls"]
+adds    = ["read_remote"]
+options.json            = { flag = ["--json"] }
+options.limit           = { flag = ["-n", "--limit"], value = "required" }
+options.next            = { flag = ["--next"], value = "required" }
+options.paused          = { flag = ["--paused"] }
+options.query           = { flag = ["-q", "--query"], value = "required" }
+options.update_required = { flag = ["--update-required"] }
+
+[shell.project_inspect]
+usage   = "vercel [global options] project inspect [options] [<name>]"
+aliases = ["projects inspect"]
+adds    = ["read_remote"]
+options.json = { flag = ["--json"] }
+options.yes  = { flag = ["-y", "--yes"], adds = ["skip_prompt"] }
+
+[shell.project_create]
+usage   = "vercel [global options] project create <name>"
+aliases = ["project add", "projects create", "projects add"]
+adds    = ["write_remote"]
+
+[shell.project_delete]
+usage   = "vercel [global options] project delete [options] <name>"
+aliases = ["project rm", "project del", "project remove", "projects delete", "projects rm", "projects del", "projects remove"]
+adds    = ["delete_remote"]
+options.confirm_name = { flag = ["--confirm-name"], value = "required", adds = ["skip_prompt"] }
+options.yes          = { flag = ["-y", "--yes"], adds = ["skip_prompt"] }
+
+# ---------------------------------------------------------------- certificates
+
+[shell.certs_list]
+usage   = "vercel [global options] certs list [options]"
+aliases = ["certs ls", "cert list", "cert ls"]
+adds    = ["read_remote"]
+options.json  = { flag = ["--json"] }
+options.limit = { flag = ["-n", "--limit"], value = "required" }
+options.next  = { flag = ["--next"], value = "required" }
+
+# `--key` names a private key file that the CLI uploads.
+[shell.certs_add]
+usage   = "vercel [global options] certs add [options]"
+aliases = ["cert add"]
+adds    = ["write_remote"]
+options.ca  = { flag = ["--ca"], value = "required" }
+options.crt = { flag = ["--crt"], value = "required" }
+options.key = { flag = ["--key"], value = "required" }
+
+[shell.certs_issue]
+usage   = "vercel [global options] certs issue [options] <cn>"
+aliases = ["cert issue"]
+adds    = ["write_remote"]
+options.ca             = { flag = ["--ca"], value = "required" }
+options.challenge_only = { flag = ["--challenge-only"] }
+options.crt            = { flag = ["--crt"], value = "required" }
+options.key            = { flag = ["--key"], value = "required" }
+
+[shell.certs_delete]
+usage   = "vercel [global options] certs delete <id>"
+aliases = ["certs rm", "certs del", "certs remove", "cert delete", "cert rm", "cert del", "cert remove"]
+adds    = ["delete_remote"]
+
+# ---------------------------------------------------------------- account
+
+# `--cached` prints the saved username and does not contact Vercel.
+[shell.whoami]
+usage = "vercel [global options] whoami [options]"
+adds  = ["read_remote"]
+options.cached = { flag = ["--cached"], removes = ["read_remote"] }
+options.json   = { flag = ["--json"] }
+
+[shell.teams_list]
+usage   = "vercel [global options] teams list [options]"
+aliases = ["teams ls", "team list", "team ls"]
+adds    = ["read_remote"]
+options.json  = { flag = ["--json"] }
+options.limit = { flag = ["-n", "--limit"], value = "required" }
+options.next  = { flag = ["--next"], value = "required" }
+
+# `vercel switch` is `vercel teams switch`.
+[shell.teams_switch]
+usage   = "vercel [global options] teams switch [<name>]"
+aliases = ["teams change", "team switch", "team change", "switch"]
+adds    = ["write_local_config"]
