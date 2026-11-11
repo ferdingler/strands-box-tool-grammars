@@ -1131,3 +1131,328 @@ action = "unmodeled"
 [[case]]
 argv = ["gh", "PR", "list"]
 action = "unmodeled"
+
+# --- independent verifier cases ---
+# Written by the verifier from cli/cli v2.103.3 source (pkg/cmd/**, cobra v1.10.2, pflag v1.0.10),
+# not from the grammar's output.
+
+# cobra strips `-R x` before the command words and the leaf inherits -R from `pr`, so gh accepts these;
+# the grammar declines them (safe).
+[[case]]
+argv = ["gh", "-R", "o/r", "pr", "list"]
+action = "unmodeled"
+
+[[case]]
+argv = ["gh", "pr", "-R", "o/r", "list"]
+action = "unmodeled"
+
+# pflag accepts `-R=o/r`; the grammar's parser refuses an attached `=` value (contract section 4).
+[[case]]
+argv = ["gh", "pr", "list", "-R=o/r"]
+action = "unmodeled"
+
+[[case]]
+argv = ["gh", "pr", "list", "--repo=o/r"]
+action = "pr_list"
+fields = { repo = "o/r" }
+effects = ["read_remote", "target_override"]
+
+[[case]]
+argv = ["gh", "pr", "list", "-Ro/r"]
+action = "pr_list"
+fields = { repo = "o/r" }
+effects = ["read_remote", "target_override"]
+
+# src: pr/merge/merge.go flags --admin, -d, -s, --auto.
+[[case]]
+argv = ["gh", "pr", "merge", "12", "--squash", "--auto", "--delete-branch"]
+action = "pr_merge"
+fields = { pr = "12", squash = true, auto = true, delete_branch = true }
+effects = ["write_remote", "merge", "delete_remote", "write_local"]
+
+[[case]]
+argv = ["gh", "pr", "merge", "-sd", "--admin", "12"]
+action = "pr_merge"
+fields = { pr = "12", squash = true, delete_branch = true, admin = true }
+effects = ["write_remote", "merge", "delete_remote", "write_local", "admin_bypass"]
+
+[[case]]
+argv = ["gh", "pr", "merge", "12", "--disable-auto"]
+action = "pr_merge"
+fields = { pr = "12", disable_auto = true }
+effects = ["write_remote"]
+
+# A prefix of --delete-branch, and a bool given a value.
+[[case]]
+argv = ["gh", "pr", "merge", "12", "--dele"]
+action = "unmodeled"
+
+[[case]]
+argv = ["gh", "pr", "merge", "12", "--delete-branch=false"]
+action = "unmodeled"
+
+# src: repo/delete/delete.go: only `--yes` (no -y); `--confirm` is deprecated.
+[[case]]
+argv = ["gh", "repo", "delete", "o/r", "--yes"]
+action = "repo_delete"
+fields = { repository = "o/r", yes = true }
+effects = ["delete_remote"]
+
+[[case]]
+argv = ["gh", "repo", "delete", "o/r", "-y"]
+action = "unmodeled"
+
+[[case]]
+argv = ["gh", "repo", "delete", "o/r", "--confirm"]
+action = "unmodeled"
+
+# src: repo/edit/edit.go: --visibility is a free string (NilStringFlag).
+[[case]]
+argv = ["gh", "repo", "edit", "o/r", "--visibility", "public", "--accept-visibility-change-consequences"]
+action = "repo_edit"
+fields = { repository = "o/r", visibility = "public", accept_visibility_change_consequences = true }
+effects = ["write_remote", "make_public"]
+
+[[case]]
+argv = ["gh", "repo", "edit", "--visibility=PRIVATE"]
+action = "repo_edit"
+fields = { visibility = "PRIVATE" }
+effects = ["write_remote", "make_public"]
+
+[[case]]
+argv = ["gh", "repo", "edit", "--visibility", "private"]
+action = "repo_edit"
+fields = { visibility = "private" }
+effects = ["write_remote"]
+
+# src: repo/create/create.go --public, -s/--source, --push, -c/--clone; alias `new`.
+[[case]]
+argv = ["gh", "repo", "create", "foo", "--public", "--source=.", "--push"]
+action = "repo_create"
+fields = { name = "foo", public = true, source = ".", push = true }
+effects = ["write_remote", "make_public", "write_local", "git_push"]
+
+[[case]]
+argv = ["gh", "repo", "new", "foo", "--private", "-c"]
+action = "repo_create"
+fields = { name = "foo", private = true, clone = true }
+effects = ["write_remote", "write_local"]
+
+[[case]]
+argv = ["gh", "repo", "create", "foo", "--internal", "-y"]
+action = "unmodeled"
+
+# src: api/api.go: -X default GET; POST when -f/-F/--input and -X not given; http.go upper-cases
+# the method and sends params as a query string for GET.
+[[case]]
+argv = ["gh", "api", "repos/o/r", "-X", "DELETE"]
+action = "api"
+fields = { endpoint = "repos/o/r", method = "DELETE" }
+effects = ["read_remote", "write_remote", "delete_remote"]
+
+[[case]]
+argv = ["gh", "api", "--method=delete", "repos/o/r"]
+action = "api"
+fields = { endpoint = "repos/o/r", method = "delete" }
+effects = ["read_remote", "write_remote", "delete_remote"]
+
+[[case]]
+argv = ["gh", "api", "-XGET", "search/issues", "-f", "q=x"]
+action = "api"
+fields = { endpoint = "search/issues", method = "GET", raw_field = ["q=x"] }
+effects = ["read_remote"]
+
+[[case]]
+argv = ["gh", "api", "graphql", "--paginate", "-f", "query=q"]
+action = "api"
+fields = { endpoint = "graphql", paginate = true, raw_field = ["query=q"] }
+effects = ["read_remote", "write_remote"]
+
+[[case]]
+argv = ["gh", "api", "repos/o/r/issues", "--input", "body.json"]
+action = "api"
+fields = { endpoint = "repos/o/r/issues", input = "body.json" }
+effects = ["read_remote", "write_remote", "upload_file"]
+
+[[case]]
+argv = ["gh", "api", "-X", "PATCH", "repos/o/r", "-F", "private=false"]
+action = "api"
+fields = { endpoint = "repos/o/r", method = "PATCH", field = ["private=false"] }
+effects = ["read_remote", "write_remote"]
+
+[[case]]
+argv = ["gh", "api", "-X", "Get", "user"]
+action = "api"
+fields = { endpoint = "user", method = "Get" }
+effects = ["read_remote", "write_remote", "delete_remote"]
+
+[[case]]
+argv = ["gh", "api", "https://evil.example/x"]
+action = "api"
+fields = { endpoint = "https://evil.example/x" }
+effects = ["read_remote", "target_override"]
+
+[[case]]
+argv = ["gh", "api", "repos/o/r", "--verbose"]
+action = "unmodeled"
+
+[[case]]
+argv = ["gh", "api"]
+action = "unmodeled"
+
+[[case]]
+argv = ["gh", "api", "a", "b"]
+action = "unmodeled"
+
+# src: release/create/create.go: args[1:] are assets; --latest is a NilBoolFlag.
+[[case]]
+argv = ["gh", "release", "create", "v1", "--draft", "--target", "main", "./a.zip", "./b.zip#label"]
+action = "release_create"
+fields = { tag = "v1", draft = true, target = "main", files = ["./a.zip", "./b.zip#label"] }
+effects = ["write_remote", "upload_file"]
+
+[[case]]
+argv = ["gh", "release", "new", "v1", "--latest=false"]
+action = "unmodeled"
+
+[[case]]
+argv = ["gh", "release", "delete", "v1", "--cleanup-tag", "-y"]
+action = "release_delete"
+fields = { tag = "v1", cleanup_tag = true, yes = true }
+effects = ["delete_remote"]
+
+[[case]]
+argv = ["gh", "release", "download", "v1", "-O-", "--clobber"]
+action = "release_download"
+fields = { tag = "v1", output = "-", clobber = true }
+effects = ["read_remote"]
+
+# src: run/rerun, run/cancel (--force), run/delete.
+[[case]]
+argv = ["gh", "run", "rerun", "123", "--failed", "-d"]
+action = "run_rerun"
+fields = { run_id = "123", failed = true, debug = true }
+effects = ["write_remote", "trigger_ci"]
+
+[[case]]
+argv = ["gh", "run", "cancel", "123", "--force"]
+action = "run_cancel"
+fields = { run_id = "123", force = true }
+effects = ["write_remote"]
+
+[[case]]
+argv = ["gh", "run", "delete", "123", "-R", "o/r"]
+action = "run_delete"
+fields = { run_id = "123", repo = "o/r" }
+effects = ["delete_remote", "target_override"]
+
+# src: workflow/run/run.go: -F (magic, @file), -f, --json (bool), -r.
+[[case]]
+argv = ["gh", "workflow", "run", "ci.yml", "-fa=b", "-F", "c=@secrets.txt", "--ref", "main"]
+action = "workflow_run"
+fields = { workflow = "ci.yml", raw_field = ["a=b"], field = ["c=@secrets.txt"], ref = "main" }
+effects = ["write_remote", "trigger_ci", "upload_file"]
+
+[[case]]
+argv = ["gh", "workflow", "run", "ci.yml", "--json"]
+action = "workflow_run"
+fields = { workflow = "ci.yml", json = true }
+effects = ["write_remote", "trigger_ci"]
+
+# src: repo/clone/clone.go: args[1:] go to git clone.
+[[case]]
+argv = ["gh", "repo", "clone", "o/r", "--", "--upload-pack=touch /tmp/x"]
+action = "repo_clone"
+fields = { repository = "o/r", gitflags = ["--upload-pack=touch /tmp/x"] }
+effects = ["read_remote", "write_local", "git_passthrough"]
+
+# gh reads the first word after `--` as the repository and the rest as git flags.
+[[case]]
+argv = ["gh", "repo", "clone", "--", "o/r", "--upload-pack=x"]
+action = "unmodeled"
+
+[[case]]
+argv = ["gh", "repo", "clone", "o/r", "--depth", "1"]
+action = "unmodeled"
+
+# pr checkout alias `co` (src: pr/checkout/checkout.go Aliases).
+[[case]]
+argv = ["gh", "pr", "co", "12", "-f"]
+action = "pr_checkout"
+fields = { pr = "12", force = true }
+effects = ["read_remote", "write_local", "overwrite_local"]
+
+[[case]]
+argv = ["gh", "pr", "review", "12", "-a", "-b", "lgtm"]
+action = "pr_review"
+fields = { pr = "12", approve = true, body = "lgtm" }
+effects = ["write_remote", "approve"]
+
+[[case]]
+argv = ["gh", "pr", "review", "12", "--approve=true"]
+action = "unmodeled"
+
+[[case]]
+argv = ["gh", "pr", "comment", "12", "--delete-last", "--yes"]
+action = "pr_comment"
+fields = { pr = "12", delete_last = true, yes = true }
+effects = ["write_remote", "delete_remote"]
+
+# src: pr/create/create.go: --head skips the push; alias `new`.
+[[case]]
+argv = ["gh", "pr", "new", "-H", "feat", "-t", "x", "-b", "y"]
+action = "pr_create"
+fields = { head = "feat", title = "x", body = "y" }
+effects = ["write_remote"]
+
+# A value that looks like a flag is taken by a required option, as pflag does.
+[[case]]
+argv = ["gh", "pr", "view", "-R", "--web"]
+action = "pr_view"
+fields = { repo = "--web" }
+effects = ["read_remote", "target_override"]
+
+# After `--` a flag-looking word is the operand, as cobra does.
+[[case]]
+argv = ["gh", "pr", "view", "--", "--web"]
+action = "pr_view"
+fields = { pr = "--web" }
+effects = ["read_remote"]
+
+[[case]]
+argv = ["gh", "search", "prs", "--repo", "o/r", "-R", "o/s", "fix", "bug"]
+action = "search_prs"
+fields = { repo_filter = ["o/r", "o/s"], query = ["fix", "bug"] }
+effects = ["read_remote"]
+
+[[case]]
+argv = ["gh", "auth", "token", "-h", "github.com"]
+action = "auth_token"
+fields = { hostname = "github.com" }
+effects = ["reveal_token", "write_credentials"]
+
+[[case]]
+argv = ["gh", "auth", "status", "-t", "--no-refresh"]
+action = "auth_status"
+fields = { show_token = true, no_refresh = true }
+effects = ["read_remote", "reveal_token"]
+
+[[case]]
+argv = ["gh", "auth", "token", "--secure-storage"]
+action = "unmodeled"
+
+[[case]]
+argv = ["gh", "repo", "archive", "o/r", "-y"]
+action = "repo_archive"
+fields = { repository = "o/r", yes = true }
+effects = ["write_remote"]
+
+# A config alias may nest under a group (src: root/root.go, alias/shared/validations.go) but never
+# shadow a built-in; an unknown sub-word is unmodeled.
+[[case]]
+argv = ["gh", "pr", "nuke", "12"]
+action = "unmodeled"
+
+[[case]]
+argv = ["gh", "issue", "delete", "5", "--yes"]
+action = "unmodeled"
