@@ -1,0 +1,128 @@
+# End-to-end cases for supabase.grammar.toml. The harness runs each argv through the Shell of a
+# real box, where the program is a stub that prints its arguments and exits 0.
+#
+# The policy permits every modeled command, and forbids two things an agent should not do on its
+# own: change a hosted database, and delete hosted data.
+
+policy = '''
+@id("supabase_actions")
+permit (principal, action in Tool::supabase::Action::"*", resource);
+
+@id("no_hosted_db_writes")
+@description("Changing a hosted Supabase database is not allowed.")
+forbid (principal, action in Tool::supabase::Action::"*", resource)
+when { context.input.effects.contains(Tool::supabase::Effect::"write_remote_db") };
+
+@id("no_hosted_deletes")
+@description("Deleting hosted Supabase data is not allowed.")
+forbid (principal, action in Tool::supabase::Action::"*", resource)
+when { context.input.effects.contains(Tool::supabase::Effect::"delete_remote_data") };
+'''
+
+# A local read runs
+[[case]]
+argv = ["supabase", "status", "-o", "env"]
+exit = 0
+stdout = "stub-argv: [status] [-o] [env]"
+
+# A local database write runs
+[[case]]
+argv = ["supabase", "db", "push"]
+exit = 0
+stdout = "stub-argv: [db] [push]"
+
+# The same command with `--remote` targets the hosted database and is refused
+[[case]]
+argv = ["supabase", "db", "push", "--remote"]
+exit = 126
+stderr = "[policy: no_hosted_db_writes]: Changing a hosted Supabase database is not allowed."
+
+# `--dry-run` removes the write, so the forbid does not apply
+[[case]]
+argv = ["supabase", "db", "push", "--remote", "--dry-run"]
+exit = 0
+stdout = "stub-argv: [db] [push] [--remote] [--dry-run]"
+
+# Deleting a hosted project is refused
+[[case]]
+argv = ["supabase", "projects", "delete", "abcdefghijklmnopqrst", "--yes"]
+exit = 126
+stderr = "[policy: no_hosted_deletes]"
+
+# A deprecated hidden selector is unmodeled, and nothing permits it
+[[case]]
+argv = ["supabase", "db", "push", "--linked"]
+exit = 126
+stderr = "[default-deny]: No permit policy matched this request."
+
+# `--debug false` makes the CLI deploy every function; the literal operand adds ambiguous_argv,
+# which the README tells operators to forbid
+[[case]]
+argv = ["supabase", "functions", "deploy", "--debug", "false"]
+exit = 126
+stderr = "[policy: no_ambiguous_argv]"
+policy = '''
+@id("supabase_actions")
+permit (principal, action in Tool::supabase::Action::"*", resource);
+
+@id("no_ambiguous_argv")
+@description("The CLI may read an operand of this line as a flag value or a target.")
+forbid (principal, action in Tool::supabase::Action::"*", resource)
+when { context.input.effects.contains(Tool::supabase::Effect::"ambiguous_argv") };
+'''
+
+# The README's example rules load together, and `gen types --remote` is refused by one of them
+[[case]]
+argv = ["supabase", "gen", "types", "--remote"]
+exit = 126
+stderr = "[policy: types_local_only]"
+policy = '''
+// Let the agent use every modeled command.
+@id("supabase_actions")
+permit (principal, action in Tool::supabase::Action::"*", resource);
+
+// Never change a hosted database.
+@id("no_hosted_db_writes")
+@description("Changing a hosted Supabase database is not allowed.")
+forbid (principal, action in Tool::supabase::Action::"*", resource)
+when { context.input.effects.contains(Tool::supabase::Effect::"write_remote_db") };
+
+// Never delete hosted data, deploy functions, or change secrets.
+@id("no_hosted_changes")
+@description("Hosted deletes, deploys, and secret changes need a human.")
+forbid (principal, action in Tool::supabase::Action::"*", resource)
+when {
+  context.input.effects.containsAny([
+    Tool::supabase::Effect::"delete_remote_data",
+    Tool::supabase::Effect::"deploy_remote",
+    Tool::supabase::Effect::"write_secret"
+  ])
+};
+
+// Do not skip the CLI's own confirmation prompts.
+@id("no_yes")
+forbid (principal, action in Tool::supabase::Action::"*", resource)
+when { context.input.effects.contains(Tool::supabase::Effect::"skip_confirmation") };
+
+// Refuse lines the grammar may misread.
+@id("no_ambiguous_argv")
+@description("The CLI may read an operand of this line as a flag value or a target.")
+forbid (principal, action in Tool::supabase::Action::"*", resource)
+when { context.input.effects.contains(Tool::supabase::Effect::"ambiguous_argv") };
+
+// Never let a remote database command clear the project's network bans.
+// SUPABASE_YES in the environment also allows it, so keep it out of the box's environment.
+@id("no_network_ban_changes")
+forbid (principal, action in Tool::supabase::Action::"*", resource)
+when {
+  context.input.effects.containsAll([
+    Tool::supabase::Effect::"clear_network_bans",
+    Tool::supabase::Effect::"skip_confirmation"
+  ])
+};
+
+// Generate types only from the local database.
+@id("types_local_only")
+forbid (principal, action == Tool::supabase::Action::"gen_types", resource)
+when { context.input has remote };
+'''
