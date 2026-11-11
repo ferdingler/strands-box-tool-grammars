@@ -72,9 +72,9 @@ argv = ["pip", "install", "--upgr", "attrs"]
 exit = 126
 stderr = "[default-deny]: No permit policy matched this request."
 
-# The README's example rules load, and an index override is refused
+# The README's example rules load, and a requirements file (which can name any index) is refused
 [[case]]
-argv = ["pip", "install", "-i", "https://mirror.example/simple", "attrs"]
+argv = ["pip", "install", "-r", "requirements.txt"]
 exit = 126
 stderr = "[policy: pip_default_index]: Use the default package index."
 policy = '''
@@ -88,11 +88,13 @@ permit (principal, action in Tool::pip::Action::"*", resource);
 forbid (principal, action in Tool::pip::Action::"*", resource)
 when { context.input.effects.contains(Tool::pip::Effect::"break_system_packages") };
 
-// Install only from the default index, over verified TLS.
+// Install only from the default index, over verified TLS. A requirements file can set its own
+// index and trusted hosts, so this rule refuses it too.
 @id("pip_default_index")
 @description("Use the default package index.")
 forbid (principal, action in Tool::pip::Action::"*", resource)
 when { context.input.effects.contains(Tool::pip::Effect::"override_index") ||
+       context.input.effects.contains(Tool::pip::Effect::"opaque_input") ||
        context.input.effects.contains(Tool::pip::Effect::"disable_tls_verification") ||
        context.input.effects.contains(Tool::pip::Effect::"override_tls_trust") };
 

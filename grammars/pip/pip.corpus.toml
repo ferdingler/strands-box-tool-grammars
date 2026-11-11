@@ -28,7 +28,7 @@ effects = ["install_packages", "network", "run_build_backend"]
 argv = ["pip", "install", "-r", "requirements.txt", "--requirement=dev.txt", "-rtest.txt"]
 action = "install"
 fields = { requirement = ["dev.txt", "requirements.txt", "test.txt"] }
-effects = ["install_packages", "network", "run_build_backend"]
+effects = ["install_packages", "network", "opaque_input", "run_build_backend"]
 
 # `-e <local project path>` (install --help, Usage) builds the project
 [[case]]
@@ -42,13 +42,13 @@ effects = ["install_packages", "network", "run_build_backend"]
 argv = ["pip", "install", "-e", "git+https://github.com/pypa/sampleproject#egg=sampleproject"]
 action = "install"
 fields = { editable = ["git+https://github.com/pypa/sampleproject#egg=sampleproject"] }
-effects = ["install_packages", "network", "run_build_backend", "run_vcs"]
+effects = ["install_packages", "network", "override_index", "run_build_backend", "run_vcs"]
 
 [[case]]
 argv = ["pip", "install", "hg+https://hg.example.org/proj"]
 action = "install"
 fields = { spec = ["hg+https://hg.example.org/proj"] }
-effects = ["install_packages", "network", "run_build_backend", "run_vcs"]
+effects = ["install_packages", "network", "override_index", "run_build_backend", "run_vcs"]
 
 # Short clusters: `-Uq` is `-U` (install) and `-q` (a general option, accepted after the command)
 [[case]]
@@ -62,7 +62,7 @@ effects = ["install_packages", "network", "run_build_backend"]
 argv = ["pip", "install", "-Ur", "requirements.txt"]
 action = "install"
 fields = { upgrade = true, requirement = ["requirements.txt"] }
-effects = ["install_packages", "network", "run_build_backend"]
+effects = ["install_packages", "network", "opaque_input", "run_build_backend"]
 
 # `-v` is `action="count"`: it repeats, also as `-vvv`
 [[case]]
@@ -202,7 +202,7 @@ effects = ["install_packages", "network", "run_build_backend"]
 argv = ["pip", "install", "-r", "--user", "attrs"]
 action = "install"
 fields = { requirement = ["--user"], spec = ["attrs"] }
-effects = ["install_packages", "network", "run_build_backend"]
+effects = ["install_packages", "network", "opaque_input", "run_build_backend"]
 
 # `--` ends the options: `-weird` is a requirement, not a cluster
 [[case]]
@@ -216,14 +216,14 @@ effects = ["install_packages", "network", "run_build_backend"]
 argv = ["pip", "install", "--require-hashes", "--no-deps", "-r", "lock.txt"]
 action = "install"
 fields = { require_hashes = true, no_deps = true, requirement = ["lock.txt"] }
-effects = ["install_packages", "network", "run_build_backend"]
+effects = ["install_packages", "network", "opaque_input", "run_build_backend"]
 
 # `--group` (pip 25.1+) and `--uploaded-prior-to`
 [[case]]
 argv = ["pip", "install", "--group", "dev", "--group=pyproject.toml:test", "--uploaded-prior-to", "P3D"]
 action = "install"
 fields = { group = ["dev", "pyproject.toml:test"], uploaded_prior_to = "P3D" }
-effects = ["install_packages", "network", "run_build_backend"]
+effects = ["install_packages", "network", "opaque_input", "run_build_backend"]
 
 # pip accepts a unique prefix of a long option (optparse); the grammar does not
 [[case]]
@@ -254,6 +254,63 @@ action = "unmodeled"
 [[case]]
 argv = ["pip", "--user", "install", "attrs"]
 action = "unmodeled"
+
+# Package sources named on the line (author cases for verifier findings F1-F4, pip 26.3
+# req/constructors.py: a URL, a `name @ url` reference, or an archive path is fetched or read
+# directly, not from the index). A direct URL or archive adds `override_index`.
+[[case]]
+argv = ["pip", "install", "pkg @ https://files.example/pkg-1.0-py3-none-any.whl"]
+action = "install"
+fields = { spec = ["pkg @ https://files.example/pkg-1.0-py3-none-any.whl"] }
+effects = ["install_packages", "network", "override_index", "run_build_backend"]
+
+[[case]]
+argv = ["pip", "install", "./dist/pkg-1.0.tar.gz"]
+action = "install"
+fields = { spec = ["./dist/pkg-1.0.tar.gz"] }
+effects = ["install_packages", "network", "override_index", "run_build_backend"]
+
+# A local version label (`+cpu`) is not a VCS URL and not a package source
+[[case]]
+argv = ["pip", "install", "torch==2.4.0+cpu"]
+action = "install"
+fields = { spec = ["torch==2.4.0+cpu"] }
+effects = ["install_packages", "network", "run_build_backend"]
+
+# `bzr+lp:` has no `//` and is still a VCS URL (vcs/bazaar.py schemes)
+[[case]]
+argv = ["pip", "download", "bzr+lp:proj"]
+action = "download"
+fields = { spec = ["bzr+lp:proj"] }
+effects = ["network", "override_index", "run_build_backend", "run_vcs"]
+
+# `-c`, `--build-constraint`, `--requirements-from-script` read files that can carry options
+# (req/req_file.py SUPPORTED_OPTIONS) or direct references
+[[case]]
+argv = ["pip", "install", "-c", "constraints.txt", "attrs"]
+action = "install"
+fields = { constraint = ["constraints.txt"], spec = ["attrs"] }
+effects = ["install_packages", "network", "opaque_input", "run_build_backend"]
+
+[[case]]
+argv = ["pip", "install", "--requirements-from-script", "tool.py"]
+action = "install"
+fields = { requirements_from_script = ["tool.py"] }
+effects = ["install_packages", "network", "opaque_input", "run_build_backend"]
+
+# `--report <file>` writes the file even with `--dry-run` (install.py writes it before the
+# dry-run return); `--report -` is stdout and writes no file
+[[case]]
+argv = ["pip", "install", "--dry-run", "--report", "report.json", "attrs"]
+action = "install"
+fields = { dry_run = true, report = "report.json", spec = ["attrs"] }
+effects = ["network", "run_build_backend", "write_file"]
+
+[[case]]
+argv = ["pip", "install", "--report=-", "attrs"]
+action = "install"
+fields = { report = "-", spec = ["attrs"] }
+effects = ["install_packages", "network", "run_build_backend"]
 
 # ---------------------------------------------------------------- general options
 
@@ -344,14 +401,14 @@ action = "unmodeled"
 argv = ["pip", "download", "-d", "dist", "--no-deps", "attrs==24.2.0"]
 action = "download"
 fields = { dest = "dist", no_deps = true, spec = ["attrs==24.2.0"] }
-effects = ["network", "run_build_backend"]
+effects = ["network", "run_build_backend", "write_file"]
 
 # `--destination-dir` is a hidden spelling of `-d`; cross-platform download
 [[case]]
 argv = ["pip", "download", "--destination-dir=dist", "--platform", "manylinux2014_x86_64", "--platform", "any", "--python-version", "312", "--only-binary=:all:", "numpy"]
 action = "download"
 fields = { dest = "dist", platform = ["any", "manylinux2014_x86_64"], python_version = "312", only_binary = [":all:"], spec = ["numpy"] }
-effects = ["network", "run_build_backend"]
+effects = ["network", "run_build_backend", "write_file"]
 
 # `pip download` has no `-e` (commands/download.py)
 [[case]]
@@ -369,13 +426,13 @@ effects = ["network", "override_index", "run_build_backend", "run_vcs"]
 argv = ["pip", "wheel", "-w", "wheelhouse", "--no-verify", "-r", "requirements.txt"]
 action = "wheel"
 fields = { wheel_dir = "wheelhouse", no_verify = true, requirement = ["requirements.txt"] }
-effects = ["network", "run_build_backend"]
+effects = ["network", "opaque_input", "run_build_backend", "write_file"]
 
 [[case]]
 argv = ["pip", "wheel", "-e", "bzr+lp:proj"]
 action = "wheel"
 fields = { editable = ["bzr+lp:proj"] }
-effects = ["network", "run_build_backend", "run_vcs"]
+effects = ["network", "override_index", "run_build_backend", "run_vcs"]
 
 # `--dry-run` is install-only
 [[case]]
@@ -397,7 +454,7 @@ action = "unmodeled"
 argv = ["pip", "lock", "--output=pylock.dev.toml", "-r", "requirements.in"]
 action = "lock"
 fields = { output = "pylock.dev.toml", requirement = ["requirements.in"] }
-effects = ["network", "run_build_backend"]
+effects = ["network", "opaque_input", "run_build_backend", "write_file"]
 
 # pip 26.3 has no `pip lock check`: the word is a requirement named "check"
 [[case]]
@@ -425,7 +482,7 @@ effects = ["remove_packages", "skip_prompt"]
 argv = ["pip", "uninstall", "--yes", "--break-system-packages", "-r", "old.txt"]
 action = "uninstall"
 fields = { yes = true, break_system_packages = true, requirement = ["old.txt"] }
-effects = ["break_system_packages", "remove_packages", "skip_prompt"]
+effects = ["break_system_packages", "opaque_input", "remove_packages", "skip_prompt"]
 
 # Cluster: `-yq`
 [[case]]
@@ -700,35 +757,35 @@ action = "unmodeled"
 argv = ["pip", "install", "pkg @ git+https://example.com/r.git"]
 action = "install"
 fields = { spec = ["pkg @ git+https://example.com/r.git"] }
-effects = ["install_packages", "network", "run_build_backend", "run_vcs"]
+effects = ["install_packages", "network", "override_index", "run_build_backend", "run_vcs"]
 
 # Same, with no spaces around `@`; pip parses it to the same git+https link.
 [[case]]
 argv = ["pip", "install", "pkg@git+https://example.com/r.git"]
 action = "install"
 fields = { spec = ["pkg@git+https://example.com/r.git"] }
-effects = ["install_packages", "network", "run_build_backend", "run_vcs"]
+effects = ["install_packages", "network", "override_index", "run_build_backend", "run_vcs"]
 
 # URL schemes are case-insensitive (urlsplit lowercases them, then Link.is_vcs is true).
 [[case]]
 argv = ["pip", "install", "GIT+https://example.com/r.git#egg=pkg"]
 action = "install"
 fields = { spec = ["GIT+https://example.com/r.git#egg=pkg"] }
-effects = ["install_packages", "network", "run_build_backend", "run_vcs"]
+effects = ["install_packages", "network", "override_index", "run_build_backend", "run_vcs"]
 
 # `-e` with an upper-case VCS scheme, value attached to the short flag.
 [[case]]
 argv = ["pip", "install", "-eGit+ssh://git@example.com/r.git#egg=pkg"]
 action = "install"
 fields = { editable = ["Git+ssh://git@example.com/r.git#egg=pkg"] }
-effects = ["install_packages", "network", "run_build_backend", "run_vcs"]
+effects = ["install_packages", "network", "override_index", "run_build_backend", "run_vcs"]
 
 # wheel with a PEP 508 hg reference.
 [[case]]
 argv = ["pip", "wheel", "-w", "out", "pkg[x] @ hg+https://example.com/r"]
 action = "wheel"
 fields = { wheel_dir = "out", spec = ["pkg[x] @ hg+https://example.com/r"] }
-effects = ["network", "run_build_backend", "run_vcs"]
+effects = ["network", "override_index", "run_build_backend", "run_vcs", "write_file"]
 
 # A direct archive URL names a package source on the command line, which the README rule
 # "Install only from the default index" relies on. Expected override_index.

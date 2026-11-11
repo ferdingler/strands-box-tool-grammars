@@ -80,8 +80,10 @@ command, because pip refuses it after the command name.
 | `install_packages` | Installs, upgrades, or reinstalls packages | `install`; removed by `--dry-run` |
 | `remove_packages` | Uninstalls packages | `uninstall` |
 | `run_build_backend` | May build a project or source distribution, which runs that project's code | `install`, `download`, `wheel`, `lock` |
-| `run_vcs` | Runs git, hg, svn, or bzr | a `git+`, `hg+`, `svn+`, or `bzr+` requirement or `-e` value |
-| `override_index` | Uses a package source that the command line names | `-i`/`--index-url`, `--extra-index-url`, `-f`/`--find-links`, `search -i` |
+| `run_vcs` | Runs git, hg, svn, or bzr | a requirement or `-e` value that holds `+` and later `:`, such as `git+https://...`, `pkg @ git+https://...`, `GIT+ssh://...`, or `bzr+lp:...` (case of the scheme does not matter) |
+| `override_index` | Uses a package source that the command line names | `-i`/`--index-url`, `--extra-index-url`, `-f`/`--find-links`, `search -i`, and a requirement or `-e` value that is a URL (`://`), a VCS URL, or an archive (`.whl`, `.tar.gz`, `.tgz`, `.tar.bz2`, `.tar.xz`, `.zip`) |
+| `opaque_input` | Reads requirements or pip options from a file the grammar cannot see | `-r`, `-c`, `--build-constraint`, `--requirements-from-script`, `--group` |
+| `write_file` | Writes a file or directory at a path the line names | `install --report <file>` (not `-`, and not removed by `--dry-run`), `download -d`, `wheel -w`, `lock -o <file>` (not `-`) |
 | `disable_tls_verification` | Trusts a host without valid HTTPS | `--trusted-host` |
 | `override_tls_trust` | Replaces the CA bundle | `--cert` |
 | `override_proxy` | Sends traffic through a named proxy | `--proxy` |
@@ -109,11 +111,13 @@ permit (principal, action in Tool::pip::Action::"*", resource);
 forbid (principal, action in Tool::pip::Action::"*", resource)
 when { context.input.effects.contains(Tool::pip::Effect::"break_system_packages") };
 
-// Install only from the default index, over verified TLS.
+// Install only from the default index, over verified TLS. A requirements file can set its own
+// index and trusted hosts, so this rule refuses it too.
 @id("pip_default_index")
 @description("Use the default package index.")
 forbid (principal, action in Tool::pip::Action::"*", resource)
 when { context.input.effects.contains(Tool::pip::Effect::"override_index") ||
+       context.input.effects.contains(Tool::pip::Effect::"opaque_input") ||
        context.input.effects.contains(Tool::pip::Effect::"disable_tls_verification") ||
        context.input.effects.contains(Tool::pip::Effect::"override_tls_trust") };
 
@@ -157,7 +161,15 @@ A line that uses any of these is `unmodeled`, and only a rule that names
   `PIP_BREAK_SYSTEM_PACKAGES`, `PIP_TARGET`, and `PIP_USER`. The grammar does not see them.
   Control the agent's environment and configuration files, or pass `--isolated`.
 - **Requirements files are opaque.** A `-r` or `-c` file can hold index options, `--trusted-host`,
-  `-e`, VCS URLs, binary options, and nested `-r` files. The grammar sees only the file name.
+  `-e`, VCS URLs, binary options, and nested `-r` files. The grammar sees only the file name, and
+  marks the line with `opaque_input`. A rule that restricts sources, TLS, or VCS must also refuse
+  `opaque_input`, as the example rule does.
+- **Package sources are matched by pattern.** `override_index` and `run_vcs` on a requirement are
+  found by its spelling. A local project directory (`.`, `./proj`) adds neither; it adds
+  `run_build_backend` only. Patterns over-match on purpose: any value with `+` and later `:` is
+  read as a VCS URL.
+- **Other written paths.** `--src` (editable checkouts), `--cache-dir`, and the default outputs of
+  `download`, `wheel`, and `lock` in the current directory carry no `write_file` effect.
 - **`run_build_backend` is always on for install, download, wheel, and lock.** pip may build any
   source distribution it selects, and `--only-binary :all:` does not stop a local path, an `-e`
   project, a VCS URL, or a requirements file entry from building. A rule can still read the
