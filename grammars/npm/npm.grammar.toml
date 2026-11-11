@@ -472,7 +472,7 @@ options.workspace              = { flag = ["--workspace"], value = "required", r
 options.workspaces             = { flag = ["--workspaces"], adds = ["network", "modify_node_modules"] }
 options.no_workspaces_update   = { flag = ["--no-workspaces-update"], removes = ["modify_node_modules"] }
 options.include_workspace_root = { flag = ["--include-workspace-root"] }
-operands.newversion = { adds = ["modify_package_json", "modify_lockfile", "git_commit", "run_lifecycle_scripts"] }
+operands.newversion = { adds = ["modify_package_json", "modify_lockfile", "git_commit", "run_lifecycle_scripts"], when = [{ like = "true", adds = ["ambiguous_argv"] }, { like = "false", adds = ["ambiguous_argv"] }] }
 
 # `npm init` writes package.json. `npm init <initializer> [args...]` runs `create-<initializer>`
 # through `npm exec`, passing the extra words to it (lib/commands/init.js). `--workspace` creates a
@@ -494,8 +494,8 @@ options.init_private           = { flag = ["--init-private"] }
 options.workspace              = { flag = ["--workspace"], value = "required", repeated = true, adds = ["network", "modify_node_modules", "modify_lockfile", "run_lifecycle_scripts"], when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
 options.no_workspaces_update   = { flag = ["--no-workspaces-update"], removes = ["modify_node_modules", "modify_lockfile", "run_lifecycle_scripts"] }
 options.include_workspace_root = { flag = ["--include-workspace-root"] }
-operands.package_spec     = { adds = ["network", "run_program"] }
-operands.initializer_args = { adds = ["network", "run_program"] }
+operands.package_spec     = { adds = ["network", "run_program"], when = [{ like = "true", adds = ["ambiguous_argv"] }, { like = "false", adds = ["ambiguous_argv"] }] }
+operands.initializer_args = { adds = ["network", "run_program"], when = [{ like = "true", adds = ["ambiguous_argv"] }, { like = "false", adds = ["ambiguous_argv"] }] }
 
 # ---------------------------------------------------------------------------------------------
 # Configuration and cache

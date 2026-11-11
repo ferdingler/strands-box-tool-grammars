@@ -1500,3 +1500,25 @@ effects = ["modify_package_json", "modify_lockfile", "git_commit", "run_lifecycl
 [[case]]
 argv = ["npm", "version", "patch", "--workspace", "a", "--no-workspaces-update", "false"]
 action = "unmodeled"
+
+# --- author cases after verification round 2 (R2-1) ---
+
+# nopt reads `--no-workspaces-update false` as workspaces-update=true, so the reify runs; the
+# operand `false` adds ambiguous_argv. The same rule covers init's initializer args and version.
+[[case]]
+argv = ["npm", "init", "--no-workspaces-update", "true"]
+action = "init"
+fields = { no_workspaces_update = true, package_spec = "true" }
+effects = ["ambiguous_argv", "modify_package_json", "network", "run_program"]
+
+[[case]]
+argv = ["npm", "init", "vite", "--no-workspaces-update", "false"]
+action = "init"
+fields = { no_workspaces_update = true, package_spec = "vite", initializer_args = ["false"] }
+effects = ["ambiguous_argv", "modify_package_json", "network", "run_program"]
+
+[[case]]
+argv = ["npm", "version", "--ignore-scripts", "false"]
+action = "version"
+fields = { ignore_scripts = true, newversion = "false" }
+effects = ["ambiguous_argv", "git_commit", "modify_lockfile", "modify_package_json"]
