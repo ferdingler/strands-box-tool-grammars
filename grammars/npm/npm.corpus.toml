@@ -1463,3 +1463,40 @@ argv = ["npm", "version", "patch", "--workspaces", "--no-workspaces-update"]
 action = "version"
 fields = { newversion = "patch", workspaces = true, no_workspaces_update = true }
 effects = ["git_commit", "modify_lockfile", "modify_package_json", "network", "run_lifecycle_scripts"]
+
+# --- independent verifier cases, round 2 (575cacc) ---
+# update-workspaces.js L12 returns before reify when workspaces-update is false: no install, no scripts.
+[[case]]
+argv = ["npm", "init", "--workspace", "pkgs/a", "--no-workspaces-update"]
+action = "init"
+fields = { workspace = ["pkgs/a"], no_workspaces_update = true }
+effects = ["modify_package_json", "network"]
+
+# The positive spelling is not declared, so a later `--workspaces-update` cannot undo the removal.
+[[case]]
+argv = ["npm", "init", "--workspace", "pkgs/a", "--no-workspaces-update", "--workspaces-update"]
+action = "unmodeled"
+
+# nopt: `--no-workspaces-update false` sets workspaces-update=true, so npm reifies and may run scripts.
+# The word lands in package_spec; it must carry ambiguous_argv.
+[[case]]
+argv = ["npm", "init", "--workspace", "pkgs/a", "--no-workspaces-update", "false"]
+action = "init"
+fields = { workspace = ["pkgs/a"], no_workspaces_update = true, package_spec = "false" }
+effects = ["modify_package_json", "network", "run_program", "ambiguous_argv"]
+
+[[case]]
+argv = ["npm", "version", "patch", "--workspaces"]
+action = "version"
+fields = { newversion = "patch", workspaces = true }
+effects = ["modify_package_json", "modify_lockfile", "git_commit", "run_lifecycle_scripts", "network", "modify_node_modules"]
+
+[[case]]
+argv = ["npm", "version", "patch", "--workspace", "a", "--no-workspaces-update"]
+action = "version"
+fields = { newversion = "patch", workspace = ["a"], no_workspaces_update = true }
+effects = ["modify_package_json", "modify_lockfile", "git_commit", "run_lifecycle_scripts", "network"]
+
+[[case]]
+argv = ["npm", "version", "patch", "--workspace", "a", "--no-workspaces-update", "false"]
+action = "unmodeled"
