@@ -1099,3 +1099,222 @@ action = "unmodeled"
 [[case]]
 argv = ["aws", "configure"]
 action = "unmodeled"
+
+# --- independent verifier cases ---
+# Written by the verifier from aws-cli 2.40.0 source (tag 2.40.0, commit ebbb625e): awscli/argparser.py,
+# awscli/clidriver.py, awscli/paramfile.py, awscli/customizations/s3/, customizations/configure/get.py.
+# Each CLI claim was checked by running the 2.40.0 source parser with the API call stubbed out.
+
+# argparse accepts the unique prefix --regio for --region. The grammar does not model prefixes.
+[[case]]
+argv = ["aws", "s3", "ls", "--regio", "eu-west-1"]
+action = "unmodeled"
+
+# A global option between the service and the operation: the main parser reads it anywhere.
+[[case]]
+argv = ["aws", "s3", "--profile", "prod", "ls"]
+action = "s3_ls"
+fields = { profile = "prod" }
+effects = ["change_account", "read_data"]
+
+# Two --profile values: argparse keeps the last. The grammar must not pick one.
+[[case]]
+argv = ["aws", "--profile", "a", "sts", "get-caller-identity", "--profile", "b"]
+action = "unmodeled"
+
+# argparse keeps the last of --dry-run / --no-dry-run, so this terminates for real.
+[[case]]
+argv = ["aws", "ec2", "terminate-instances", "--instance-ids", "i-1", "--dry-run", "--no-dry-run"]
+action = "unmodeled"
+
+# The service parser passes --dry-run through to the operation (DryRun=true in the CLI).
+# Not a global option, so the grammar refuses it between the words.
+[[case]]
+argv = ["aws", "ec2", "--dry-run", "terminate-instances", "--instance-ids", "i-1"]
+action = "unmodeled"
+
+# A prefix of --dry-run: the CLI reads DryRun=true, the grammar must not.
+[[case]]
+argv = ["aws", "ec2", "terminate-instances", "--instance-ids", "i-1", "--dry"]
+action = "unmodeled"
+
+[[case]]
+argv = ["aws", "ec2", "terminate-instances", "--instance-ids", "i-1", "i-2", "--dry-run"]
+action = "ec2_terminate_instances"
+fields = { instance_ids = ["i-1", "i-2"], dry_run = true }
+
+# --x=v on a list option gives one value.
+[[case]]
+argv = ["aws", "ec2", "terminate-instances", "--instance-ids=i-1"]
+action = "ec2_terminate_instances"
+fields = { instance_ids = ["i-1"] }
+effects = ["delete_data"]
+
+[[case]]
+argv = ["aws", "ec2", "stop-instances", "--instance-ids", "i-1", "--force", "--dry-run"]
+action = "ec2_stop_instances"
+fields = { instance_ids = ["i-1"], force = true, dry_run = true }
+
+# sync from S3 to a local dir with --delete deletes local files.
+[[case]]
+argv = ["aws", "s3", "sync", "s3://a", "./d", "--delete", "--exclude", "*.tmp"]
+action = "s3_sync"
+fields = { source = "s3://a", destination = "./d", delete = true, exclude = ["*.tmp"] }
+effects = ["delete_data", "read_data", "write_local_file"]
+
+# --dryrun cancels the upload, the write, and the delete. The read of the source listing stays.
+[[case]]
+argv = ["aws", "s3", "sync", "./d", "s3://a", "--delete", "--dryrun"]
+action = "s3_sync"
+fields = { source = "./d", destination = "s3://a", delete = true, dryrun = true }
+
+[[case]]
+argv = ["aws", "s3", "mv", "s3://a/k", "./k"]
+action = "s3_mv"
+fields = { source = "s3://a/k", destination = "./k" }
+effects = ["delete_data", "read_data", "write_local_file"]
+
+# `-` as the source is stdin: an upload of local data.
+[[case]]
+argv = ["aws", "s3", "cp", "-", "s3://b/k"]
+action = "s3_cp"
+fields = { source = "-", destination = "s3://b/k" }
+effects = ["upload_local_file", "write_data"]
+
+# The s3 path type is a case-sensitive `startswith('s3://')` (subcommands.py), so S3:// is local.
+[[case]]
+argv = ["aws", "s3", "cp", "S3://b/k", "s3://c/k"]
+action = "s3_cp"
+fields = { source = "S3://b/k", destination = "s3://c/k" }
+effects = ["upload_local_file", "write_data"]
+
+[[case]]
+argv = ["aws", "s3", "rm", "s3://b", "--recursive", "--exclude", "a", "--exclude", "b"]
+action = "s3_rm"
+fields = { path = "s3://b", recursive = true, exclude = ["a", "b"] }
+effects = ["delete_data"]
+
+# The single path of s3 rm is loaded from the file (checked: paths = file content).
+[[case]]
+argv = ["aws", "s3", "rm", "file://p.txt"]
+action = "s3_rm"
+fields = { path = "file://p.txt" }
+effects = ["delete_data", "value_from_file"]
+
+# `--` before the path: the CLI reads the path.
+[[case]]
+argv = ["aws", "s3", "rm", "--", "s3://b/k"]
+action = "s3_rm"
+fields = { path = "s3://b/k" }
+effects = ["delete_data"]
+
+# A required value takes the next word. The CLI refuses `--query --dryrun` (expected one
+# argument), so reading the delete is the safe side.
+[[case]]
+argv = ["aws", "s3", "rm", "s3://b/k", "--query", "--dryrun"]
+action = "s3_rm"
+fields = { path = "s3://b/k", query = "--dryrun" }
+effects = ["delete_data"]
+
+[[case]]
+argv = ["aws", "s3", "rb", "s3://b", "--force"]
+action = "s3_rb"
+fields = { path = "s3://b", force = true }
+effects = ["delete_data"]
+
+[[case]]
+argv = ["aws", "lambda", "invoke", "--function-name", "f", "--invocation-type", "DryRun", "out.json"]
+action = "lambda_invoke"
+fields = { function_name = "f", invocation_type = "DryRun", outfile = "out.json" }
+effects = ["write_local_file"]
+
+# A lowercase value does not match DryRun, so the run stays.
+[[case]]
+argv = ["aws", "lambda", "invoke", "--function-name", "f", "--invocation-type", "dryrun", "out.json"]
+action = "lambda_invoke"
+fields = { function_name = "f", invocation_type = "dryrun", outfile = "out.json" }
+effects = ["run_program", "write_local_file"]
+
+[[case]]
+argv = ["aws", "cloudformation", "deploy", "--template-file", "t.yaml", "--stack-name", "s", "--capabilities", "CAPABILITY_IAM", "--no-execute-changeset"]
+action = "cloudformation_deploy"
+fields = { template_file = "t.yaml", stack_name = "s", capabilities = ["CAPABILITY_IAM"], no_execute_changeset = true }
+effects = ["upload_local_file", "write_data"]
+
+[[case]]
+argv = ["aws", "cloudformation", "deploy", "--template-file", "t.yaml", "--stack-name", "s", "--capabilities", "CAPABILITY_NAMED_IAM", "CAPABILITY_AUTO_EXPAND"]
+action = "cloudformation_deploy"
+fields = { template_file = "t.yaml", stack_name = "s", capabilities = ["CAPABILITY_NAMED_IAM", "CAPABILITY_AUTO_EXPAND"] }
+effects = ["delete_data", "iam_write", "upload_local_file", "write_data"]
+
+# --no-with-decryption then --with-decryption: argparse keeps the last, so the secret is read.
+[[case]]
+argv = ["aws", "ssm", "get-parameter", "--name", "/x", "--no-with-decryption", "--with-decryption"]
+action = "ssm_get_parameter"
+fields = { name = "/x", no_with_decryption = true, with_decryption = true }
+effects = ["read_data", "read_secret"]
+
+# A prefix of --with-decryption: the CLI decrypts, the grammar must not read it as a plain get.
+[[case]]
+argv = ["aws", "ssm", "get-parameter", "--name=/x", "--with-decrypt"]
+action = "unmodeled"
+
+# aws_security_token is botocore's legacy name for the session token in the credentials file.
+# `configure get` prints it (checked with a test credentials file). Expect read_secret.
+[[case]]
+argv = ["aws", "configure", "get", "aws_security_token"]
+action = "configure_get"
+fields = { varname = "aws_security_token" }
+effects = ["read_config", "read_secret"]
+
+[[case]]
+argv = ["aws", "configure", "get", "default.aws_secret_access_key"]
+action = "configure_get"
+fields = { varname = "default.aws_secret_access_key" }
+effects = ["read_config", "read_secret"]
+
+[[case]]
+argv = ["aws", "configure", "get", "--profile", "prod", "aws_secret_access_key"]
+action = "configure_get"
+fields = { profile = "prod", varname = "aws_secret_access_key" }
+effects = ["change_account", "read_config", "read_secret"]
+
+# configure get has --sso-session and --services options at 2.40.0; not declared.
+[[case]]
+argv = ["aws", "configure", "get", "aws_secret_access_key", "--sso-session", "x"]
+action = "unmodeled"
+
+[[case]]
+argv = ["aws", "--endpoint-url", "http://localhost:4566", "s3", "ls"]
+action = "s3_ls"
+fields = { endpoint_url = "http://localhost:4566" }
+effects = ["insecure_tls", "override_endpoint", "read_data"]
+
+[[case]]
+argv = ["aws", "s3api", "put-object", "--bucket", "b", "--key", "k", "--body", "f", "--grant-read", "uri=http://acs.amazonaws.com/groups/global/AllUsers"]
+action = "s3api_put_object"
+fields = { bucket = "b", key = "k", body = "f", grant_read = "uri=http://acs.amazonaws.com/groups/global/AllUsers" }
+effects = ["grant_access", "make_public", "upload_local_file", "write_data"]
+
+[[case]]
+argv = ["aws", "s3", "cp", "./a", "s3://b/k", "--grants", "read=uri=http://acs.amazonaws.com/groups/global/AllUsers"]
+action = "s3_cp"
+fields = { source = "./a", destination = "s3://b/k", grants = ["read=uri=http://acs.amazonaws.com/groups/global/AllUsers"] }
+effects = ["grant_access", "make_public", "upload_local_file", "write_data"]
+
+[[case]]
+argv = ["aws", "dynamodb", "delete-item", "--table-name", "t", "--key", "file://k.json"]
+action = "dynamodb_delete_item"
+fields = { table_name = "t", key = "file://k.json" }
+effects = ["delete_data", "value_from_file"]
+
+[[case]]
+argv = ["aws", "logs", "filter-log-events", "--log-group-name", "g", "--unmask"]
+action = "logs_filter_log_events"
+fields = { log_group_name = "g", unmask = true }
+effects = ["read_data", "read_secret"]
+
+# --cli-input-json can set any parameter; not declared.
+[[case]]
+argv = ["aws", "ssm", "get-parameter", "--cli-input-json", "file://in.json"]
+action = "unmodeled"
