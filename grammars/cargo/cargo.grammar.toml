@@ -1,0 +1,569 @@
+# Tool grammar for Cargo, the Rust package manager.
+#
+# Project:    Cargo, https://github.com/rust-lang/cargo (shipped with the Rust toolchain)
+# Executable: cargo, usually the rustup proxy, which picks a toolchain and runs its cargo.
+#             `cargo +<toolchain> ...` is not modeled (`unmodeled`): rustup installs a missing
+#             toolchain from the network before cargo starts (auto-install is on by default since
+#             rustup 1.28.1), and a grammar cannot put an effect on the toolchain word.
+# Checked:    cargo 1.99.1 (5f94df478 2026-08-27), Rust 1.99.1, clippy and rustfmt of that
+#             toolchain. Sources: `cargo <cmd> --help` output, `cargo help <cmd>`, and the cargo
+#             source at commit 5f94df478 (src/bin/cargo/cli.rs, main.rs, commands/*.rs,
+#             src/util/command_prelude.rs).
+#
+# What this grammar cannot see:
+# - Configuration files. `.cargo/config.toml` in the working directory and every parent (for
+#   `install --path <dir>`, in that directory: effect `override_config`), and
+#   `$CARGO_HOME/config.toml`, can set `build.rustc-wrapper`, `target.<triple>.runner`,
+#   `net.offline`, registries, and `[alias]` entries. A config file can make any build run any
+#   program. Only `--config` on the command line is visible (effect `override_config`).
+# - Toolchain files. `rust-toolchain.toml` or `RUSTUP_TOOLCHAIN` choose the toolchain, and rustup
+#   can download a missing one even for `cargo version` (set RUSTUP_AUTO_INSTALL=0 to stop it).
+# - Environment variables, such as CARGO_NET_OFFLINE, CARGO_TARGET_DIR, RUSTFLAGS,
+#   RUSTC_WRAPPER, CARGO_REGISTRY_TOKEN, and BROWSER.
+# - User aliases. cargo reads `[alias]` from config before it looks for a built-in alias, so
+#   `b`, `c`, `d`, `r`, `t`, and `rm` can mean anything (main.rs `aliased_command`). This
+#   grammar does not model them: those lines are `unmodeled`. A config alias cannot replace a
+#   built-in command name such as `build` (cli.rs `expand_aliases`).
+# - External subcommands. `cargo <x>` runs a `cargo-<x>` program from `$CARGO_HOME/bin` or
+#   `PATH`. Only `clippy` and `fmt` are modeled. A config alias can also shadow them.
+# - Child processes: build scripts, procedural macros, rustc, rustdoc, rustfmt, clippy-driver,
+#   test and bench binaries, the program `cargo run` starts, the browser `doc --open` starts,
+#   and the VCS program `new`/`init` can start. Effects name when they can run; what they do
+#   is not decided by this grammar.
+# - The meaning of a value: a package spec, a feature name, a target triple.
+#
+# Value spelling: an option that cargo reads as `[<VALUE>]` (`-p`, `--bin`, `--example`,
+# `--test`, `--bench`, `--target`, `tree -i`) is `value = "required"` here, so the grammar takes
+# the next word as the value even when it starts with `-`. cargo instead reads such a word as its
+# own option. Each of these options adds `ambiguous_argv` for a value like `-*`, so a policy can
+# refuse the misread line. `install --bin` and `install --example` are not modeled at all: with a
+# crate named, cargo goes on to install, and the swallowed option (`--root`, `--git`, `--config`)
+# would be hidden. See README.md, Known limits.
+
+format  = 1
+version = 1
+name    = "cargo"
+program = "cargo"
+
+[effects]
+network            = "Cargo itself can contact a registry or a git source"
+update_lockfile    = "Can create or rewrite Cargo.lock"
+run_build_scripts  = "Compiles code, which runs build scripts and procedural macros on this machine"
+execute_built_code = "Runs a test, bench, or binary that the build produced"
+override_config    = "Changes configuration or the manifest from the command line, which can name programs cargo runs"
+edit_manifest      = "Writes dependency changes to Cargo.toml"
+write_source       = "Rewrites source files in place"
+pass_through_args  = "Passes extra arguments straight to rustfmt or the clippy compiler driver"
+create_package     = "Creates a new package, and can add it to the members of a parent workspace"
+write_files        = "Writes dependency sources into a vendor directory, and deletes stale crates there"
+delete_files       = "Deletes build output"
+publish_crate      = "Uploads a package to a registry"
+install_binary     = "Installs binaries into the cargo install root"
+uninstall_binary   = "Deletes installed binaries from the cargo install root"
+open_browser       = "Opens the generated documentation with a browser program"
+ambiguous_argv     = "An option with an optional value got a word that starts with -, which cargo reads as its own option, so the fields can be wrong"
+
+# cli.rs `cli()`: each of these is `global(true)`, so it may come before or after the command.
+# `-C`, `--list`, `--explain`, and `-V` are not global and need no command, so they stay
+# undeclared (`unmodeled`).
+[global]
+options.verbose           = { flag = ["-v", "--verbose"], anywhere = true }
+options.quiet             = { flag = ["-q", "--quiet"], anywhere = true }
+options.color             = { flag = ["--color"], value = "required", anywhere = true }
+options.locked            = { flag = ["--locked"], anywhere = true, removes = ["update_lockfile"] }
+options.offline           = { flag = ["--offline"], anywhere = true, removes = ["network"] }
+options.frozen            = { flag = ["--frozen"], anywhere = true, removes = ["network", "update_lockfile"] }
+options.config            = { flag = ["--config"], value = "required", repeated = true, anywhere = true, adds = ["override_config"] }
+options.unstable_features = { flag = ["-Z"], value = "required", repeated = true, anywhere = true, adds = ["override_config"] }
+
+
+# cargo build --help
+[shell.build]
+usage = "cargo [global options] build [options]"
+adds  = ["network", "update_lockfile", "run_build_scripts"]
+options.future_incompat_report = { flag = ["--future-incompat-report"] }
+options.message_format = { flag = ["--message-format"], value = "required", repeated = true }
+options.package = { flag = ["-p", "--package"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
+options.workspace = { flag = ["--workspace"] }
+options.exclude = { flag = ["--exclude"], value = "required", repeated = true }
+options.all = { flag = ["--all"] }
+options.lib = { flag = ["--lib"] }
+options.bins = { flag = ["--bins"] }
+options.bin = { flag = ["--bin"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
+options.examples = { flag = ["--examples"] }
+options.example = { flag = ["--example"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
+options.tests = { flag = ["--tests"] }
+options.test = { flag = ["--test"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
+options.benches = { flag = ["--benches"] }
+options.bench = { flag = ["--bench"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
+options.all_targets = { flag = ["--all-targets"] }
+options.features = { flag = ["-F", "--features"], value = "required", repeated = true }
+options.all_features = { flag = ["--all-features"] }
+options.no_default_features = { flag = ["--no-default-features"] }
+options.release = { flag = ["-r", "--release"] }
+options.profile = { flag = ["--profile"], value = "required" }
+options.jobs = { flag = ["-j", "--jobs"], value = "required" }
+options.keep_going = { flag = ["--keep-going"] }
+options.target = { flag = ["--target"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
+options.target_dir = { flag = ["--target-dir"], value = "required" }
+options.timings = { flag = ["--timings"] }
+options.manifest_path = { flag = ["-m", "--manifest-path"], value = "required", adds = ["override_config"] }
+options.ignore_rust_version = { flag = ["--ignore-rust-version"] }
+
+# cargo check --help
+[shell.check]
+usage = "cargo [global options] check [options]"
+adds  = ["network", "update_lockfile", "run_build_scripts"]
+options.future_incompat_report = { flag = ["--future-incompat-report"] }
+options.message_format = { flag = ["--message-format"], value = "required", repeated = true }
+options.package = { flag = ["-p", "--package"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
+options.workspace = { flag = ["--workspace"] }
+options.exclude = { flag = ["--exclude"], value = "required", repeated = true }
+options.all = { flag = ["--all"] }
+options.lib = { flag = ["--lib"] }
+options.bins = { flag = ["--bins"] }
+options.bin = { flag = ["--bin"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
+options.examples = { flag = ["--examples"] }
+options.example = { flag = ["--example"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
+options.tests = { flag = ["--tests"] }
+options.test = { flag = ["--test"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
+options.benches = { flag = ["--benches"] }
+options.bench = { flag = ["--bench"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
+options.all_targets = { flag = ["--all-targets"] }
+options.features = { flag = ["-F", "--features"], value = "required", repeated = true }
+options.all_features = { flag = ["--all-features"] }
+options.no_default_features = { flag = ["--no-default-features"] }
+options.release = { flag = ["-r", "--release"] }
+options.profile = { flag = ["--profile"], value = "required" }
+options.jobs = { flag = ["-j", "--jobs"], value = "required" }
+options.keep_going = { flag = ["--keep-going"] }
+options.target = { flag = ["--target"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
+options.target_dir = { flag = ["--target-dir"], value = "required" }
+options.timings = { flag = ["--timings"] }
+options.manifest_path = { flag = ["-m", "--manifest-path"], value = "required", adds = ["override_config"] }
+options.ignore_rust_version = { flag = ["--ignore-rust-version"] }
+
+# cargo test --help. TESTNAME is one word; ARGS need `--` (clap `last`).
+[shell.test]
+usage = "cargo [global options] test [options] [<testname>] [-- <args_list>...]"
+adds  = ["network", "update_lockfile", "run_build_scripts", "execute_built_code"]
+options.no_run = { flag = ["--no-run"], removes = ["execute_built_code"] }
+options.no_fail_fast = { flag = ["--no-fail-fast"] }
+options.future_incompat_report = { flag = ["--future-incompat-report"] }
+options.message_format = { flag = ["--message-format"], value = "required", repeated = true }
+options.package = { flag = ["-p", "--package"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
+options.workspace = { flag = ["--workspace"] }
+options.exclude = { flag = ["--exclude"], value = "required", repeated = true }
+options.all = { flag = ["--all"] }
+options.lib = { flag = ["--lib"] }
+options.bins = { flag = ["--bins"] }
+options.bin = { flag = ["--bin"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
+options.examples = { flag = ["--examples"] }
+options.example = { flag = ["--example"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
+options.tests = { flag = ["--tests"] }
+options.test = { flag = ["--test"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
+options.benches = { flag = ["--benches"] }
+options.bench = { flag = ["--bench"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
+options.all_targets = { flag = ["--all-targets"] }
+options.doc = { flag = ["--doc"] }
+options.features = { flag = ["-F", "--features"], value = "required", repeated = true }
+options.all_features = { flag = ["--all-features"] }
+options.no_default_features = { flag = ["--no-default-features"] }
+options.jobs = { flag = ["-j", "--jobs"], value = "required" }
+options.release = { flag = ["-r", "--release"] }
+options.profile = { flag = ["--profile"], value = "required" }
+options.target = { flag = ["--target"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
+options.target_dir = { flag = ["--target-dir"], value = "required" }
+options.timings = { flag = ["--timings"] }
+options.manifest_path = { flag = ["-m", "--manifest-path"], value = "required", adds = ["override_config"] }
+options.ignore_rust_version = { flag = ["--ignore-rust-version"] }
+operands.args_list = {}
+
+# cargo bench --help. No -r, --keep-going, or --future-incompat-report.
+[shell.bench]
+usage = "cargo [global options] bench [options] [<benchname>] [-- <args_list>...]"
+adds  = ["network", "update_lockfile", "run_build_scripts", "execute_built_code"]
+options.no_run = { flag = ["--no-run"], removes = ["execute_built_code"] }
+options.no_fail_fast = { flag = ["--no-fail-fast"] }
+options.message_format = { flag = ["--message-format"], value = "required", repeated = true }
+options.package = { flag = ["-p", "--package"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
+options.workspace = { flag = ["--workspace"] }
+options.exclude = { flag = ["--exclude"], value = "required", repeated = true }
+options.all = { flag = ["--all"] }
+options.lib = { flag = ["--lib"] }
+options.bins = { flag = ["--bins"] }
+options.bin = { flag = ["--bin"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
+options.examples = { flag = ["--examples"] }
+options.example = { flag = ["--example"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
+options.tests = { flag = ["--tests"] }
+options.test = { flag = ["--test"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
+options.benches = { flag = ["--benches"] }
+options.bench = { flag = ["--bench"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
+options.all_targets = { flag = ["--all-targets"] }
+options.features = { flag = ["-F", "--features"], value = "required", repeated = true }
+options.all_features = { flag = ["--all-features"] }
+options.no_default_features = { flag = ["--no-default-features"] }
+options.jobs = { flag = ["-j", "--jobs"], value = "required" }
+options.profile = { flag = ["--profile"], value = "required" }
+options.target = { flag = ["--target"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
+options.target_dir = { flag = ["--target-dir"], value = "required" }
+options.timings = { flag = ["--timings"] }
+options.manifest_path = { flag = ["-m", "--manifest-path"], value = "required", adds = ["override_config"] }
+options.ignore_rust_version = { flag = ["--ignore-rust-version"] }
+operands.args_list = {}
+
+# cargo run --help. ARGS is clap `trailing_var_arg`: the first operand and every word after it go to the program.
+[shell.run]
+usage = "cargo [global options] run [options] [<args_list>...]"
+adds  = ["network", "update_lockfile", "run_build_scripts", "execute_built_code"]
+options.message_format = { flag = ["--message-format"], value = "required", repeated = true }
+options.package = { flag = ["-p", "--package"], value = "required", when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
+options.bin = { flag = ["--bin"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
+options.example = { flag = ["--example"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
+options.features = { flag = ["-F", "--features"], value = "required", repeated = true }
+options.all_features = { flag = ["--all-features"] }
+options.no_default_features = { flag = ["--no-default-features"] }
+options.jobs = { flag = ["-j", "--jobs"], value = "required" }
+options.keep_going = { flag = ["--keep-going"] }
+options.release = { flag = ["-r", "--release"] }
+options.profile = { flag = ["--profile"], value = "required" }
+options.target = { flag = ["--target"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
+options.target_dir = { flag = ["--target-dir"], value = "required" }
+options.timings = { flag = ["--timings"] }
+options.manifest_path = { flag = ["-m", "--manifest-path"], value = "required", adds = ["override_config"] }
+options.ignore_rust_version = { flag = ["--ignore-rust-version"] }
+operands.args_list = { rest = true }
+
+# cargo doc --help
+[shell.doc]
+usage = "cargo [global options] doc [options]"
+adds  = ["network", "update_lockfile", "run_build_scripts"]
+options.open = { flag = ["--open"], adds = ["open_browser"] }
+options.no_deps = { flag = ["--no-deps"] }
+options.document_private_items = { flag = ["--document-private-items"] }
+options.message_format = { flag = ["--message-format"], value = "required", repeated = true }
+options.package = { flag = ["-p", "--package"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
+options.workspace = { flag = ["--workspace"] }
+options.exclude = { flag = ["--exclude"], value = "required", repeated = true }
+options.all = { flag = ["--all"] }
+options.features = { flag = ["-F", "--features"], value = "required", repeated = true }
+options.all_features = { flag = ["--all-features"] }
+options.no_default_features = { flag = ["--no-default-features"] }
+options.lib = { flag = ["--lib"] }
+options.bins = { flag = ["--bins"] }
+options.bin = { flag = ["--bin"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
+options.examples = { flag = ["--examples"] }
+options.example = { flag = ["--example"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
+options.jobs = { flag = ["-j", "--jobs"], value = "required" }
+options.keep_going = { flag = ["--keep-going"] }
+options.release = { flag = ["-r", "--release"] }
+options.profile = { flag = ["--profile"], value = "required" }
+options.target = { flag = ["--target"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
+options.target_dir = { flag = ["--target-dir"], value = "required" }
+options.timings = { flag = ["--timings"] }
+options.manifest_path = { flag = ["-m", "--manifest-path"], value = "required", adds = ["override_config"] }
+options.ignore_rust_version = { flag = ["--ignore-rust-version"] }
+
+# cargo clippy --help; rust-lang/rust 1.99.1 src/tools/clippy/src/main.rs (ClippyCmd::new).
+[shell.clippy]
+usage = "cargo clippy [options] [-- <lint_args>...]"
+adds  = ["network", "update_lockfile", "run_build_scripts"]
+options.fix = { flag = ["--fix"], adds = ["write_source"] }
+options.no_deps = { flag = ["--no-deps"] }
+options.allow_dirty = { flag = ["--allow-dirty"] }
+options.allow_staged = { flag = ["--allow-staged"] }
+options.allow_no_vcs = { flag = ["--allow-no-vcs"] }
+options.future_incompat_report = { flag = ["--future-incompat-report"] }
+options.message_format = { flag = ["--message-format"], value = "required", repeated = true, when = [{ like = "--fix", adds = ["write_source"] }] }
+options.package = { flag = ["-p", "--package"], value = "required", repeated = true, when = [{ like = "--fix", adds = ["write_source"] }, { like = "-*", adds = ["ambiguous_argv"] }] }
+options.workspace = { flag = ["--workspace"] }
+options.exclude = { flag = ["--exclude"], value = "required", repeated = true, when = [{ like = "--fix", adds = ["write_source"] }] }
+options.all = { flag = ["--all"] }
+options.lib = { flag = ["--lib"] }
+options.bins = { flag = ["--bins"] }
+options.bin = { flag = ["--bin"], value = "required", repeated = true, when = [{ like = "--fix", adds = ["write_source"] }, { like = "-*", adds = ["ambiguous_argv"] }] }
+options.examples = { flag = ["--examples"] }
+options.example = { flag = ["--example"], value = "required", repeated = true, when = [{ like = "--fix", adds = ["write_source"] }, { like = "-*", adds = ["ambiguous_argv"] }] }
+options.tests = { flag = ["--tests"] }
+options.test = { flag = ["--test"], value = "required", repeated = true, when = [{ like = "--fix", adds = ["write_source"] }, { like = "-*", adds = ["ambiguous_argv"] }] }
+options.benches = { flag = ["--benches"] }
+options.bench = { flag = ["--bench"], value = "required", repeated = true, when = [{ like = "--fix", adds = ["write_source"] }, { like = "-*", adds = ["ambiguous_argv"] }] }
+options.all_targets = { flag = ["--all-targets"] }
+options.features = { flag = ["-F", "--features"], value = "required", repeated = true, when = [{ like = "--fix", adds = ["write_source"] }] }
+options.all_features = { flag = ["--all-features"] }
+options.no_default_features = { flag = ["--no-default-features"] }
+options.release = { flag = ["-r", "--release"] }
+options.profile = { flag = ["--profile"], value = "required", when = [{ like = "--fix", adds = ["write_source"] }] }
+options.jobs = { flag = ["-j", "--jobs"], value = "required", when = [{ like = "--fix", adds = ["write_source"] }] }
+options.keep_going = { flag = ["--keep-going"] }
+options.target = { flag = ["--target"], value = "required", repeated = true, when = [{ like = "--fix", adds = ["write_source"] }, { like = "-*", adds = ["ambiguous_argv"] }] }
+options.target_dir = { flag = ["--target-dir"], value = "required", when = [{ like = "--fix", adds = ["write_source"] }] }
+options.timings = { flag = ["--timings"] }
+options.manifest_path = { flag = ["-m", "--manifest-path"], value = "required", adds = ["override_config"], when = [{ like = "--fix", adds = ["write_source"] }] }
+options.ignore_rust_version = { flag = ["--ignore-rust-version"] }
+options.verbose = { flag = ["-v", "--verbose"] }
+options.quiet = { flag = ["-q", "--quiet"] }
+options.color = { flag = ["--color"], value = "required", when = [{ like = "--fix", adds = ["write_source"] }] }
+options.locked = { flag = ["--locked"], removes = ["update_lockfile"] }
+options.offline = { flag = ["--offline"], removes = ["network"] }
+options.frozen = { flag = ["--frozen"], removes = ["network", "update_lockfile"] }
+options.config = { flag = ["--config"], value = "required", repeated = true, adds = ["override_config"], when = [{ like = "--fix", adds = ["write_source"] }] }
+options.unstable_features = { flag = ["-Z"], value = "required", repeated = true, adds = ["override_config"], when = [{ like = "--fix", adds = ["write_source"] }] }
+operands.lint_args = { adds = ["pass_through_args"] }
+
+# cargo fmt --help; rust-lang/rust 1.99.1 src/tools/rustfmt/src/cargo-fmt/main.rs (Opts). Its own clap parser, so no cargo global option.
+[shell.fmt]
+usage = "cargo fmt [options] [-- <rustfmt_options>...]"
+adds  = ["write_source"]
+options.quiet = { flag = ["-q", "--quiet"] }
+options.verbose = { flag = ["-v", "--verbose"] }
+options.package = { flag = ["-p", "--package"], value = "many" }
+options.manifest_path = { flag = ["--manifest-path"], value = "required", adds = ["override_config"] }
+options.message_format = { flag = ["--message-format"], value = "required" }
+options.all = { flag = ["--all"] }
+options.check = { flag = ["--check"], removes = ["write_source"] }
+operands.rustfmt_options = { adds = ["pass_through_args"] }
+
+# cargo clean --help; commands/clean.rs: -p or --workspace resolves the workspace (ops::resolve_ws).
+[shell.clean]
+usage = "cargo [global options] clean [options]"
+adds  = ["delete_files"]
+options.doc = { flag = ["--doc"] }
+options.dry_run = { flag = ["-n", "--dry-run"], removes = ["delete_files", "update_lockfile"] }
+options.package = { flag = ["-p", "--package"], value = "required", repeated = true, adds = ["network", "update_lockfile"], when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
+options.workspace = { flag = ["--workspace"], adds = ["network", "update_lockfile"] }
+options.release = { flag = ["-r", "--release"] }
+options.profile = { flag = ["--profile"], value = "required" }
+options.target = { flag = ["--target"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
+options.target_dir = { flag = ["--target-dir"], value = "required" }
+options.manifest_path = { flag = ["-m", "--manifest-path"], value = "required", adds = ["override_config"] }
+
+# cargo add --help
+[shell.add]
+usage = "cargo [global options] add [options] [<dep_id>...]"
+adds  = ["edit_manifest", "network", "update_lockfile"]
+options.no_default_features = { flag = ["--no-default-features"] }
+options.default_features = { flag = ["--default-features"] }
+options.features = { flag = ["-F", "--features"], value = "required", repeated = true }
+options.optional = { flag = ["--optional"] }
+options.no_optional = { flag = ["--no-optional"] }
+options.rename = { flag = ["--rename"], value = "required" }
+options.dry_run = { flag = ["-n", "--dry-run"], removes = ["edit_manifest", "update_lockfile"] }
+options.manifest_path = { flag = ["-m", "--manifest-path"], value = "required", adds = ["override_config"] }
+options.ignore_rust_version = { flag = ["--ignore-rust-version"] }
+options.package = { flag = ["-p", "--package"], value = "required", when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
+options.path = { flag = ["--path"], value = "required" }
+options.git = { flag = ["--git"], value = "required" }
+options.branch = { flag = ["--branch"], value = "required" }
+options.tag = { flag = ["--tag"], value = "required" }
+options.rev = { flag = ["--rev"], value = "required" }
+options.registry = { flag = ["--registry"], value = "required" }
+options.dev = { flag = ["--dev"] }
+options.build = { flag = ["--build"] }
+options.target = { flag = ["--target"], value = "required" }
+
+# cargo remove --help
+[shell.remove]
+usage = "cargo [global options] remove [options] <dep_id>..."
+adds  = ["edit_manifest", "network", "update_lockfile"]
+options.dry_run = { flag = ["-n", "--dry-run"], removes = ["edit_manifest", "update_lockfile"] }
+options.dev = { flag = ["--dev"] }
+options.build = { flag = ["--build"] }
+options.target = { flag = ["--target"], value = "required" }
+options.package = { flag = ["-p", "--package"], value = "required", when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
+options.manifest_path = { flag = ["-m", "--manifest-path"], value = "required", adds = ["override_config"] }
+
+# cargo update --help
+[shell.update]
+usage = "cargo [global options] update [options] [<spec>...]"
+adds  = ["network", "update_lockfile"]
+options.dry_run = { flag = ["-n", "--dry-run"], removes = ["update_lockfile"] }
+options.recursive = { flag = ["--recursive"] }
+options.precise = { flag = ["--precise"], value = "required" }
+options.workspace = { flag = ["-w", "--workspace"] }
+options.manifest_path = { flag = ["-m", "--manifest-path"], value = "required", adds = ["override_config"] }
+options.ignore_rust_version = { flag = ["--ignore-rust-version"] }
+
+# cargo fetch --help
+[shell.fetch]
+usage = "cargo [global options] fetch [options]"
+adds  = ["network", "update_lockfile"]
+options.target = { flag = ["--target"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
+options.manifest_path = { flag = ["-m", "--manifest-path"], value = "required", adds = ["override_config"] }
+
+# cargo tree --help
+[shell.tree]
+usage = "cargo [global options] tree [options]"
+adds  = ["network", "update_lockfile"]
+options.edges = { flag = ["-e", "--edges"], value = "required", repeated = true }
+options.invert = { flag = ["-i", "--invert"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
+options.prune = { flag = ["--prune"], value = "required", repeated = true }
+options.depth = { flag = ["--depth"], value = "required" }
+options.prefix = { flag = ["--prefix"], value = "required" }
+options.no_dedupe = { flag = ["--no-dedupe"] }
+options.duplicates = { flag = ["-d", "--duplicates"] }
+options.charset = { flag = ["--charset"], value = "required" }
+options.format = { flag = ["-f", "--format"], value = "required" }
+options.package = { flag = ["-p", "--package"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
+options.workspace = { flag = ["--workspace"] }
+options.exclude = { flag = ["--exclude"], value = "required", repeated = true }
+options.features = { flag = ["-F", "--features"], value = "required", repeated = true }
+options.all_features = { flag = ["--all-features"] }
+options.no_default_features = { flag = ["--no-default-features"] }
+options.target = { flag = ["--target"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
+options.manifest_path = { flag = ["-m", "--manifest-path"], value = "required", adds = ["override_config"] }
+
+# cargo metadata --help
+[shell.metadata]
+usage = "cargo [global options] metadata [options]"
+adds  = ["network", "update_lockfile"]
+options.filter_platform = { flag = ["--filter-platform"], value = "required", repeated = true }
+options.no_deps = { flag = ["--no-deps"], removes = ["network", "update_lockfile"] }
+options.format_version = { flag = ["--format-version"], value = "required" }
+options.features = { flag = ["-F", "--features"], value = "required", repeated = true }
+options.all_features = { flag = ["--all-features"] }
+options.no_default_features = { flag = ["--no-default-features"] }
+options.manifest_path = { flag = ["-m", "--manifest-path"], value = "required", adds = ["override_config"] }
+
+# cargo locate-project --help
+[shell.locate_project]
+usage = "cargo [global options] locate-project [options]"
+adds  = []
+options.workspace = { flag = ["--workspace"] }
+options.message_format = { flag = ["--message-format"], value = "required" }
+options.manifest_path = { flag = ["-m", "--manifest-path"], value = "required", adds = ["override_config"] }
+
+# cargo version --help
+[shell.version]
+usage = "cargo [global options] version"
+adds  = []
+
+# cargo new --help
+[shell.new]
+usage = "cargo [global options] new [options] <path>"
+adds  = ["create_package"]
+options.vcs = { flag = ["--vcs"], value = "required" }
+options.bin = { flag = ["--bin"] }
+options.lib = { flag = ["--lib"] }
+options.edition = { flag = ["--edition"], value = "required" }
+options.name = { flag = ["--name"], value = "required" }
+options.registry = { flag = ["--registry"], value = "required" }
+
+# cargo init --help
+[shell.init]
+usage = "cargo [global options] init [options] [<path>]"
+adds  = ["create_package"]
+options.vcs = { flag = ["--vcs"], value = "required" }
+options.bin = { flag = ["--bin"] }
+options.lib = { flag = ["--lib"] }
+options.edition = { flag = ["--edition"], value = "required" }
+options.name = { flag = ["--name"], value = "required" }
+options.registry = { flag = ["--registry"], value = "required" }
+
+# cargo install --help; commands/install.rs: --list prints the install list and builds nothing.
+[shell.install]
+usage = "cargo [global options] install [options] [<crate>...]"
+adds  = ["install_binary", "network", "run_build_scripts"]
+options.version = { flag = ["--version"], value = "required" }
+options.index = { flag = ["--index"], value = "required" }
+options.registry = { flag = ["--registry"], value = "required" }
+options.git = { flag = ["--git"], value = "required" }
+options.branch = { flag = ["--branch"], value = "required" }
+options.tag = { flag = ["--tag"], value = "required" }
+options.rev = { flag = ["--rev"], value = "required" }
+options.path = { flag = ["--path"], value = "required", adds = ["override_config"] }
+options.root = { flag = ["--root"], value = "required" }
+options.force = { flag = ["-f", "--force"] }
+options.no_track = { flag = ["--no-track"] }
+options.list = { flag = ["--list"], removes = ["install_binary", "network", "run_build_scripts"] }
+options.message_format = { flag = ["--message-format"], value = "required", repeated = true }
+options.ignore_rust_version = { flag = ["--ignore-rust-version"] }
+options.bins = { flag = ["--bins"] }
+options.examples = { flag = ["--examples"] }
+options.features = { flag = ["-F", "--features"], value = "required", repeated = true }
+options.all_features = { flag = ["--all-features"] }
+options.no_default_features = { flag = ["--no-default-features"] }
+options.jobs = { flag = ["-j", "--jobs"], value = "required" }
+options.keep_going = { flag = ["--keep-going"] }
+options.debug = { flag = ["--debug"] }
+options.profile = { flag = ["--profile"], value = "required" }
+options.target = { flag = ["--target"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
+options.target_dir = { flag = ["--target-dir"], value = "required" }
+options.timings = { flag = ["--timings"] }
+
+# cargo uninstall --help
+[shell.uninstall]
+usage = "cargo [global options] uninstall [options] [<spec>...]"
+adds  = ["uninstall_binary"]
+options.root = { flag = ["--root"], value = "required" }
+options.package = { flag = ["-p", "--package"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
+options.bin = { flag = ["--bin"], value = "required", repeated = true }
+
+# cargo search --help
+[shell.search]
+usage = "cargo [global options] search [options] [<query>...]"
+adds  = ["network"]
+options.limit = { flag = ["--limit"], value = "required" }
+options.index = { flag = ["--index"], value = "required" }
+options.registry = { flag = ["--registry"], value = "required" }
+
+# cargo publish --help
+[shell.publish]
+usage = "cargo [global options] publish [options]"
+adds  = ["publish_crate", "network", "update_lockfile", "run_build_scripts"]
+options.dry_run = { flag = ["-n", "--dry-run"], removes = ["publish_crate"] }
+options.index = { flag = ["--index"], value = "required" }
+options.registry = { flag = ["--registry"], value = "required" }
+options.no_verify = { flag = ["--no-verify"], removes = ["run_build_scripts"] }
+options.allow_dirty = { flag = ["--allow-dirty"] }
+options.package = { flag = ["-p", "--package"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
+options.workspace = { flag = ["--workspace"] }
+options.exclude = { flag = ["--exclude"], value = "required", repeated = true }
+options.features = { flag = ["-F", "--features"], value = "required", repeated = true }
+options.all_features = { flag = ["--all-features"] }
+options.no_default_features = { flag = ["--no-default-features"] }
+options.jobs = { flag = ["-j", "--jobs"], value = "required" }
+options.keep_going = { flag = ["--keep-going"] }
+options.target = { flag = ["--target"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
+options.target_dir = { flag = ["--target-dir"], value = "required" }
+options.manifest_path = { flag = ["-m", "--manifest-path"], value = "required", adds = ["override_config"] }
+
+# cargo package --help; ops/cargo_package: --list skips the verify build.
+[shell.package]
+usage = "cargo [global options] package [options]"
+adds  = ["network", "update_lockfile", "run_build_scripts"]
+options.index = { flag = ["--index"], value = "required" }
+options.registry = { flag = ["--registry"], value = "required" }
+options.list = { flag = ["-l", "--list"], removes = ["run_build_scripts"] }
+options.no_verify = { flag = ["--no-verify"], removes = ["run_build_scripts"] }
+options.no_metadata = { flag = ["--no-metadata"] }
+options.allow_dirty = { flag = ["--allow-dirty"] }
+options.exclude_lockfile = { flag = ["--exclude-lockfile"] }
+options.package = { flag = ["-p", "--package"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
+options.workspace = { flag = ["--workspace"] }
+options.exclude = { flag = ["--exclude"], value = "required", repeated = true }
+options.features = { flag = ["-F", "--features"], value = "required", repeated = true }
+options.all_features = { flag = ["--all-features"] }
+options.no_default_features = { flag = ["--no-default-features"] }
+options.target = { flag = ["--target"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
+options.target_dir = { flag = ["--target-dir"], value = "required" }
+options.jobs = { flag = ["-j", "--jobs"], value = "required" }
+options.keep_going = { flag = ["--keep-going"] }
+options.manifest_path = { flag = ["-m", "--manifest-path"], value = "required", adds = ["override_config"] }
+
+# cargo vendor --help
+[shell.vendor]
+usage = "cargo [global options] vendor [options] [<path>]"
+adds  = ["network", "update_lockfile", "write_files"]
+options.no_delete = { flag = ["--no-delete"] }
+options.sync = { flag = ["-s", "--sync"], value = "required", repeated = true, adds = ["override_config"] }
+options.respect_source_config = { flag = ["--respect-source-config"] }
+options.versioned_dirs = { flag = ["--versioned-dirs"] }
+options.manifest_path = { flag = ["-m", "--manifest-path"], value = "required", adds = ["override_config"] }
+
+# cargo generate-lockfile --help
+[shell.generate_lockfile]
+usage = "cargo [global options] generate-lockfile [options]"
+adds  = ["network", "update_lockfile"]
+options.manifest_path = { flag = ["-m", "--manifest-path"], value = "required", adds = ["override_config"] }
+options.ignore_rust_version = { flag = ["--ignore-rust-version"] }

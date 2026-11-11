@@ -1,0 +1,96 @@
+# End-to-end cases for cargo.grammar.toml. The harness runs each argv through the Shell of a real
+# box, where `cargo` is a stub that prints its arguments and exits 0.
+#
+# The policy is the set of example rules in README.md: it refuses publishing, a command-line
+# configuration override, a lockfile write on build/check/test, a formatting write, and a clean of
+# another target directory.
+
+policy = '''
+@id("cargo_actions")
+permit (principal, action in Tool::cargo::Action::"*", resource);
+
+@id("no_publish")
+@description("Publishing a crate is not allowed.")
+forbid (principal, action == Tool::cargo::Action::"publish", resource)
+when { context.input.effects.contains(Tool::cargo::Effect::"publish_crate") };
+
+@id("no_config_override")
+@description("Use the project configuration; do not override it on the command line.")
+forbid (principal, action in Tool::cargo::Action::"*", resource)
+when { context.input.effects.contains(Tool::cargo::Effect::"override_config") };
+
+@id("locked")
+@description("Pass --locked or --frozen so that Cargo.lock does not change.")
+forbid (principal, action in [Tool::cargo::Action::"build", Tool::cargo::Action::"check", Tool::cargo::Action::"test"], resource)
+when { context.input.effects.contains(Tool::cargo::Effect::"update_lockfile") };
+
+@id("fmt_check_only")
+forbid (principal, action == Tool::cargo::Action::"fmt", resource)
+when { context.input.effects.containsAny([
+  Tool::cargo::Effect::"write_source",
+  Tool::cargo::Effect::"pass_through_args"]) };
+
+@id("clean_default_dir")
+forbid (principal, action == Tool::cargo::Action::"clean", resource)
+when { context.input has target_dir };
+'''
+
+# A locked build is permitted and runs the program
+[[case]]
+argv = ["cargo", "build", "--locked", "--release"]
+exit = 0
+stdout = "stub-argv: [build] [--locked] [--release]"
+
+# The same build without --locked can rewrite Cargo.lock, so the rule refuses it
+[[case]]
+argv = ["cargo", "build", "--release"]
+exit = 126
+stderr = "[policy: locked]: Pass --locked or --frozen so that Cargo.lock does not change."
+
+# Publishing is refused
+[[case]]
+argv = ["cargo", "publish"]
+exit = 126
+stderr = "[policy: no_publish]: Publishing a crate is not allowed."
+
+# --dry-run removes publish_crate, so the forbid does not apply
+[[case]]
+argv = ["cargo", "publish", "--dry-run"]
+exit = 0
+stdout = "stub-argv: [publish] [--dry-run]"
+
+# --config is override_config, on any action
+[[case]]
+argv = ["cargo", "test", "--config", "build.rustc-wrapper=\"x\""]
+exit = 126
+stderr = "[policy: no_config_override]"
+
+# Arguments after -- go to the test binary
+[[case]]
+argv = ["cargo", "test", "--locked", "parse", "--", "--nocapture"]
+exit = 0
+stdout = "stub-argv: [test] [--locked] [parse] [--] [--nocapture]"
+
+# A config-file alias can redefine `b`, so it is unmodeled, and nothing permits it
+[[case]]
+argv = ["cargo", "b", "--locked"]
+exit = 126
+stderr = "[default-deny]: No permit policy matched this request."
+
+# An option before an external subcommand is not forwarded, so the line is unmodeled
+[[case]]
+argv = ["cargo", "--offline", "clippy"]
+exit = 126
+stderr = "[default-deny]"
+
+# fmt may only check: a pass-through word after `--` is refused, even `-- --check`
+[[case]]
+argv = ["cargo", "fmt", "--all", "--", "--check"]
+exit = 126
+stderr = "[policy: fmt_check_only]"
+
+# `clean --target-dir` would delete that directory
+[[case]]
+argv = ["cargo", "clean", "--target-dir", "/"]
+exit = 126
+stderr = "[policy: clean_default_dir]"
