@@ -1841,3 +1841,54 @@ argv = ["kubectl", "delete", "pod/a", "customResourceDefinition/w"]
 action = "delete"
 fields = { type = "pod/a", name = ["customResourceDefinition/w"] }
 effects = ["broad_delete", "cluster_delete"]
+
+# --- independent verifier cases, round 3 ---
+[[case]]
+argv = ["kubectl", "delete", "nS.v1./prod"]
+action = "delete"
+fields = { type = "nS.v1./prod" }
+effects = ["cluster_delete", "broad_delete"]
+
+[[case]]
+argv = ["kubectl", "delete", "pod/a", "NS.v1./prod"]
+action = "delete"
+fields = { type = "pod/a", name = ["NS.v1./prod"] }
+effects = ["cluster_delete", "broad_delete"]
+
+[[case]]
+argv = ["kubectl", "delete", "pods,NS.v1.,svc", "x"]
+action = "delete"
+fields = { type = "pods,NS.v1.,svc", name = ["x"] }
+effects = ["cluster_delete", "broad_delete"]
+
+[[case]]
+argv = ["kubectl", "delete", "CRDs", "w"]
+action = "delete"
+fields = { type = "CRDs", name = ["w"] }
+effects = ["cluster_delete", "broad_delete"]
+
+[[case]]
+argv = ["kubectl", "delete", "cUsToMrEsOuRcEdEfInItIoNs.v1.apiextensions.k8s.io", "w"]
+action = "delete"
+fields = { type = "cUsToMrEsOuRcEdEfInItIoNs.v1.apiextensions.k8s.io", name = ["w"] }
+effects = ["cluster_delete", "broad_delete"]
+
+[[case]]
+argv = ["kubectl", "delete", "pod/a", "CustomResourceDefinition.v1.apiextensions.k8s.io/w"]
+action = "delete"
+fields = { type = "pod/a", name = ["CustomResourceDefinition.v1.apiextensions.k8s.io/w"] }
+effects = ["cluster_delete", "broad_delete"]
+
+# A dry run still removes the broad delete.
+[[case]]
+argv = ["kubectl", "delete", "Ns.", "prod", "--dry-run=client"]
+action = "delete"
+fields = { type = "Ns.", name = ["prod"], dry_run = "client" }
+effects = []
+
+# A plain built-in type stays narrow.
+[[case]]
+argv = ["kubectl", "delete", "deployments.v1.apps", "web"]
+action = "delete"
+fields = { type = "deployments.v1.apps", name = ["web"] }
+effects = ["cluster_delete"]
