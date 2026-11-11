@@ -1,0 +1,867 @@
+# Tool grammar for the GitHub CLI.
+#
+# Project:    GitHub CLI, https://github.com/cli/cli
+# Executable: gh (a native Go binary)
+# Checked:    gh 2.103.3 (tag v2.103.3, commit 63837fb7), from `gh <command> --help` and the source at
+#             that tag (pkg/cmd/**, pkg/cmdutil/repo_override.go, pkg/cmdutil/json_flags.go).
+#
+# How gh reads a command line (cobra and pflag): flags and operands may interleave after the command
+# words; `--flag=v`, `--flag v`, `-fv`, and `-f v` are all accepted; there is no abbreviation of a
+# long flag. This grammar accepts those spellings. It makes `-f=v`, `--bool=false`, and a
+# single-valued flag given twice `unmodeled`, although gh accepts them.
+#
+# `-R/--repo` is a persistent flag of each command group that has it. Here it is an option of each
+# action, so it is accepted after the command words only. `gh -R x pr list` and `gh pr -R x list`
+# work in gh but are `unmodeled` here.
+#
+# What this grammar cannot see:
+# - Environment: GH_REPO (selects the target repository like -R), GH_HOST (the target host),
+#   GH_TOKEN / GITHUB_TOKEN / GH_ENTERPRISE_TOKEN (the identity), GH_EDITOR / EDITOR, BROWSER,
+#   GH_PAGER / PAGER, GH_CONFIG_DIR, and `GIT_*` variables that git reads.
+# - Config files: ~/.config/gh/config.yml and hosts.yml (identity, git_protocol, pager, browser,
+#   and aliases).
+# - Aliases from config. `gh co` is a config alias (default `co: pr checkout`) that the operator
+#   may redefine, even as a shell command, so `co` is not modeled. `pr co` is a built-in alias and
+#   is modeled.
+# - Child processes that gh starts itself: git (clone, fetch, checkout, push, and the git hooks
+#   that those run), the pager, the browser for `--web`, the editor, shell aliases, and gh
+#   extensions. Box does not decide them; the effects below name the commands that start them.
+# - Prompts. On a terminal some commands with no flags ask questions (for example `repo edit` can
+#   change visibility interactively, and `pr review` can approve). The grammar sees only the
+#   command line.
+
+format  = 1
+version = 1
+name    = "gh"
+program = "gh"
+
+[effects]
+read_remote       = "Reads data from GitHub"
+write_remote      = "Creates or changes data on GitHub"
+delete_remote     = "Deletes data on GitHub, such as a repository, a release, a tag, a branch, a comment, or a run"
+merge             = "Merges a pull request, or turns on auto-merge for it"
+admin_bypass      = "Uses administrator rights to merge without meeting branch protection or the merge queue"
+approve           = "Approves a pull request"
+make_public       = "Makes a repository public, or may do so"
+trigger_ci        = "Starts or reruns a GitHub Actions workflow, which runs code with the repository's secrets"
+git_push          = "May push local git commits or branches to a remote"
+write_local       = "Writes files, git branches, or git remotes on the local machine"
+overwrite_local   = "Overwrites or resets existing local files or branches"
+git_passthrough   = "Passes extra arguments straight to git, which can make git run other programs"
+upload_file       = "Sends the content of a local file to GitHub"
+open_browser      = "Opens a web browser"
+target_override   = "Names the target repository or host on the command line"
+reveal_token      = "Prints a stored authentication token"
+write_credentials = "May change the stored gh credentials, such as refreshing an expiring token"
+
+# ---------------------------------------------------------------------------------------------
+# pr
+
+[shell.pr_list]
+usage   = "gh pr list [options]"
+aliases = ["pr ls"]
+adds    = ["read_remote"]
+options.app      = { flag = ["--app"], value = "required" }
+options.assignee = { flag = ["-a", "--assignee"], value = "required" }
+options.author   = { flag = ["-A", "--author"], value = "required" }
+options.base     = { flag = ["-B", "--base"], value = "required" }
+options.draft    = { flag = ["-d", "--draft"] }
+options.head     = { flag = ["-H", "--head"], value = "required" }
+options.jq       = { flag = ["-q", "--jq"], value = "required" }
+options.json     = { flag = ["--json"], value = "required", repeated = true }
+options.label    = { flag = ["-l", "--label"], value = "required", repeated = true }
+options.limit    = { flag = ["-L", "--limit"], value = "required" }
+options.search   = { flag = ["-S", "--search"], value = "required" }
+options.state    = { flag = ["-s", "--state"], value = "required" }
+options.template = { flag = ["-t", "--template"], value = "required" }
+options.web      = { flag = ["-w", "--web"], adds = ["open_browser"] }
+options.repo     = { flag = ["-R", "--repo"], value = "required", adds = ["target_override"] }
+
+[shell.pr_view]
+usage = "gh pr view [options] [<pr>]"
+adds  = ["read_remote"]
+options.comments = { flag = ["-c", "--comments"] }
+options.jq       = { flag = ["-q", "--jq"], value = "required" }
+options.json     = { flag = ["--json"], value = "required", repeated = true }
+options.template = { flag = ["-t", "--template"], value = "required" }
+options.web      = { flag = ["-w", "--web"], adds = ["open_browser"] }
+options.repo     = { flag = ["-R", "--repo"], value = "required", adds = ["target_override"] }
+
+[shell.pr_diff]
+usage = "gh pr diff [options] [<pr>]"
+adds  = ["read_remote"]
+options.allow_escape_sequences = { flag = ["--allow-escape-sequences"] }
+options.color     = { flag = ["--color"], value = "required" }
+options.exclude   = { flag = ["-e", "--exclude"], value = "required", repeated = true }
+options.name_only = { flag = ["--name-only"] }
+options.patch     = { flag = ["--patch"] }
+options.web       = { flag = ["-w", "--web"], adds = ["open_browser"] }
+options.repo      = { flag = ["-R", "--repo"], value = "required", adds = ["target_override"] }
+
+[shell.pr_checks]
+usage = "gh pr checks [options] [<pr>]"
+adds  = ["read_remote"]
+options.fail_fast = { flag = ["--fail-fast"] }
+options.interval  = { flag = ["-i", "--interval"], value = "required" }
+options.jq        = { flag = ["-q", "--jq"], value = "required" }
+options.json      = { flag = ["--json"], value = "required", repeated = true }
+options.required  = { flag = ["--required"] }
+options.template  = { flag = ["-t", "--template"], value = "required" }
+options.watch     = { flag = ["--watch"] }
+options.web       = { flag = ["-w", "--web"], adds = ["open_browser"] }
+options.repo      = { flag = ["-R", "--repo"], value = "required", adds = ["target_override"] }
+
+[shell.pr_status]
+usage = "gh pr status [options]"
+adds  = ["read_remote"]
+options.conflict_status = { flag = ["-c", "--conflict-status"] }
+options.jq       = { flag = ["-q", "--jq"], value = "required" }
+options.json     = { flag = ["--json"], value = "required", repeated = true }
+options.template = { flag = ["-t", "--template"], value = "required" }
+options.repo     = { flag = ["-R", "--repo"], value = "required", adds = ["target_override"] }
+
+# `pr co` is a built-in cobra alias. The top-level `gh co` is a config alias and is not modeled.
+[shell.pr_checkout]
+usage   = "gh pr checkout [options] [<pr>]"
+aliases = ["pr co"]
+adds    = ["read_remote", "write_local"]
+options.branch             = { flag = ["-b", "--branch"], value = "required" }
+options.detach             = { flag = ["--detach"] }
+options.force              = { flag = ["-f", "--force"], adds = ["overwrite_local"] }
+options.recurse_submodules = { flag = ["--recurse-submodules"] }
+options.worktree           = { flag = ["--worktree"], value = "required" }
+options.repo               = { flag = ["-R", "--repo"], value = "required", adds = ["target_override"] }
+
+# `--head` selects a branch that is already pushed and skips every push and fork. `--dry-run`
+# creates nothing but "may still push git changes". `--web` pushes, then opens the compare page in a
+# browser and creates nothing. `--editor` and `--recover` are not modeled.
+[shell.pr_create]
+usage   = "gh pr create [options]"
+aliases = ["pr new"]
+adds    = ["write_remote", "git_push"]
+options.assignee   = { flag = ["-a", "--assignee"], value = "required", repeated = true }
+options.attach     = { flag = ["--attach"], value = "required", repeated = true, adds = ["upload_file"] }
+options.base       = { flag = ["-B", "--base"], value = "required" }
+options.body       = { flag = ["-b", "--body"], value = "required" }
+options.body_file  = { flag = ["-F", "--body-file"], value = "required", adds = ["upload_file"] }
+options.draft      = { flag = ["-d", "--draft"] }
+options.dry_run    = { flag = ["--dry-run"], removes = ["write_remote", "upload_file"] }
+options.fill       = { flag = ["-f", "--fill"] }
+options.fill_first   = { flag = ["--fill-first"] }
+options.fill_verbose = { flag = ["--fill-verbose"] }
+options.head       = { flag = ["-H", "--head"], value = "required", removes = ["git_push"] }
+options.label      = { flag = ["-l", "--label"], value = "required", repeated = true }
+options.milestone  = { flag = ["-m", "--milestone"], value = "required" }
+options.no_maintainer_edit = { flag = ["--no-maintainer-edit"] }
+options.project    = { flag = ["-p", "--project"], value = "required", repeated = true }
+options.reviewer   = { flag = ["-r", "--reviewer"], value = "required", repeated = true }
+options.template   = { flag = ["-T", "--template"], value = "required" }
+options.title      = { flag = ["-t", "--title"], value = "required" }
+options.web        = { flag = ["-w", "--web"], adds = ["open_browser"], removes = ["write_remote", "upload_file"] }
+options.repo       = { flag = ["-R", "--repo"], value = "required", adds = ["target_override"] }
+
+# `--editor` is not modeled.
+[shell.pr_comment]
+usage = "gh pr comment [options] [<pr>]"
+adds  = ["write_remote"]
+options.attach         = { flag = ["--attach"], value = "required", repeated = true, adds = ["upload_file"] }
+options.body           = { flag = ["-b", "--body"], value = "required" }
+options.body_file      = { flag = ["-F", "--body-file"], value = "required", adds = ["upload_file"] }
+options.create_if_none = { flag = ["--create-if-none"] }
+options.delete_last    = { flag = ["--delete-last"], adds = ["delete_remote"] }
+options.edit_last      = { flag = ["--edit-last"] }
+options.web            = { flag = ["-w", "--web"], adds = ["open_browser"], removes = ["write_remote", "upload_file"] }
+options.yes            = { flag = ["--yes"] }
+options.repo           = { flag = ["-R", "--repo"], value = "required", adds = ["target_override"] }
+
+[shell.pr_review]
+usage = "gh pr review [options] [<pr>]"
+adds  = ["write_remote"]
+options.approve         = { flag = ["-a", "--approve"], adds = ["approve"] }
+options.body            = { flag = ["-b", "--body"], value = "required" }
+options.body_file       = { flag = ["-F", "--body-file"], value = "required", adds = ["upload_file"] }
+options.comment         = { flag = ["-c", "--comment"] }
+options.request_changes = { flag = ["-r", "--request-changes"] }
+options.repo            = { flag = ["-R", "--repo"], value = "required", adds = ["target_override"] }
+
+# `--disable-auto` turns auto-merge off and merges nothing. `--delete-branch` deletes the remote and
+# the local branch.
+[shell.pr_merge]
+usage = "gh pr merge [options] [<pr>]"
+adds  = ["write_remote", "merge"]
+options.admin             = { flag = ["--admin"], adds = ["admin_bypass"] }
+options.author_email      = { flag = ["-A", "--author-email"], value = "required" }
+options.auto              = { flag = ["--auto"] }
+options.body              = { flag = ["-b", "--body"], value = "required" }
+options.body_file         = { flag = ["-F", "--body-file"], value = "required", adds = ["upload_file"] }
+options.delete_branch     = { flag = ["-d", "--delete-branch"], adds = ["delete_remote", "write_local"] }
+options.disable_auto      = { flag = ["--disable-auto"], removes = ["merge"] }
+options.match_head_commit = { flag = ["--match-head-commit"], value = "required" }
+options.merge             = { flag = ["-m", "--merge"] }
+options.rebase            = { flag = ["-r", "--rebase"] }
+options.squash            = { flag = ["-s", "--squash"] }
+options.subject           = { flag = ["-t", "--subject"], value = "required" }
+options.repo              = { flag = ["-R", "--repo"], value = "required", adds = ["target_override"] }
+
+[shell.pr_close]
+usage = "gh pr close [options] <pr>"
+adds  = ["write_remote"]
+options.comment       = { flag = ["-c", "--comment"], value = "required" }
+options.delete_branch = { flag = ["-d", "--delete-branch"], adds = ["delete_remote", "write_local"] }
+options.repo          = { flag = ["-R", "--repo"], value = "required", adds = ["target_override"] }
+
+[shell.pr_reopen]
+usage = "gh pr reopen [options] <pr>"
+adds  = ["write_remote"]
+options.comment = { flag = ["-c", "--comment"], value = "required" }
+options.repo    = { flag = ["-R", "--repo"], value = "required", adds = ["target_override"] }
+
+[shell.pr_edit]
+usage = "gh pr edit [options] [<pr>]"
+adds  = ["write_remote"]
+options.add_assignee     = { flag = ["--add-assignee"], value = "required", repeated = true }
+options.add_label        = { flag = ["--add-label"], value = "required", repeated = true }
+options.add_project      = { flag = ["--add-project"], value = "required", repeated = true }
+options.add_reviewer     = { flag = ["--add-reviewer"], value = "required", repeated = true }
+options.attach           = { flag = ["--attach"], value = "required", repeated = true, adds = ["upload_file"] }
+options.base             = { flag = ["-B", "--base"], value = "required" }
+options.body             = { flag = ["-b", "--body"], value = "required" }
+options.body_file        = { flag = ["-F", "--body-file"], value = "required", adds = ["upload_file"] }
+options.milestone        = { flag = ["-m", "--milestone"], value = "required" }
+options.remove_assignee  = { flag = ["--remove-assignee"], value = "required", repeated = true }
+options.remove_label     = { flag = ["--remove-label"], value = "required", repeated = true }
+options.remove_milestone = { flag = ["--remove-milestone"] }
+options.remove_project   = { flag = ["--remove-project"], value = "required", repeated = true }
+options.remove_reviewer  = { flag = ["--remove-reviewer"], value = "required", repeated = true }
+options.title            = { flag = ["-t", "--title"], value = "required" }
+options.repo             = { flag = ["-R", "--repo"], value = "required", adds = ["target_override"] }
+
+[shell.pr_ready]
+usage = "gh pr ready [options] [<pr>]"
+adds  = ["write_remote"]
+options.undo = { flag = ["--undo"] }
+options.repo = { flag = ["-R", "--repo"], value = "required", adds = ["target_override"] }
+
+# ---------------------------------------------------------------------------------------------
+# issue
+
+[shell.issue_list]
+usage   = "gh issue list [options]"
+aliases = ["issue ls"]
+adds    = ["read_remote"]
+options.app       = { flag = ["--app"], value = "required" }
+options.assignee  = { flag = ["-a", "--assignee"], value = "required" }
+options.author    = { flag = ["-A", "--author"], value = "required" }
+options.jq        = { flag = ["-q", "--jq"], value = "required" }
+options.json      = { flag = ["--json"], value = "required", repeated = true }
+options.label     = { flag = ["-l", "--label"], value = "required", repeated = true }
+options.limit     = { flag = ["-L", "--limit"], value = "required" }
+options.mention   = { flag = ["--mention"], value = "required" }
+options.milestone = { flag = ["-m", "--milestone"], value = "required" }
+options.search    = { flag = ["-S", "--search"], value = "required" }
+options.state     = { flag = ["-s", "--state"], value = "required" }
+options.template  = { flag = ["-t", "--template"], value = "required" }
+options.type      = { flag = ["--type"], value = "required" }
+options.web       = { flag = ["-w", "--web"], adds = ["open_browser"] }
+options.repo      = { flag = ["-R", "--repo"], value = "required", adds = ["target_override"] }
+
+[shell.issue_view]
+usage = "gh issue view [options] <issue>"
+adds  = ["read_remote"]
+options.comments = { flag = ["-c", "--comments"] }
+options.jq       = { flag = ["-q", "--jq"], value = "required" }
+options.json     = { flag = ["--json"], value = "required", repeated = true }
+options.template = { flag = ["-t", "--template"], value = "required" }
+options.web      = { flag = ["-w", "--web"], adds = ["open_browser"] }
+options.repo     = { flag = ["-R", "--repo"], value = "required", adds = ["target_override"] }
+
+[shell.issue_status]
+usage = "gh issue status [options]"
+adds  = ["read_remote"]
+options.jq       = { flag = ["-q", "--jq"], value = "required" }
+options.json     = { flag = ["--json"], value = "required", repeated = true }
+options.template = { flag = ["-t", "--template"], value = "required" }
+options.repo     = { flag = ["-R", "--repo"], value = "required", adds = ["target_override"] }
+
+# `--editor` and `--recover` are not modeled. `--web` opens the new-issue page and creates nothing.
+[shell.issue_create]
+usage   = "gh issue create [options]"
+aliases = ["issue new"]
+adds    = ["write_remote"]
+options.assignee   = { flag = ["-a", "--assignee"], value = "required", repeated = true }
+options.attach     = { flag = ["--attach"], value = "required", repeated = true, adds = ["upload_file"] }
+options.blocked_by = { flag = ["--blocked-by"], value = "required", repeated = true }
+options.blocking   = { flag = ["--blocking"], value = "required", repeated = true }
+options.body       = { flag = ["-b", "--body"], value = "required" }
+options.body_file  = { flag = ["-F", "--body-file"], value = "required", adds = ["upload_file"] }
+options.label      = { flag = ["-l", "--label"], value = "required", repeated = true }
+options.milestone  = { flag = ["-m", "--milestone"], value = "required" }
+options.parent     = { flag = ["--parent"], value = "required" }
+options.project    = { flag = ["-p", "--project"], value = "required", repeated = true }
+options.template   = { flag = ["-T", "--template"], value = "required" }
+options.title      = { flag = ["-t", "--title"], value = "required" }
+options.type       = { flag = ["--type"], value = "required" }
+options.web        = { flag = ["-w", "--web"], adds = ["open_browser"], removes = ["write_remote", "upload_file"] }
+options.repo       = { flag = ["-R", "--repo"], value = "required", adds = ["target_override"] }
+
+[shell.issue_comment]
+usage = "gh issue comment [options] <issue>"
+adds  = ["write_remote"]
+options.attach         = { flag = ["--attach"], value = "required", repeated = true, adds = ["upload_file"] }
+options.body           = { flag = ["-b", "--body"], value = "required" }
+options.body_file      = { flag = ["-F", "--body-file"], value = "required", adds = ["upload_file"] }
+options.create_if_none = { flag = ["--create-if-none"] }
+options.delete_last    = { flag = ["--delete-last"], adds = ["delete_remote"] }
+options.edit_last      = { flag = ["--edit-last"] }
+options.web            = { flag = ["-w", "--web"], adds = ["open_browser"], removes = ["write_remote", "upload_file"] }
+options.yes            = { flag = ["--yes"] }
+options.repo           = { flag = ["-R", "--repo"], value = "required", adds = ["target_override"] }
+
+[shell.issue_close]
+usage = "gh issue close [options] <issue>"
+adds  = ["write_remote"]
+options.comment      = { flag = ["-c", "--comment"], value = "required" }
+options.duplicate_of = { flag = ["--duplicate-of"], value = "required" }
+options.reason       = { flag = ["-r", "--reason"], value = "required" }
+options.repo         = { flag = ["-R", "--repo"], value = "required", adds = ["target_override"] }
+
+[shell.issue_reopen]
+usage = "gh issue reopen [options] <issue>"
+adds  = ["write_remote"]
+options.comment = { flag = ["-c", "--comment"], value = "required" }
+options.repo    = { flag = ["-R", "--repo"], value = "required", adds = ["target_override"] }
+
+[shell.issue_edit]
+usage = "gh issue edit [options] <issue>..."
+adds  = ["write_remote"]
+options.add_assignee      = { flag = ["--add-assignee"], value = "required", repeated = true }
+options.add_blocked_by    = { flag = ["--add-blocked-by"], value = "required", repeated = true }
+options.add_blocking      = { flag = ["--add-blocking"], value = "required", repeated = true }
+options.add_label         = { flag = ["--add-label"], value = "required", repeated = true }
+options.add_project       = { flag = ["--add-project"], value = "required", repeated = true }
+options.add_sub_issue     = { flag = ["--add-sub-issue"], value = "required", repeated = true }
+options.attach            = { flag = ["--attach"], value = "required", repeated = true, adds = ["upload_file"] }
+options.body              = { flag = ["-b", "--body"], value = "required" }
+options.body_file         = { flag = ["-F", "--body-file"], value = "required", adds = ["upload_file"] }
+options.milestone         = { flag = ["-m", "--milestone"], value = "required" }
+options.parent            = { flag = ["--parent"], value = "required" }
+options.remove_assignee   = { flag = ["--remove-assignee"], value = "required", repeated = true }
+options.remove_blocked_by = { flag = ["--remove-blocked-by"], value = "required", repeated = true }
+options.remove_blocking   = { flag = ["--remove-blocking"], value = "required", repeated = true }
+options.remove_label      = { flag = ["--remove-label"], value = "required", repeated = true }
+options.remove_milestone  = { flag = ["--remove-milestone"] }
+options.remove_parent     = { flag = ["--remove-parent"] }
+options.remove_project    = { flag = ["--remove-project"], value = "required", repeated = true }
+options.remove_sub_issue  = { flag = ["--remove-sub-issue"], value = "required", repeated = true }
+options.remove_type       = { flag = ["--remove-type"] }
+options.title             = { flag = ["-t", "--title"], value = "required" }
+options.type              = { flag = ["--type"], value = "required" }
+options.repo              = { flag = ["-R", "--repo"], value = "required", adds = ["target_override"] }
+
+# ---------------------------------------------------------------------------------------------
+# repo (these commands take the repository as an operand and have no -R)
+
+[shell.repo_view]
+usage = "gh repo view [options] [<repository>]"
+adds  = ["read_remote"]
+options.branch   = { flag = ["-b", "--branch"], value = "required" }
+options.jq       = { flag = ["-q", "--jq"], value = "required" }
+options.json     = { flag = ["--json"], value = "required", repeated = true }
+options.template = { flag = ["-t", "--template"], value = "required" }
+options.web      = { flag = ["-w", "--web"], adds = ["open_browser"] }
+
+[shell.repo_list]
+usage   = "gh repo list [options] [<owner>]"
+aliases = ["repo ls"]
+adds    = ["read_remote"]
+options.archived    = { flag = ["--archived"] }
+options.fork        = { flag = ["--fork"] }
+options.jq          = { flag = ["-q", "--jq"], value = "required" }
+options.json        = { flag = ["--json"], value = "required", repeated = true }
+options.language    = { flag = ["-l", "--language"], value = "required" }
+options.limit       = { flag = ["-L", "--limit"], value = "required" }
+options.no_archived = { flag = ["--no-archived"] }
+options.source      = { flag = ["--source"] }
+options.template    = { flag = ["-t", "--template"], value = "required" }
+options.topic       = { flag = ["--topic"], value = "required", repeated = true }
+options.visibility  = { flag = ["--visibility"], value = "required" }
+
+# gh passes every word after <repository> to `git clone`: the directory, and the git flags after
+# `--`. A git flag such as `-u <program>` or `-c core.sshCommand=...` makes git run a program.
+[shell.repo_clone]
+usage = "gh repo clone [options] <repository> [<directory>] [-- <gitflags>...]"
+adds  = ["read_remote", "write_local"]
+options.no_upstream          = { flag = ["--no-upstream"] }
+options.upstream_remote_name = { flag = ["-u", "--upstream-remote-name"], value = "required" }
+operands.gitflags            = { adds = ["git_passthrough"] }
+
+# Each of `--public`, `--private`, and `--internal` is needed when gh cannot prompt. `--public` is
+# the one that makes the new repository public.
+[shell.repo_create]
+usage   = "gh repo create [options] [<name>]"
+aliases = ["repo new"]
+adds    = ["write_remote"]
+options.add_readme           = { flag = ["--add-readme"] }
+options.clone                = { flag = ["-c", "--clone"], adds = ["write_local"] }
+options.description          = { flag = ["-d", "--description"], value = "required" }
+options.disable_issues       = { flag = ["--disable-issues"] }
+options.disable_wiki         = { flag = ["--disable-wiki"] }
+options.gitignore            = { flag = ["-g", "--gitignore"], value = "required" }
+options.homepage             = { flag = ["-h", "--homepage"], value = "required" }
+options.include_all_branches = { flag = ["--include-all-branches"] }
+options.internal             = { flag = ["--internal"] }
+options.license              = { flag = ["-l", "--license"], value = "required" }
+options.private              = { flag = ["--private"] }
+options.public               = { flag = ["--public"], adds = ["make_public"] }
+options.push                 = { flag = ["--push"], adds = ["git_push"] }
+options.remote               = { flag = ["-r", "--remote"], value = "required", adds = ["write_local"] }
+options.source               = { flag = ["-s", "--source"], value = "required" }
+options.team                 = { flag = ["-t", "--team"], value = "required" }
+options.template             = { flag = ["-p", "--template"], value = "required" }
+
+[shell.repo_fork]
+usage = "gh repo fork [options] [<repository>] [-- <gitflags>...]"
+adds  = ["write_remote"]
+options.clone               = { flag = ["--clone"], adds = ["write_local"] }
+options.default_branch_only = { flag = ["--default-branch-only"] }
+options.fork_name           = { flag = ["--fork-name"], value = "required" }
+options.org                 = { flag = ["--org"], value = "required" }
+options.remote              = { flag = ["--remote"], adds = ["write_local"] }
+options.remote_name         = { flag = ["--remote-name"], value = "required" }
+operands.gitflags           = { adds = ["git_passthrough"] }
+
+[shell.repo_delete]
+usage = "gh repo delete [options] [<repository>]"
+adds  = ["delete_remote"]
+options.yes = { flag = ["--yes"] }
+
+[shell.repo_archive]
+usage = "gh repo archive [options] [<repository>]"
+adds  = ["write_remote"]
+options.yes = { flag = ["-y", "--yes"] }
+
+# `--visibility` adds `make_public` for every value except exactly `private` and `internal`, so an
+# unusual spelling of `public` is never missed. Each `--enable-*` style flag is modeled in its bare
+# form only; `--enable-wiki=false` is `unmodeled`.
+[shell.repo_edit]
+usage = "gh repo edit [options] [<repository>]"
+adds  = ["write_remote"]
+options.accept_visibility_change_consequences = { flag = ["--accept-visibility-change-consequences"] }
+options.add_topic                = { flag = ["--add-topic"], value = "required", repeated = true }
+options.allow_forking            = { flag = ["--allow-forking"] }
+options.allow_update_branch      = { flag = ["--allow-update-branch"] }
+options.default_branch           = { flag = ["--default-branch"], value = "required" }
+options.delete_branch_on_merge   = { flag = ["--delete-branch-on-merge"] }
+options.description              = { flag = ["-d", "--description"], value = "required" }
+options.enable_auto_merge        = { flag = ["--enable-auto-merge"] }
+options.enable_discussions       = { flag = ["--enable-discussions"] }
+options.enable_issues            = { flag = ["--enable-issues"] }
+options.enable_merge_commit      = { flag = ["--enable-merge-commit"] }
+options.enable_projects          = { flag = ["--enable-projects"] }
+options.enable_rebase_merge      = { flag = ["--enable-rebase-merge"] }
+options.enable_squash_merge      = { flag = ["--enable-squash-merge"] }
+options.enable_wiki              = { flag = ["--enable-wiki"] }
+options.homepage                 = { flag = ["-h", "--homepage"], value = "required" }
+options.remove_topic             = { flag = ["--remove-topic"], value = "required", repeated = true }
+options.squash_merge_commit_message = { flag = ["--squash-merge-commit-message"], value = "required" }
+options.template                 = { flag = ["--template"] }
+options.visibility = { flag = ["--visibility"], value = "required", adds = ["make_public"], when = [
+  { like = "private", removes = ["make_public"] },
+  { like = "internal", removes = ["make_public"] },
+] }
+
+# ---------------------------------------------------------------------------------------------
+# run
+
+[shell.run_list]
+usage   = "gh run list [options]"
+aliases = ["run ls"]
+adds    = ["read_remote"]
+options.all      = { flag = ["-a", "--all"] }
+options.branch   = { flag = ["-b", "--branch"], value = "required" }
+options.commit   = { flag = ["-c", "--commit"], value = "required" }
+options.created  = { flag = ["--created"], value = "required" }
+options.event    = { flag = ["-e", "--event"], value = "required" }
+options.jq       = { flag = ["-q", "--jq"], value = "required" }
+options.json     = { flag = ["--json"], value = "required", repeated = true }
+options.limit    = { flag = ["-L", "--limit"], value = "required" }
+options.status   = { flag = ["-s", "--status"], value = "required" }
+options.template = { flag = ["-t", "--template"], value = "required" }
+options.user     = { flag = ["-u", "--user"], value = "required" }
+options.workflow = { flag = ["-w", "--workflow"], value = "required" }
+options.repo     = { flag = ["-R", "--repo"], value = "required", adds = ["target_override"] }
+
+[shell.run_view]
+usage = "gh run view [options] [<run_id>]"
+adds  = ["read_remote"]
+options.attempt     = { flag = ["-a", "--attempt"], value = "required" }
+options.exit_status = { flag = ["--exit-status"] }
+options.job         = { flag = ["-j", "--job"], value = "required" }
+options.jq          = { flag = ["-q", "--jq"], value = "required" }
+options.json        = { flag = ["--json"], value = "required", repeated = true }
+options.log         = { flag = ["--log"] }
+options.log_failed  = { flag = ["--log-failed"] }
+options.template    = { flag = ["-t", "--template"], value = "required" }
+options.verbose     = { flag = ["-v", "--verbose"] }
+options.web         = { flag = ["-w", "--web"], adds = ["open_browser"] }
+options.repo        = { flag = ["-R", "--repo"], value = "required", adds = ["target_override"] }
+
+[shell.run_watch]
+usage = "gh run watch [options] [<run_id>]"
+adds  = ["read_remote"]
+options.compact     = { flag = ["--compact"] }
+options.exit_status = { flag = ["--exit-status"] }
+options.interval    = { flag = ["-i", "--interval"], value = "required" }
+options.repo        = { flag = ["-R", "--repo"], value = "required", adds = ["target_override"] }
+
+[shell.run_rerun]
+usage = "gh run rerun [options] [<run_id>]"
+adds  = ["write_remote", "trigger_ci"]
+options.debug  = { flag = ["-d", "--debug"] }
+options.failed = { flag = ["--failed"] }
+options.job    = { flag = ["-j", "--job"], value = "required" }
+options.repo   = { flag = ["-R", "--repo"], value = "required", adds = ["target_override"] }
+
+[shell.run_cancel]
+usage = "gh run cancel [options] [<run_id>]"
+adds  = ["write_remote"]
+options.force = { flag = ["--force"] }
+options.repo  = { flag = ["-R", "--repo"], value = "required", adds = ["target_override"] }
+
+[shell.run_delete]
+usage = "gh run delete [options] [<run_id>]"
+adds  = ["delete_remote"]
+options.repo = { flag = ["-R", "--repo"], value = "required", adds = ["target_override"] }
+
+[shell.run_download]
+usage = "gh run download [options] [<run_id>]"
+adds  = ["read_remote", "write_local"]
+options.dir     = { flag = ["-D", "--dir"], value = "required" }
+options.name    = { flag = ["-n", "--name"], value = "required", repeated = true }
+options.pattern = { flag = ["-p", "--pattern"], value = "required", repeated = true }
+options.repo    = { flag = ["-R", "--repo"], value = "required", adds = ["target_override"] }
+
+# ---------------------------------------------------------------------------------------------
+# workflow
+
+[shell.workflow_list]
+usage   = "gh workflow list [options]"
+aliases = ["workflow ls"]
+adds    = ["read_remote"]
+options.all      = { flag = ["-a", "--all"] }
+options.jq       = { flag = ["-q", "--jq"], value = "required" }
+options.json     = { flag = ["--json"], value = "required", repeated = true }
+options.limit    = { flag = ["-L", "--limit"], value = "required" }
+options.template = { flag = ["-t", "--template"], value = "required" }
+options.repo     = { flag = ["-R", "--repo"], value = "required", adds = ["target_override"] }
+
+[shell.workflow_view]
+usage = "gh workflow view [options] [<workflow>]"
+adds  = ["read_remote"]
+options.ref  = { flag = ["-r", "--ref"], value = "required" }
+options.web  = { flag = ["-w", "--web"], adds = ["open_browser"] }
+options.yaml = { flag = ["-y", "--yaml"] }
+options.repo = { flag = ["-R", "--repo"], value = "required", adds = ["target_override"] }
+
+# `-F key=@file` reads the value from a file. `--json` (a flag here) reads the inputs from stdin.
+[shell.workflow_run]
+usage = "gh workflow run [options] [<workflow>]"
+adds  = ["write_remote", "trigger_ci"]
+options.field     = { flag = ["-F", "--field"], value = "required", repeated = true, when = [{ like = "*=@*", adds = ["upload_file"] }] }
+options.json      = { flag = ["--json"] }
+options.raw_field = { flag = ["-f", "--raw-field"], value = "required", repeated = true }
+options.ref       = { flag = ["-r", "--ref"], value = "required" }
+options.repo      = { flag = ["-R", "--repo"], value = "required", adds = ["target_override"] }
+
+# ---------------------------------------------------------------------------------------------
+# release
+
+[shell.release_list]
+usage   = "gh release list [options]"
+aliases = ["release ls"]
+adds    = ["read_remote"]
+options.exclude_drafts       = { flag = ["--exclude-drafts"] }
+options.exclude_pre_releases = { flag = ["--exclude-pre-releases"] }
+options.jq       = { flag = ["-q", "--jq"], value = "required" }
+options.json     = { flag = ["--json"], value = "required", repeated = true }
+options.limit    = { flag = ["-L", "--limit"], value = "required" }
+options.order    = { flag = ["-O", "--order"], value = "required" }
+options.template = { flag = ["-t", "--template"], value = "required" }
+options.repo     = { flag = ["-R", "--repo"], value = "required", adds = ["target_override"] }
+
+[shell.release_view]
+usage = "gh release view [options] [<tag>]"
+adds  = ["read_remote"]
+options.jq       = { flag = ["-q", "--jq"], value = "required" }
+options.json     = { flag = ["--json"], value = "required", repeated = true }
+options.template = { flag = ["-t", "--template"], value = "required" }
+options.web      = { flag = ["-w", "--web"], adds = ["open_browser"] }
+options.repo     = { flag = ["-R", "--repo"], value = "required", adds = ["target_override"] }
+
+# Each word after <tag> is a local file that gh uploads as an asset. `--latest=false` is
+# `unmodeled`.
+[shell.release_create]
+usage   = "gh release create [options] [<tag>] [<files>...]"
+aliases = ["release new"]
+adds    = ["write_remote"]
+options.discussion_category = { flag = ["--discussion-category"], value = "required" }
+options.draft               = { flag = ["-d", "--draft"] }
+options.fail_on_no_commits  = { flag = ["--fail-on-no-commits"] }
+options.generate_notes      = { flag = ["--generate-notes"] }
+options.latest              = { flag = ["--latest"] }
+options.notes               = { flag = ["-n", "--notes"], value = "required" }
+options.notes_file          = { flag = ["-F", "--notes-file"], value = "required", adds = ["upload_file"] }
+options.notes_from_tag      = { flag = ["--notes-from-tag"] }
+options.notes_start_tag     = { flag = ["--notes-start-tag"], value = "required" }
+options.prerelease          = { flag = ["-p", "--prerelease"] }
+options.target              = { flag = ["--target"], value = "required" }
+options.title               = { flag = ["-t", "--title"], value = "required" }
+options.verify_tag          = { flag = ["--verify-tag"] }
+options.repo                = { flag = ["-R", "--repo"], value = "required", adds = ["target_override"] }
+operands.files              = { adds = ["upload_file"] }
+
+# `--output -` writes the asset to stdout, so nothing is written to disk.
+[shell.release_download]
+usage = "gh release download [options] [<tag>]"
+adds  = ["read_remote", "write_local"]
+options.allow_escape_sequences = { flag = ["--allow-escape-sequences"] }
+options.archive       = { flag = ["-A", "--archive"], value = "required" }
+options.clobber       = { flag = ["--clobber"], adds = ["overwrite_local"] }
+options.dir           = { flag = ["-D", "--dir"], value = "required" }
+options.output        = { flag = ["-O", "--output"], value = "required", when = [{ like = "-", removes = ["write_local", "overwrite_local"] }] }
+options.pattern       = { flag = ["-p", "--pattern"], value = "required", repeated = true }
+options.skip_existing = { flag = ["--skip-existing"] }
+options.repo          = { flag = ["-R", "--repo"], value = "required", adds = ["target_override"] }
+
+[shell.release_delete]
+usage = "gh release delete [options] <tag>"
+adds  = ["delete_remote"]
+options.cleanup_tag = { flag = ["--cleanup-tag"] }
+options.yes         = { flag = ["-y", "--yes"] }
+options.repo        = { flag = ["-R", "--repo"], value = "required", adds = ["target_override"] }
+
+# ---------------------------------------------------------------------------------------------
+# search (read only; here `-R/--repo` is a search filter, not a target, and it repeats)
+
+[shell.search_code]
+usage = "gh search code [options] [<query>...]"
+adds  = ["read_remote"]
+options.extension = { flag = ["--extension"], value = "required" }
+options.filename  = { flag = ["--filename"], value = "required" }
+options.jq        = { flag = ["-q", "--jq"], value = "required" }
+options.json      = { flag = ["--json"], value = "required", repeated = true }
+options.language  = { flag = ["--language"], value = "required" }
+options.limit     = { flag = ["-L", "--limit"], value = "required" }
+options.match     = { flag = ["--match"], value = "required", repeated = true }
+options.owner     = { flag = ["--owner"], value = "required", repeated = true }
+options.repo      = { flag = ["-R", "--repo"], value = "required", repeated = true }
+options.size      = { flag = ["--size"], value = "required" }
+options.template  = { flag = ["-t", "--template"], value = "required" }
+options.web       = { flag = ["-w", "--web"], adds = ["open_browser"] }
+
+[shell.search_commits]
+usage = "gh search commits [options] [<query>...]"
+adds  = ["read_remote"]
+options.author          = { flag = ["--author"], value = "required" }
+options.author_date     = { flag = ["--author-date"], value = "required" }
+options.author_email    = { flag = ["--author-email"], value = "required" }
+options.author_name     = { flag = ["--author-name"], value = "required" }
+options.committer       = { flag = ["--committer"], value = "required" }
+options.committer_date  = { flag = ["--committer-date"], value = "required" }
+options.committer_email = { flag = ["--committer-email"], value = "required" }
+options.committer_name  = { flag = ["--committer-name"], value = "required" }
+options.hash            = { flag = ["--hash"], value = "required" }
+options.jq              = { flag = ["-q", "--jq"], value = "required" }
+options.json            = { flag = ["--json"], value = "required", repeated = true }
+options.limit           = { flag = ["-L", "--limit"], value = "required" }
+options.merge           = { flag = ["--merge"] }
+options.order           = { flag = ["--order"], value = "required" }
+options.owner           = { flag = ["--owner"], value = "required", repeated = true }
+options.parent          = { flag = ["--parent"], value = "required" }
+options.repo            = { flag = ["-R", "--repo"], value = "required", repeated = true }
+options.sort            = { flag = ["--sort"], value = "required" }
+options.template        = { flag = ["-t", "--template"], value = "required" }
+options.tree            = { flag = ["--tree"], value = "required" }
+options.visibility      = { flag = ["--visibility"], value = "required", repeated = true }
+options.web             = { flag = ["-w", "--web"], adds = ["open_browser"] }
+
+[shell.search_issues]
+usage = "gh search issues [options] [<query>...]"
+adds  = ["read_remote"]
+options.app           = { flag = ["--app"], value = "required" }
+options.archived      = { flag = ["--archived"] }
+options.assignee      = { flag = ["--assignee"], value = "required" }
+options.author        = { flag = ["--author"], value = "required" }
+options.closed        = { flag = ["--closed"], value = "required" }
+options.commenter     = { flag = ["--commenter"], value = "required" }
+options.comments      = { flag = ["--comments"], value = "required" }
+options.created       = { flag = ["--created"], value = "required" }
+options.include_prs   = { flag = ["--include-prs"] }
+options.interactions  = { flag = ["--interactions"], value = "required" }
+options.involves      = { flag = ["--involves"], value = "required" }
+options.jq            = { flag = ["-q", "--jq"], value = "required" }
+options.json          = { flag = ["--json"], value = "required", repeated = true }
+options.label         = { flag = ["--label"], value = "required", repeated = true }
+options.language      = { flag = ["--language"], value = "required" }
+options.limit         = { flag = ["-L", "--limit"], value = "required" }
+options.locked        = { flag = ["--locked"] }
+options.match         = { flag = ["--match"], value = "required", repeated = true }
+options.mentions      = { flag = ["--mentions"], value = "required" }
+options.milestone     = { flag = ["--milestone"], value = "required" }
+options.no_assignee   = { flag = ["--no-assignee"] }
+options.no_label      = { flag = ["--no-label"] }
+options.no_milestone  = { flag = ["--no-milestone"] }
+options.no_project    = { flag = ["--no-project"] }
+options.order         = { flag = ["--order"], value = "required" }
+options.owner         = { flag = ["--owner"], value = "required", repeated = true }
+options.project       = { flag = ["--project"], value = "required" }
+options.reactions     = { flag = ["--reactions"], value = "required" }
+options.repo          = { flag = ["-R", "--repo"], value = "required", repeated = true }
+options.search_type   = { flag = ["--search-type"], value = "required" }
+options.sort          = { flag = ["--sort"], value = "required" }
+options.state         = { flag = ["--state"], value = "required" }
+options.team_mentions = { flag = ["--team-mentions"], value = "required" }
+options.template      = { flag = ["-t", "--template"], value = "required" }
+options.updated       = { flag = ["--updated"], value = "required" }
+options.visibility    = { flag = ["--visibility"], value = "required", repeated = true }
+options.web           = { flag = ["-w", "--web"], adds = ["open_browser"] }
+
+[shell.search_prs]
+usage = "gh search prs [options] [<query>...]"
+adds  = ["read_remote"]
+options.app              = { flag = ["--app"], value = "required" }
+options.archived         = { flag = ["--archived"] }
+options.assignee         = { flag = ["--assignee"], value = "required" }
+options.author           = { flag = ["--author"], value = "required" }
+options.base             = { flag = ["-B", "--base"], value = "required" }
+options.checks           = { flag = ["--checks"], value = "required" }
+options.closed           = { flag = ["--closed"], value = "required" }
+options.commenter        = { flag = ["--commenter"], value = "required" }
+options.comments         = { flag = ["--comments"], value = "required" }
+options.created          = { flag = ["--created"], value = "required" }
+options.draft            = { flag = ["--draft"] }
+options.head             = { flag = ["-H", "--head"], value = "required" }
+options.interactions     = { flag = ["--interactions"], value = "required" }
+options.involves         = { flag = ["--involves"], value = "required" }
+options.jq               = { flag = ["-q", "--jq"], value = "required" }
+options.json             = { flag = ["--json"], value = "required", repeated = true }
+options.label            = { flag = ["--label"], value = "required", repeated = true }
+options.language         = { flag = ["--language"], value = "required" }
+options.limit            = { flag = ["-L", "--limit"], value = "required" }
+options.locked           = { flag = ["--locked"] }
+options.match            = { flag = ["--match"], value = "required", repeated = true }
+options.mentions         = { flag = ["--mentions"], value = "required" }
+options.merged           = { flag = ["--merged"] }
+options.merged_at        = { flag = ["--merged-at"], value = "required" }
+options.milestone        = { flag = ["--milestone"], value = "required" }
+options.no_assignee      = { flag = ["--no-assignee"] }
+options.no_label         = { flag = ["--no-label"] }
+options.no_milestone     = { flag = ["--no-milestone"] }
+options.no_project       = { flag = ["--no-project"] }
+options.order            = { flag = ["--order"], value = "required" }
+options.owner            = { flag = ["--owner"], value = "required", repeated = true }
+options.project          = { flag = ["--project"], value = "required" }
+options.reactions        = { flag = ["--reactions"], value = "required" }
+options.repo             = { flag = ["-R", "--repo"], value = "required", repeated = true }
+options.review           = { flag = ["--review"], value = "required" }
+options.review_requested = { flag = ["--review-requested"], value = "required" }
+options.reviewed_by      = { flag = ["--reviewed-by"], value = "required" }
+options.sort             = { flag = ["--sort"], value = "required" }
+options.state            = { flag = ["--state"], value = "required" }
+options.team_mentions    = { flag = ["--team-mentions"], value = "required" }
+options.template         = { flag = ["-t", "--template"], value = "required" }
+options.updated          = { flag = ["--updated"], value = "required" }
+options.visibility       = { flag = ["--visibility"], value = "required", repeated = true }
+options.web              = { flag = ["-w", "--web"], adds = ["open_browser"] }
+
+[shell.search_repos]
+usage = "gh search repos [options] [<query>...]"
+adds  = ["read_remote"]
+options.archived           = { flag = ["--archived"] }
+options.created            = { flag = ["--created"], value = "required" }
+options.followers          = { flag = ["--followers"], value = "required" }
+options.forks              = { flag = ["--forks"], value = "required" }
+options.good_first_issues  = { flag = ["--good-first-issues"], value = "required" }
+options.help_wanted_issues = { flag = ["--help-wanted-issues"], value = "required" }
+options.include_forks      = { flag = ["--include-forks"], value = "required" }
+options.jq                 = { flag = ["-q", "--jq"], value = "required" }
+options.json               = { flag = ["--json"], value = "required", repeated = true }
+options.language           = { flag = ["--language"], value = "required" }
+options.license            = { flag = ["--license"], value = "required", repeated = true }
+options.limit              = { flag = ["-L", "--limit"], value = "required" }
+options.match              = { flag = ["--match"], value = "required", repeated = true }
+options.number_topics      = { flag = ["--number-topics"], value = "required" }
+options.order              = { flag = ["--order"], value = "required" }
+options.owner              = { flag = ["--owner"], value = "required", repeated = true }
+options.size               = { flag = ["--size"], value = "required" }
+options.sort               = { flag = ["--sort"], value = "required" }
+options.stars              = { flag = ["--stars"], value = "required" }
+options.template           = { flag = ["-t", "--template"], value = "required" }
+options.topic              = { flag = ["--topic"], value = "required", repeated = true }
+options.updated            = { flag = ["--updated"], value = "required" }
+options.visibility         = { flag = ["--visibility"], value = "required", repeated = true }
+options.web                = { flag = ["-w", "--web"], adds = ["open_browser"] }
+
+# ---------------------------------------------------------------------------------------------
+# auth (status and token only; login, logout, refresh, switch, and setup-git are not modeled)
+
+# gh refreshes an expiring token, or removes a stored one whose refresh token is refused, unless
+# `--no-refresh` is given. Here `-t` is `--show-token`, and `--jq` and `--template` have no short
+# form.
+[shell.auth_status]
+usage = "gh auth status [options]"
+adds  = ["read_remote", "write_credentials"]
+options.active     = { flag = ["-a", "--active"] }
+options.hostname   = { flag = ["-h", "--hostname"], value = "required" }
+options.jq         = { flag = ["--jq"], value = "required" }
+options.json       = { flag = ["--json"], value = "required", repeated = true }
+options.no_refresh = { flag = ["--no-refresh"], removes = ["write_credentials"] }
+options.show_token = { flag = ["-t", "--show-token"], adds = ["reveal_token"] }
+options.template   = { flag = ["--template"], value = "required" }
+
+[shell.auth_token]
+usage = "gh auth token [options]"
+adds  = ["reveal_token", "write_credentials"]
+options.hostname   = { flag = ["-h", "--hostname"], value = "required" }
+options.no_refresh = { flag = ["--no-refresh"], removes = ["write_credentials"] }
+options.user       = { flag = ["-u", "--user"], value = "required" }
+
+# ---------------------------------------------------------------------------------------------
+# api
+#
+# The method is GET, or POST when a -f, -F, or --input is given and -X is not. gh upper-cases the
+# -X value. So -X adds `write_remote` and `delete_remote`, and only an exact GET or HEAD spelling
+# (upper or lower case) takes both away, and only an exact POST, PUT, or PATCH spelling takes
+# `delete_remote` away. A mixed-case method keeps both, which over-states and never under-states.
+# A GraphQL query is a POST with -f, so it is `write_remote` even when it only reads.
+# An endpoint with `://` is used as an absolute URL, so it adds `target_override`.
+[shell.api]
+usage = "gh api [options] <endpoint>"
+adds  = ["read_remote"]
+options.allow_escape_sequences = { flag = ["--allow-escape-sequences"] }
+options.cache     = { flag = ["--cache"], value = "required" }
+options.field     = { flag = ["-F", "--field"], value = "required", repeated = true, adds = ["write_remote"], when = [{ like = "*=@*", adds = ["upload_file"] }] }
+options.header    = { flag = ["-H", "--header"], value = "required", repeated = true }
+options.hostname  = { flag = ["--hostname"], value = "required", adds = ["target_override"] }
+options.include   = { flag = ["-i", "--include"] }
+options.input     = { flag = ["--input"], value = "required", adds = ["write_remote", "upload_file"] }
+options.jq        = { flag = ["-q", "--jq"], value = "required" }
+options.method    = { flag = ["-X", "--method"], value = "required", adds = ["write_remote", "delete_remote"], when = [
+  { like = "GET", removes = ["write_remote", "delete_remote"] },
+  { like = "get", removes = ["write_remote", "delete_remote"] },
+  { like = "HEAD", removes = ["write_remote", "delete_remote"] },
+  { like = "head", removes = ["write_remote", "delete_remote"] },
+  { like = "POST", removes = ["delete_remote"] },
+  { like = "post", removes = ["delete_remote"] },
+  { like = "PUT", removes = ["delete_remote"] },
+  { like = "put", removes = ["delete_remote"] },
+  { like = "PATCH", removes = ["delete_remote"] },
+  { like = "patch", removes = ["delete_remote"] },
+] }
+options.paginate  = { flag = ["--paginate"] }
+options.preview   = { flag = ["-p", "--preview"], value = "required", repeated = true }
+options.raw_field = { flag = ["-f", "--raw-field"], value = "required", repeated = true, adds = ["write_remote"] }
+options.silent    = { flag = ["--silent"] }
+options.slurp     = { flag = ["--slurp"] }
+options.template  = { flag = ["-t", "--template"], value = "required" }
+operands.endpoint = { when = [{ like = "*://*", adds = ["target_override"] }] }
