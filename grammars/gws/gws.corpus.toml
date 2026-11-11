@@ -1392,3 +1392,123 @@ argv = ["gws", "calendar", "acl", "insert", "--params", '{"calendarId":"primary"
 action = "calendar_acl_insert"
 fields = { params = '{"calendarId":"primary"}', json = '{"role":"reader","scope":{"type":"user","value":"x@example.org"}}' }
 effects = ["share_external", "make_public", "send_email"]
+
+# --- independent verifier cases, round 2 (against 568a40d) ---
+
+# V-1 fix: publish in any case, through a \u escape, and with the `=` form; dry run removes it.
+[[case]]
+argv = ["gws", "drive", "revisions", "update", "--params", '{"fileId":"f1","revisionId":"head"}', '--json={ "PUBLISHED" : true }']
+action = "drive_revisions_update"
+fields = { params = '{"fileId":"f1","revisionId":"head"}', json = '{ "PUBLISHED" : true }' }
+effects = ["write_data", "make_public", "share_external"]
+
+[[case]]
+argv = ["gws", "drive", "revisions", "update", "--json", '{"published":true}']
+action = "drive_revisions_update"
+fields = { json = '{"published":true}' }
+effects = ["write_data", "make_public", "share_external"]
+
+[[case]]
+argv = ["gws", "drive", "revisions", "update", "--json", '{"published":true}', "--dry-run"]
+action = "drive_revisions_update"
+fields = { json = '{"published":true}', dry_run = true }
+effects = []
+
+# A revision write without publish stays write_data (no over-flag on keepForever).
+[[case]]
+argv = ["gws", "drive", "revisions", "update", "--params", '{"fileId":"f1","revisionId":"1"}', "--json", '{"keepForever":true}']
+action = "drive_revisions_update"
+fields = { params = '{"fileId":"f1","revisionId":"1"}', json = '{"keepForever":true}' }
+effects = ["write_data"]
+
+# V-2 fix: send_email on every create, even with sendNotificationEmail false (duplicate keys: last wins in serde_json).
+[[case]]
+argv = ["gws", "drive", "permissions", "create", "--params", '{"fileId":"f1","sendNotificationEmail":false}', "--json", '{"type":"group","role":"writer","emailAddress":"g@example.org"}']
+action = "drive_permissions_create"
+fields = { params = '{"fileId":"f1","sendNotificationEmail":false}', json = '{"type":"group","role":"writer","emailAddress":"g@example.org"}' }
+effects = ["share_external", "send_email"]
+
+# permissions update: a role change keeps share_external and make_public.
+[[case]]
+argv = ["gws", "drive", "permissions", "update", "--params", '{"fileId":"f1","permissionId":"p1","transferOwnership":true}', "--json", '{"role":"owner"}']
+action = "drive_permissions_update"
+fields = { params = '{"fileId":"f1","permissionId":"p1","transferOwnership":true}', json = '{"role":"owner"}' }
+effects = ["share_external", "make_public"]
+
+# V-3 fix on patch, with sendNotifications false still flagged (cannot prove false with like).
+[[case]]
+argv = ["gws", "calendar", "acl", "patch", "--params", '{"calendarId":"primary","ruleId":"r","sendNotifications":false}', "--json", '{"role":"writer"}']
+action = "calendar_acl_patch"
+fields = { params = '{"calendarId":"primary","ruleId":"r","sendNotifications":false}', json = '{"role":"writer"}' }
+effects = ["share_external", "make_public", "send_email"]
+
+# V-4 fix: parents in a copy body, in mixed case, and through \u.
+[[case]]
+argv = ["gws", "drive", "files", "copy", "--params", '{"fileId":"f1"}', "--json", '{"name":"c","Parents":["pub"]}']
+action = "drive_files_copy"
+fields = { params = '{"fileId":"f1"}', json = '{"name":"c","Parents":["pub"]}' }
+effects = ["write_data", "share_external"]
+
+[[case]]
+argv = ["gws", "drive", "files", "create", "--upload", "a.txt", "--json", '{"name":"a","parents":["pub"]}']
+action = "drive_files_create"
+fields = { upload = "a.txt", json = '{"name":"a","parents":["pub"]}' }
+effects = ["write_data", "share_external", "upload_file"]
+
+# A create with no parents stays write_data.
+[[case]]
+argv = ["gws", "drive", "files", "create", "--json", '{"name":"a"}']
+action = "drive_files_create"
+fields = { json = '{"name":"a"}' }
+effects = ["write_data"]
+
+# V-5 fix: threads modify with TRASH.
+[[case]]
+argv = ["gws", "gmail", "users", "threads", "modify", "--params", '{"userId":"me","id":"t1"}', "--json", '{"addLabelIds":["TRASH"]}']
+action = "gmail_users_threads_modify"
+fields = { params = '{"userId":"me","id":"t1"}', json = '{"addLabelIds":["TRASH"]}' }
+effects = ["write_data", "trash_data"]
+
+# V-6 fix: snake_case key.
+[[case]]
+argv = ["gws", "calendar", "events", "patch", "--params", '{"calendarId":"primary","eventId":"e","send_updates":"all"}', "--json", '{"summary":"x"}']
+action = "calendar_events_patch"
+fields = { params = '{"calendarId":"primary","eventId":"e","send_updates":"all"}', json = '{"summary":"x"}' }
+effects = ["write_data", "send_email"]
+
+# Attendees without sendUpdates: Calendar's default is no notification ("The default is false").
+[[case]]
+argv = ["gws", "calendar", "events", "insert", "--params", '{"calendarId":"primary"}', "--json", '{"summary":"x","attendees":[{"email":"a@example.org"}]}']
+action = "calendar_events_insert"
+fields = { params = '{"calendarId":"primary"}', json = '{"summary":"x","attendees":[{"email":"a@example.org"}]}' }
+effects = ["write_data"]
+
+# Noted, not failed (MINOR): settings that loosen who may share, but grant no access themselves.
+[[case]]
+argv = ["gws", "drive", "files", "update", "--params", '{"fileId":"f1"}', "--json", '{"writersCanShare":true,"copyRequiresWriterPermission":false}']
+action = "drive_files_update"
+fields = { params = '{"fileId":"f1"}', json = '{"writersCanShare":true,"copyRequiresWriterPermission":false}' }
+effects = ["write_data"]
+
+[[case]]
+argv = ["gws", "drive", "drives", "update", "--params", '{"driveId":"d1"}', "--json", '{"restrictions":{"domainUsersOnly":false,"driveMembersOnly":false}}']
+action = "drive_drives_update"
+fields = { params = '{"driveId":"d1"}', json = '{"restrictions":{"domainUsersOnly":false,"driveMembersOnly":false}}' }
+effects = ["write_data"]
+
+# Noted, not failed (MINOR): moving an event to another calendar gives it that calendar's ACL.
+[[case]]
+argv = ["gws", "calendar", "events", "move", "--params", '{"calendarId":"primary","eventId":"e","destination":"public@group.calendar.google.com"}']
+action = "calendar_events_move"
+fields = { params = '{"calendarId":"primary","eventId":"e","destination":"public@group.calendar.google.com"}' }
+effects = ["write_data"]
+
+# --- round 2 case that FAILS on 568a40d (pins R2-1) ---
+# File.inheritedPermissionsDisabled=false re-enables inherited permissions (Discovery drive v3
+# schemas.File: "Inherited permissions are enabled by default"), so the file gets its folder's
+# audience again: the same route as `parents`, which now adds share_external.
+[[case]]
+argv = ["gws", "drive", "files", "update", "--params", '{"fileId":"f1"}', "--json", '{"inheritedPermissionsDisabled":false}']
+action = "drive_files_update"
+fields = { params = '{"fileId":"f1"}', json = '{"inheritedPermissionsDisabled":false}' }
+effects = ["write_data", "share_external"]
