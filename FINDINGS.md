@@ -164,8 +164,8 @@ kubectl delete customResourceDefinitions x
 
 kubectl lowercases resource names. `like` has no case folding, no character class, and no negation.
 **Workaround:** the kubectl grammar lists all 64 casings of `*secret*` to add `read_secrets`.
-`customresourcedefinition` has about 2^24 casings, so only 4 are listed, and the README states the
-limit. A pattern such as "not localhost" cannot be written (kubectl, vercel).
+`customresourcedefinition` has about 2^24 casings, so the grammar matches every casing of the
+shorter `*efin*` instead, which also over-flags any custom type that contains it. A pattern such as "not localhost" cannot be written (kubectl, vercel).
 
 ### Option and value spellings the parser cannot read
 
