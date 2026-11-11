@@ -25,7 +25,7 @@ found, are in [FINDINGS.md](FINDINGS.md).
 | git | Git, git/git | `git` | 2.56.1 | 54 | 386 | 10 | [grammars/git](grammars/git/) |
 | gws | Google Workspace CLI, googleworkspace/cli | `gws` | 0.22.5 | 102 | 253 | 8 | [grammars/gws](grammars/gws/) |
 | kubectl | Kubernetes, kubernetes/kubectl | `kubectl` | v1.37.2 | 36 | 308 | 12 | [grammars/kubectl](grammars/kubectl/) |
-| npm (in review) | npm CLI, npm/cli | `npm` | 12.2.2 | 32 | 200 | 9 | in review |
+| npm | npm CLI, npm/cli | `npm` | 12.2.2 | 32 | 257 | 9 | [grammars/npm](grammars/npm/) |
 | pip | pip, pypa/pip | `pip` | 26.3 | 27 | 175 | 8 | [grammars/pip](grammars/pip/) |
 | stripe | Stripe CLI, stripe/stripe-cli | `stripe` | 1.55.10 | 63 | 227 | 8 | [grammars/stripe](grammars/stripe/) |
 | supabase | Supabase CLI, supabase/cli | `supabase` | 3.1.0 | 72 | 239 | 8 | [grammars/supabase](grammars/supabase/) |

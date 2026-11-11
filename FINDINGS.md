@@ -1,7 +1,7 @@
 # Findings: tool grammars on 13 real CLIs
 
 This report says how well the Strands Box tool-grammar feature handles real command-line tools.
-It is based on 13 grammars (12 on `main`, npm in review), all at Box `8a5f9ba262a5`
+It is based on 13 grammars, all at Box `8a5f9ba262a5`
 (`BOX_REVISION`). Each claim names the check it rests on:
 
 - **Level 1**: Box's loader, parser, policy engine, and fuzz test over the golden cases (CI).
@@ -22,7 +22,7 @@ cannot read is `unmodeled`, and the default-deny refuses it.
 The limits are in what a grammar can express. Many real CLI parsers do things the grammar format
 cannot describe. Each grammar works around them by leaving lines `unmodeled` or by over-stating an
 effect. That is safe, but it costs coverage. Golden tests alone were not enough: source verification
-found a missed dangerous effect in 11 of the 12 grammars on `main`. We also found one Box defect and
+found a missed dangerous effect in 11 of the 13 grammars. We also found one Box defect and
 two runtime limits that stop some real CLIs from running.
 
 | Worked | Did not work, or needed a workaround |
@@ -376,9 +376,9 @@ All at Box `8a5f9ba262a5260b269b25ac6a75bf74abcdc89c`, found by real-CLI executi
 ## What independent verification caught
 
 Every grammar passed Level 1 and Level 2 before verification. A second reviewer then read the CLI's
-source at the checked version and wrote more cases. In round 1, 11 of the 12 grammars on `main` had
+source at the checked version and wrote more cases. In round 1, 11 of the 13 grammars had
 at least one BLOCKER: a dangerous effect that the grammar missed, so that a policy that forbids the
-effect would permit the line. gh had one MAJOR. Each grammar passed in a later round.
+effect would permit the line. gh and npm had one MAJOR each. Each grammar passed in a later round.
 
 | CLI | Rounds | Round-1 BLOCKERs | Example |
 |---|---|---|---|
@@ -394,7 +394,7 @@ effect would permit the line. gh had one MAJOR. Each grammar passed in a later r
 | uv | 3 | 1 | `uv pip list --python ./x` executes `./x`. Round 2 found one more: `uv python list ./x` |
 | valyu | 2 | 2 | `workflows run` with no `-m` can run the most expensive mode; a top-level `-p` inside a value changes the account |
 | vercel | 3 | 1 | `vercel deploy --env VERCEL_TOKEN` copies a local secret into the deployment. Round 2 found one more: the same copy through `vercel.json` |
-| npm | in review | | |
+| npm | 3 | 0 (1 MAJOR) | `npm init --workspace x` installs packages and may run scripts, but read as `modify_package_json` only |
 
 Golden cases prove that a grammar does what its author meant. They do not prove that the author
 understood the CLI. Most BLOCKERs came from CLI behaviour that the help text does not show: a parser
