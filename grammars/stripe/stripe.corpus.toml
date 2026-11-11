@@ -1259,3 +1259,107 @@ argv = ["stripe", "customers", "list", "-v", "2024-06-20"]
 action = "customers_list"
 fields = { stripe_version = "2024-06-20" }
 effects = ["network"]
+
+# --- independent verifier cases, round 2 ---
+# S1: any invoice create/update carries move_money, by flag, by -d, or bare.
+[[case]]
+argv = ["stripe", "invoices", "create", "--customer", "cus_1", "--data", "auto_advance=true"]
+action = "invoices_create"
+fields = { customer = "cus_1", data = ["auto_advance=true"] }
+effects = ["move_money", "network", "write_data"]
+
+[[case]]
+argv = ["stripe", "invoices", "update", "in_1", "-dauto_advance=true"]
+action = "invoices_update"
+fields = { data = ["auto_advance=true"], invoice = "in_1" }
+effects = ["move_money", "network", "write_data"]
+
+# The dry run still removes it (operation.go::runOperationCmd).
+[[case]]
+argv = ["stripe", "invoices", "create", "--customer", "cus_1", "--auto-advance", "--dry-run"]
+action = "invoices_create"
+fields = { auto_advance = "", customer = "cus_1", dry_run = true }
+effects = ["network"]
+
+# S2: pause through -d.
+[[case]]
+argv = ["stripe", "subscriptions", "pause", "sub_1", "-d", "invoicing_behavior=invoice"]
+action = "subscriptions_pause"
+fields = { data = ["invoicing_behavior=invoice"], subscription = "sub_1" }
+effects = ["move_money", "network", "write_data"]
+
+# migrate changes the billing mode only.
+[[case]]
+argv = ["stripe", "subscriptions", "migrate", "sub_1", "--billing-mode.type", "flexible"]
+action = "subscriptions_migrate"
+fields = { billing_mode_type = "flexible", subscription = "sub_1" }
+effects = ["network", "write_data"]
+
+# S3: the endpoint named through -d.
+[[case]]
+argv = ["stripe", "events", "resend", "evt_1", "-dwebhook_endpoint=we_1"]
+action = "events_resend"
+fields = { data = ["webhook_endpoint=we_1"], event = "evt_1" }
+effects = ["forward_events", "network", "write_data"]
+
+# S5
+[[case]]
+argv = ["stripe", "listen", "--print-secret", "--api-key", "sk_live_x"]
+action = "listen"
+fields = { api_key = "sk_live_x", print_secret = true }
+effects = ["api_key_override", "credentials", "live_mode", "network"]
+
+# S6: refunds cancel keeps write_data only.
+[[case]]
+argv = ["stripe", "refunds", "cancel", "re_1", "--live"]
+action = "refunds_cancel"
+fields = { live = true, refund = "re_1" }
+effects = ["live_mode", "network", "write_data"]
+
+# Other money paths among modeled resources.
+[[case]]
+argv = ["stripe", "charges", "capture", "ch_1", "--amount", "500"]
+action = "charges_capture"
+fields = { amount = "500", charge = "ch_1" }
+effects = ["move_money", "network", "write_data"]
+
+[[case]]
+argv = ["stripe", "invoices", "pay", "in_1", "--paid-out-of-band=true"]
+action = "invoices_pay"
+fields = { invoice = "in_1", paid_out_of_band = "true" }
+effects = ["move_money", "network", "write_data"]
+
+[[case]]
+argv = ["stripe", "subscriptions", "create", "--customer", "cus_1", "--payment-behavior", "error_if_incomplete"]
+action = "subscriptions_create"
+fields = { customer = "cus_1", payment_behavior = "error_if_incomplete" }
+effects = ["move_money", "network", "write_data"]
+
+[[case]]
+argv = ["stripe", "subscriptions", "cancel", "sub_1", "-d", "invoice_now=true", "-c"]
+action = "subscriptions_cancel"
+fields = { confirm = true, data = ["invoice_now=true"], subscription_exposed_id = "sub_1" }
+effects = ["delete_data", "move_money", "network", "skip_prompt"]
+
+# charges update has no capture parameter (specs_gen.go V1ChargesUpdate).
+[[case]]
+argv = ["stripe", "charges", "update", "ch_1", "--description", "x"]
+action = "charges_update"
+fields = { charge = "ch_1", description = "x" }
+effects = ["network", "write_data"]
+
+# Checkout needs the buyer to pay; creating a session moves no money.
+[[case]]
+argv = ["stripe", "checkout", "sessions", "create", "--mode", "payment", "--success-url", "https://example.com/ok"]
+action = "checkout_sessions_create"
+fields = { mode = "payment", success_url = "https://example.com/ok" }
+effects = ["network", "write_data"]
+
+# Unmodeled money paths stay unmodeled (underscore names).
+[[case]]
+argv = ["stripe", "invoices", "finalize_invoice", "in_1"]
+action = "unmodeled"
+
+[[case]]
+argv = ["stripe", "payment_intents", "confirm", "pi_1"]
+action = "unmodeled"
