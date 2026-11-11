@@ -1172,3 +1172,294 @@ action = "unmodeled"
 [[case]]
 argv = ["cargo", "+nightly"]
 action = "unmodeled"
+
+# --- independent verifier cases ---
+# Written by the verifier from the cargo 1.99.1 source (5f94df478: src/bin/cargo/cli.rs,
+# main.rs, commands/*.rs, src/util/command_prelude.rs), rust 1.99.1 src/tools/clippy/src/main.rs,
+# src/tools/rustfmt/src/{cargo-fmt,bin}/main.rs, and rustup 1.29.3 src/cli/proxy_mode.rs.
+# A case marked EXPECTED-FAIL states what the CLI does and the grammar does not read.
+
+# cli.rs: -v (Count), -q, --color are global(true); accepted after the command.
+[[case]]
+argv = ["cargo", "build", "-vv", "--release", "-q", "--color=never"]
+action = "build"
+fields = { verbose = true, release = true, quiet = true, color = "never" }
+effects = ["network", "run_build_scripts", "update_lockfile"]
+
+# --locked before the command and --offline after it (both global(true)).
+[[case]]
+argv = ["cargo", "--locked", "check", "--offline"]
+action = "check"
+fields = { locked = true, offline = true }
+effects = ["run_build_scripts"]
+
+# --frozen = --locked + --offline (context/mod.rs offline_flag, locked_flag); --config still adds.
+[[case]]
+argv = ["cargo", "build", "--frozen", "--config", "net.offline=false"]
+action = "build"
+fields = { frozen = true, config = ["net.offline=false"] }
+effects = ["override_config", "run_build_scripts"]
+
+# --config is multi_opt (Append): `=` and separate forms collect.
+[[case]]
+argv = ["cargo", "--config=build.rustc-wrapper=\"/x\"", "doc", "--config", "k=1"]
+action = "doc"
+fields = { config = ["build.rustc-wrapper=\"/x\"", "k=1"] }
+effects = ["network", "override_config", "run_build_scripts", "update_lockfile"]
+
+# -Z attached in a cluster after the command.
+[[case]]
+argv = ["cargo", "check", "-vZunstable-options"]
+action = "check"
+fields = { verbose = true, unstable_features = ["unstable-options"] }
+effects = ["network", "override_config", "run_build_scripts", "update_lockfile"]
+
+# No prefix matching: clap in cargo does not set infer_long_args.
+[[case]]
+argv = ["cargo", "build", "--relea"]
+action = "unmodeled"
+
+# -C is not global and nightly-only.
+[[case]]
+argv = ["cargo", "-C", "/tmp/other", "build"]
+action = "unmodeled"
+
+# build takes no positional; `--` with nothing to fill is left over.
+[[case]]
+argv = ["cargo", "build", "--", "x"]
+action = "unmodeled"
+
+# Built-in aliases: aliased_command reads a user [alias] first, so `c` and `rm` can mean anything.
+[[case]]
+argv = ["cargo", "c", "--locked"]
+action = "unmodeled"
+
+[[case]]
+argv = ["cargo", "rm", "serde"]
+action = "unmodeled"
+
+# run ARGS is trailing_var_arg: after `--` every word goes to the program, not to cargo.
+[[case]]
+argv = ["cargo", "run", "--release", "--", "--config", "x=1"]
+action = "run"
+fields = { release = true, args_list = ["--config", "x=1"] }
+effects = ["execute_built_code", "network", "run_build_scripts", "update_lockfile"]
+
+# run: after the first positional, a cargo-looking flag belongs to the program.
+[[case]]
+argv = ["cargo", "run", "srv", "--config", "x=1"]
+action = "run"
+fields = { args_list = ["--config", "srv", "x=1"] }
+effects = ["execute_built_code", "network", "run_build_scripts", "update_lockfile"]
+
+# run: before the first positional, --config is cargo's own.
+[[case]]
+argv = ["cargo", "run", "--config", "x=1", "srv"]
+action = "run"
+fields = { config = ["x=1"], args_list = ["srv"] }
+effects = ["execute_built_code", "network", "override_config", "run_build_scripts", "update_lockfile"]
+
+# test: TESTNAME is not trailing, so a later --config is still cargo's (global).
+[[case]]
+argv = ["cargo", "test", "parse", "--config", "x=1"]
+action = "test"
+fields = { testname = "parse", config = ["x=1"] }
+effects = ["execute_built_code", "network", "override_config", "run_build_scripts", "update_lockfile"]
+
+# test: words after `--` go to the test binary (`last(true)`).
+[[case]]
+argv = ["cargo", "test", "--no-run", "--", "--config", "x=1"]
+action = "test"
+fields = { no_run = true, args_list = ["--config", "x=1"] }
+effects = ["network", "run_build_scripts", "update_lockfile"]
+
+# test: a second TESTNAME is refused by clap (ARGS needs `--`).
+[[case]]
+argv = ["cargo", "test", "a", "b"]
+action = "unmodeled"
+
+# publish -n is arg_dry_run: no upload, still verifies and resolves.
+[[case]]
+argv = ["cargo", "publish", "-n", "--registry", "my-reg"]
+action = "publish"
+fields = { dry_run = true, registry = "my-reg" }
+effects = ["network", "run_build_scripts", "update_lockfile"]
+
+# publish --no-verify skips the verify build but still uploads.
+[[case]]
+argv = ["cargo", "publish", "--no-verify", "--index", "https://example.invalid/index"]
+action = "publish"
+fields = { no_verify = true, index = "https://example.invalid/index" }
+effects = ["network", "publish_crate", "update_lockfile"]
+
+# publish --token (secret on the command line) is not modeled.
+[[case]]
+argv = ["cargo", "publish", "--token", "abc"]
+action = "unmodeled"
+
+# install --path / --root.
+[[case]]
+argv = ["cargo", "install", "--path", ".", "--root", "/opt/x"]
+action = "install"
+fields = { path = ".", root = "/opt/x" }
+effects = ["install_binary", "network", "run_build_scripts"]
+
+# install --git with --branch and a crate.
+[[case]]
+argv = ["cargo", "install", "--git", "https://example.invalid/x.git", "--branch", "main", "foo"]
+action = "install"
+fields = { git = "https://example.invalid/x.git", branch = "main", crate = ["foo"] }
+effects = ["install_binary", "network", "run_build_scripts"]
+
+# install --list only reads the install root.
+[[case]]
+argv = ["cargo", "install", "--list", "--root", "/r"]
+action = "install"
+fields = { list = true, root = "/r" }
+effects = []
+
+# install --vers is a clap alias of --version that the grammar does not declare.
+[[case]]
+argv = ["cargo", "install", "--vers", "1.0.0", "foo"]
+action = "unmodeled"
+
+# EXPECTED-FAIL. install --bin is optional_multi_opt (num_args 0..=1), so clap does not take
+# `--root` as its value. With crate operands, install.rs passes workspace None to compile_options,
+# so check_optional_opts does not run and the install goes on into /r. Verified with cargo 1.98.1
+# (same helper): `cargo install --bin --root R --list` lists R. The grammar reads root as absent
+# and `/r` as a crate.
+[[case]]
+argv = ["cargo", "install", "--bin", "--root", "/r", "foo"]
+action = "unmodeled"
+
+# EXPECTED-FAIL. Same shape: bare --example hides --config, so override_config is lost.
+[[case]]
+argv = ["cargo", "install", "--example", "--config", "build.rustc-wrapper=\"/x\"", "foo"]
+action = "unmodeled"
+
+# EXPECTED-FAIL. Same shape: bare --bin hides --git, so the source is not visible.
+[[case]]
+argv = ["cargo", "install", "--bin", "--git", "https://example.invalid/x.git", "foo"]
+action = "unmodeled"
+
+# clippy --fix (exact word, before `--`) switches cargo-clippy to `cargo fix`.
+[[case]]
+argv = ["cargo", "clippy", "--fix", "--allow-dirty"]
+action = "clippy"
+fields = { fix = true, allow_dirty = true }
+effects = ["network", "run_build_scripts", "update_lockfile", "write_source"]
+
+# clippy scans raw args, so `--fix` after -p still selects fix mode.
+[[case]]
+argv = ["cargo", "clippy", "-p", "--fix"]
+action = "clippy"
+fields = { package = ["--fix"] }
+effects = ["network", "run_build_scripts", "update_lockfile", "write_source"]
+
+# clippy stops its scan at `--`: a later --fix goes to clippy-driver and is not fix mode.
+[[case]]
+argv = ["cargo", "clippy", "--", "-D", "warnings", "--fix"]
+action = "clippy"
+fields = { lint_args = ["--fix", "-D", "warnings"] }
+effects = ["network", "pass_through_args", "run_build_scripts", "update_lockfile"]
+
+# cargo-clippy forwards --frozen to `cargo check`.
+[[case]]
+argv = ["cargo", "clippy", "--frozen"]
+action = "clippy"
+fields = { frozen = true }
+effects = ["run_build_scripts"]
+
+# A global option before an external subcommand.
+[[case]]
+argv = ["cargo", "-q", "clippy"]
+action = "unmodeled"
+
+# cargo-fmt: -p is num_args(1..), collects until the next flag.
+[[case]]
+argv = ["cargo", "fmt", "-p", "a", "b", "--check"]
+action = "fmt"
+fields = { package = ["a", "b"], check = true }
+effects = []
+
+# cargo-fmt has its own clap parser and no --offline.
+[[case]]
+argv = ["cargo", "fmt", "--offline"]
+action = "unmodeled"
+
+# EXPECTED-FAIL. cargo-fmt runs `rustfmt <files> ... --check --print-config default`; rustfmt
+# determine_operation reads --print-config before --check and File::create's the first free
+# argument (a crate source file) with the default config. So --check does not stop a write.
+[[case]]
+argv = ["cargo", "fmt", "--check", "--", "--print-config", "default"]
+action = "fmt"
+fields = { check = true, rustfmt_options = ["--print-config", "default"] }
+effects = ["pass_through_args", "write_source"]
+
+# EXPECTED-FAIL. rustup 1.29.3 proxy_mode.rs: `+<toolchain>` goes to Cfg::local_toolchain, which
+# installs a missing toolchain when auto-install is on (the default since 1.28.1). That download
+# happens even with --frozen, and before cargo starts.
+[[case]]
+argv = ["cargo", "+nightly", "--frozen", "fetch"]
+action = "fetch"
+fields = { toolchain = "nightly", frozen = true }
+effects = ["network"]
+
+# clean gc is a hidden nested subcommand; not modeled.
+[[case]]
+argv = ["cargo", "clean", "gc"]
+action = "unmodeled"
+
+# clean -n -p: the dry run still resolves the workspace (resolve_ws with dry_run) but writes nothing.
+[[case]]
+argv = ["cargo", "clean", "-n", "-p", "foo"]
+action = "clean"
+fields = { dry_run = true, package = ["foo"] }
+effects = ["network"]
+
+# clean --target-dir names the directory that is deleted.
+[[case]]
+argv = ["cargo", "clean", "--target-dir", "/"]
+action = "clean"
+fields = { target_dir = "/" }
+effects = ["delete_files"]
+
+# metadata --no-deps does not resolve.
+[[case]]
+argv = ["cargo", "metadata", "--no-deps", "--format-version", "1"]
+action = "metadata"
+fields = { no_deps = true, format_version = "1" }
+effects = []
+
+# update --aggressive is a clap alias of --recursive, not declared.
+[[case]]
+argv = ["cargo", "update", "--aggressive"]
+action = "unmodeled"
+
+# add --git with a dry run.
+[[case]]
+argv = ["cargo", "add", "-n", "serde", "--git", "https://example.invalid/serde.git"]
+action = "add"
+fields = { dry_run = true, dep_id = ["serde"], git = "https://example.invalid/serde.git" }
+effects = ["network"]
+
+# version accepts the global options after the command word.
+[[case]]
+argv = ["cargo", "version", "-v"]
+action = "version"
+fields = { verbose = true }
+effects = []
+
+# doc --open adds open_browser.
+[[case]]
+argv = ["cargo", "doc", "--open", "--no-deps", "--offline", "--locked"]
+action = "doc"
+fields = { open = true, no_deps = true, offline = true, locked = true }
+effects = ["open_browser", "run_build_scripts"]
+
+# vendor -s names another manifest.
+[[case]]
+argv = ["cargo", "vendor", "-s", "../other/Cargo.toml", "out"]
+action = "vendor"
+fields = { sync = ["../other/Cargo.toml"], path = "out" }
+effects = ["network", "override_config", "update_lockfile", "write_files"]
