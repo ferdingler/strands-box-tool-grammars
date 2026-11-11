@@ -1670,3 +1670,154 @@ argv = ["kubectl", "describe", "-k", "dir/"]
 action = "describe"
 fields = { kustomize = "dir/" }
 effects = ["cluster_read", "manifest_input", "read_secrets"]
+
+# --- independent verifier cases, round 2 ---
+# kubectl v1.37.2 source. EXPECTED-FAIL cases state the CLI's real effect.
+
+# EXPECTED-FAIL. schema.ParseResourceArg + shortcutExpander: `ns.` and `ns.v1.` resolve to namespaces.
+[[case]]
+argv = ["kubectl", "delete", "ns.v1.", "prod"]
+action = "delete"
+fields = { type = "ns.v1.", name = ["prod"] }
+effects = ["cluster_delete", "broad_delete"]
+
+[[case]]
+argv = ["kubectl", "delete", "ns.", "prod"]
+action = "delete"
+fields = { type = "ns.", name = ["prod"] }
+effects = ["cluster_delete", "broad_delete"]
+
+# EXPECTED-FAIL. coerceResourceForMatching lowercases, so camel case resolves to CRDs.
+[[case]]
+argv = ["kubectl", "delete", "customResourceDefinitions", "widgets.example.com"]
+action = "delete"
+fields = { type = "customResourceDefinitions", name = ["widgets.example.com"] }
+effects = ["cluster_delete", "broad_delete"]
+
+[[case]]
+argv = ["kubectl", "delete", "NS", "prod", "--dry-run=server"]
+action = "delete"
+fields = { type = "NS", name = ["prod"], dry_run = "server" }
+effects = []
+
+# Secrets have no categories (pkg/registry/core/secret/storage), so `all` excludes them.
+[[case]]
+argv = ["kubectl", "get", "all", "-o", "yaml"]
+action = "get"
+fields = { type = "all", output = "yaml" }
+effects = ["cluster_read"]
+
+[[case]]
+argv = ["kubectl", "get", "all,secrets", "-o", "jsonpath={.items[*].data}"]
+action = "get"
+fields = { type = "all,secrets", output = "jsonpath={.items[*].data}" }
+effects = ["cluster_read", "read_secrets"]
+
+[[case]]
+argv = ["kubectl", "get", "secret", "db", "--template={{.data.password}}"]
+action = "get"
+fields = { type = "secret", name = ["db"], template = "{{.data.password}}" }
+effects = ["cluster_read", "read_secrets"]
+
+# A dry run never removes read_secrets.
+[[case]]
+argv = ["kubectl", "patch", "Secrets/db", "--type", "merge", "-p", "{}", "--dry-run", "-ojson"]
+action = "patch"
+fields = { type = "Secrets/db", type_option = "merge", patch = "{}", dry_run = "", output = "json" }
+effects = ["read_secrets"]
+
+[[case]]
+argv = ["kubectl", "label", "--local", "-f", "s.yaml", "a=b", "-o", "yaml"]
+action = "label"
+fields = { local = "", filename = ["s.yaml"], operands = ["a=b"], output = "yaml" }
+effects = ["manifest_input", "read_secrets"]
+
+[[case]]
+argv = ["kubectl", "scale", "secrets", "--all", "--replicas=0", "--dry-run=client", "--template={{.data}}"]
+action = "scale"
+fields = { type = "secrets", all = "", replicas = "0", dry_run = "client", template = "{{.data}}" }
+effects = ["read_secrets"]
+
+[[case]]
+argv = ["kubectl", "describe", "SECRET/sa-token", "-n", "kube-system"]
+action = "describe"
+fields = { type = "SECRET/sa-token", namespace = "kube-system" }
+effects = ["cluster_read", "read_secrets"]
+
+[[case]]
+argv = ["kubectl", "describe", "-f", "s.yaml"]
+action = "describe"
+fields = { filename = ["s.yaml"] }
+effects = ["cluster_read", "manifest_input", "read_secrets"]
+
+[[case]]
+argv = ["kubectl", "config", "view", "--minify", "-o", "jsonpath={.users}"]
+action = "config_view"
+fields = { minify = "", output = "jsonpath={.users}" }
+effects = ["read_secrets"]
+
+[[case]]
+argv = ["kubectl", "config", "use-context", "prod", "--kubeconfig", "/tmp/k"]
+action = "config_use_context"
+fields = { context_name = "prod", kubeconfig = "/tmp/k" }
+effects = ["override_config", "change_target"]
+
+[[case]]
+argv = ["kubectl", "delete", "Secret/db", "--now"]
+action = "delete"
+fields = { type = "Secret/db", now = "" }
+effects = ["cluster_delete", "write_secrets"]
+
+# Not modeled: --raw on API verbs, events, debug, run, attach, proxy, create token.
+[[case]]
+argv = ["kubectl", "get", "--raw", "/api/v1/namespaces/default/secrets"]
+action = "unmodeled"
+
+[[case]]
+argv = ["kubectl", "delete", "--raw", "/api/v1/namespaces/prod"]
+action = "unmodeled"
+
+[[case]]
+argv = ["kubectl", "create", "--raw", "/api/v1/namespaces/default/secrets", "-f", "s.json"]
+action = "unmodeled"
+
+[[case]]
+argv = ["kubectl", "events", "-A"]
+action = "unmodeled"
+
+[[case]]
+argv = ["kubectl", "debug", "-it", "web", "--image=busybox", "--copy-to=dbg"]
+action = "unmodeled"
+
+[[case]]
+argv = ["kubectl", "create", "token", "default"]
+action = "unmodeled"
+
+[[case]]
+argv = ["kubectl", "proxy", "--port=8001"]
+action = "unmodeled"
+
+# top, explain, and auth can-i return no object data.
+[[case]]
+argv = ["kubectl", "top", "pods", "-A", "--containers"]
+action = "top_pod"
+fields = { all_namespaces = true, containers = "" }
+effects = ["cluster_read"]
+
+[[case]]
+argv = ["kubectl", "explain", "secrets.data"]
+action = "explain"
+fields = { type = "secrets.data" }
+effects = ["cluster_read"]
+
+[[case]]
+argv = ["kubectl", "auth", "can-i", "get", "secrets", "--as", "system:serviceaccount:default:x"]
+action = "auth_can_i"
+fields = { verb = "get", type = "secrets", as = "system:serviceaccount:default:x" }
+effects = ["cluster_read", "impersonate"]
+
+[[case]]
+argv = ["kubectl", "rollout", "undo", "deploy/web", "--dry-run=client", "-o", "yaml"]
+action = "rollout_undo"
+fields = { type = "deploy/web", dry_run = "client", output = "yaml" }
+effects = []
