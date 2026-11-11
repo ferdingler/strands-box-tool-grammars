@@ -52,11 +52,11 @@ outside_path      = "Names a file or directory by an absolute path or by a path 
 # `-h`/`--help`, `--exec-path`, `--html-path`, `--man-path`, `--info-path`, `--list-cmds`, and the
 # internal `--shallow-file`.
 [global]
-options.change_directory    = { flag = ["-C"], value = "required", adds = ["other_repository"] }
+options.change_directory    = { flag = ["-C"], value = "required", adds = ["other_repository", "run_program"] }
 options.config              = { flag = ["-c"], value = "required", repeated = true, adds = ["override_config", "run_program", "skip_hooks"] }
 options.config_env          = { flag = ["--config-env"], value = "required", repeated = true, adds = ["override_config", "run_program", "skip_hooks"] }
-options.git_dir             = { flag = ["--git-dir"], value = "required", adds = ["other_repository"] }
-options.work_tree           = { flag = ["--work-tree"], value = "required", adds = ["other_repository"] }
+options.git_dir             = { flag = ["--git-dir"], value = "required", adds = ["other_repository", "run_program"] }
+options.work_tree           = { flag = ["--work-tree"], value = "required", adds = ["other_repository", "run_program"] }
 options.namespace           = { flag = ["--namespace"], value = "required" }
 options.attr_source         = { flag = ["--attr-source"], value = "required" }
 options.bare                = { flag = ["--bare"] }
@@ -398,7 +398,7 @@ options.create            = { flag = ["-b"], value = "required", removes = ["dis
 options.force_create      = { flag = ["-B"], value = "required", adds = ["rewrite_history"], removes = ["discard_changes"] }
 options.orphan            = { flag = ["--orphan"], value = "required", removes = ["discard_changes"] }
 options.detach            = { flag = ["-d", "--detach"], removes = ["discard_changes"] }
-options.track             = { flag = ["-t", "--track"], value = "optional", removes = ["discard_changes"] }
+options.track             = { flag = ["-t", "--track"], value = "optional", adds = ["override_config"], removes = ["discard_changes"] }
 options.no_track          = { flag = ["--no-track"] }
 options.create_reflog     = { flag = ["-l"] }
 options.guess             = { flag = ["--guess"] }
@@ -433,7 +433,7 @@ options.detach            = { flag = ["-d", "--detach"] }
 options.discard_changes   = { flag = ["-f", "--force", "--discard-changes"], adds = ["discard_changes"] }
 options.merge             = { flag = ["-m", "--merge"] }
 options.conflict          = { flag = ["--conflict"], value = "required" }
-options.track             = { flag = ["-t", "--track"], value = "optional" }
+options.track             = { flag = ["-t", "--track"], value = "optional", adds = ["override_config"] }
 options.no_track          = { flag = ["--no-track"] }
 options.guess             = { flag = ["--guess"] }
 options.no_guess          = { flag = ["--no-guess"] }
@@ -514,7 +514,7 @@ operands.pathspec = {}
 usage = "git [global options] rm [options] [--] <pathspec>..."
 adds  = ["delete_files"]
 options.force          = { flag = ["-f", "--force"], adds = ["discard_changes"] }
-options.cached         = { flag = ["--cached"], removes = ["delete_files", "discard_changes"] }
+options.cached         = { flag = ["--cached"], removes = ["delete_files"] }
 options.dry_run        = { flag = ["-n", "--dry-run"], removes = ["delete_files", "discard_changes"] }
 options.recursive      = { flag = ["-r"] }
 options.quiet          = { flag = ["-q", "--quiet"] }
@@ -705,7 +705,7 @@ options.onto             = { flag = ["--onto"], value = "required" }
 options.keep_base        = { flag = ["--keep-base"] }
 options.root             = { flag = ["--root"] }
 options.continue         = { flag = ["--continue"] }
-options.skip             = { flag = ["--skip"] }
+options.skip             = { flag = ["--skip"], adds = ["discard_changes"] }
 options.abort            = { flag = ["--abort"], adds = ["discard_changes"], removes = ["rewrite_history"] }
 options.quit             = { flag = ["--quit"], removes = ["rewrite_history"] }
 options.edit_todo        = { flag = ["--edit-todo"] }
@@ -749,7 +749,7 @@ operands.branch   = {}
 [shell.cherry_pick]
 usage = "git [global options] cherry-pick [options] [<commit>...]"
 options.continue         = { flag = ["--continue"] }
-options.skip             = { flag = ["--skip"] }
+options.skip             = { flag = ["--skip"], adds = ["discard_changes"] }
 options.abort            = { flag = ["--abort"], adds = ["discard_changes"] }
 options.quit             = { flag = ["--quit"] }
 options.edit             = { flag = ["-e", "--edit"] }
@@ -776,7 +776,7 @@ operands.commit = {}
 [shell.revert]
 usage = "git [global options] revert [options] [<commit>...]"
 options.continue         = { flag = ["--continue"] }
-options.skip             = { flag = ["--skip"] }
+options.skip             = { flag = ["--skip"], adds = ["discard_changes"] }
 options.abort            = { flag = ["--abort"], adds = ["discard_changes"] }
 options.quit             = { flag = ["--quit"] }
 options.edit             = { flag = ["-e", "--edit"] }
@@ -818,10 +818,10 @@ options.remotes          = { flag = ["-r", "--remotes"] }
 options.verbose          = { flag = ["-v", "--verbose"] }
 options.quiet            = { flag = ["-q", "--quiet"] }
 options.show_current     = { flag = ["--show-current"] }
-options.track            = { flag = ["-t", "--track"], value = "optional" }
+options.track            = { flag = ["-t", "--track"], value = "optional", adds = ["override_config"] }
 options.no_track         = { flag = ["--no-track"] }
-options.set_upstream_to  = { flag = ["-u", "--set-upstream-to"], value = "required" }
-options.unset_upstream   = { flag = ["--unset-upstream"] }
+options.set_upstream_to  = { flag = ["-u", "--set-upstream-to"], value = "required", adds = ["override_config"] }
+options.unset_upstream   = { flag = ["--unset-upstream"], adds = ["override_config"] }
 options.create_reflog    = { flag = ["--create-reflog"] }
 options.recurse_submodules = { flag = ["--recurse-submodules"] }
 options.contains         = { flag = ["--contains"], value = "required" }
@@ -891,7 +891,7 @@ options.delete             = { flag = ["-d", "--delete"], adds = ["delete_remote
 options.prune              = { flag = ["--prune"], adds = ["delete_remote_ref"] }
 options.dry_run            = { flag = ["-n", "--dry-run"], removes = ["force_push", "delete_remote_ref"] }
 options.no_verify          = { flag = ["--no-verify"], adds = ["skip_hooks"] }
-options.set_upstream       = { flag = ["-u", "--set-upstream"] }
+options.set_upstream       = { flag = ["-u", "--set-upstream"], adds = ["override_config"] }
 options.all                = { flag = ["--all", "--branches"] }
 options.tags               = { flag = ["--tags"] }
 options.follow_tags        = { flag = ["--follow-tags"] }
@@ -926,7 +926,7 @@ options.tags               = { flag = ["-t", "--tags"] }
 options.no_tags            = { flag = ["-n", "--no-tags"] }
 options.jobs               = { flag = ["-j", "--jobs"], value = "required" }
 options.prefetch           = { flag = ["--prefetch"] }
-options.prune              = { flag = ["-p", "--prune"] }
+options.prune              = { flag = ["-p", "--prune"], adds = ["delete_ref"] }
 options.prune_tags         = { flag = ["-P", "--prune-tags"], adds = ["delete_ref", "force_fetch"] }
 options.recurse_submodules = { flag = ["--recurse-submodules"], value = "optional" }
 options.no_recurse_submodules = { flag = ["--no-recurse-submodules"] }
@@ -946,7 +946,7 @@ options.refetch            = { flag = ["--refetch"] }
 options.update_shallow     = { flag = ["--update-shallow"] }
 options.server_option      = { flag = ["-o", "--server-option"], value = "required", repeated = true }
 options.filter             = { flag = ["--filter"], value = "required" }
-options.set_upstream       = { flag = ["--set-upstream"] }
+options.set_upstream       = { flag = ["--set-upstream"], adds = ["override_config"] }
 options.show_forced_updates = { flag = ["--show-forced-updates"] }
 options.no_show_forced_updates = { flag = ["--no-show-forced-updates"] }
 options.quiet              = { flag = ["-q", "--quiet"] }
@@ -994,9 +994,9 @@ options.upload_pack      = { flag = ["--upload-pack"], value = "required", adds 
 options.force            = { flag = ["-f", "--force"], adds = ["force_fetch"] }
 options.tags             = { flag = ["-t", "--tags"] }
 options.no_tags          = { flag = ["--no-tags"] }
-options.prune            = { flag = ["-p", "--prune"] }
+options.prune            = { flag = ["-p", "--prune"], adds = ["delete_ref"] }
 options.jobs             = { flag = ["-j", "--jobs"], value = "optional" }
-options.dry_run          = { flag = ["--dry-run"], removes = ["rewrite_history", "force_fetch", "skip_hooks"] }
+options.dry_run          = { flag = ["--dry-run"], removes = ["rewrite_history", "force_fetch", "skip_hooks", "delete_ref"] }
 options.keep             = { flag = ["-k", "--keep"] }
 options.depth            = { flag = ["--depth"], value = "required" }
 options.shallow_since    = { flag = ["--shallow-since"], value = "required" }
@@ -1004,7 +1004,7 @@ options.shallow_exclude  = { flag = ["--shallow-exclude"], value = "required", r
 options.deepen           = { flag = ["--deepen"], value = "required" }
 options.unshallow        = { flag = ["--unshallow"] }
 options.server_option    = { flag = ["-o", "--server-option"], value = "required", repeated = true }
-options.set_upstream     = { flag = ["--set-upstream"] }
+options.set_upstream     = { flag = ["--set-upstream"], adds = ["override_config"] }
 options.recurse_submodules = { flag = ["--recurse-submodules"], value = "optional" }
 options.no_recurse_submodules = { flag = ["--no-recurse-submodules"] }
 options.progress         = { flag = ["--progress"] }
@@ -1052,7 +1052,7 @@ options.no_tags          = { flag = ["--no-tags"] }
 options.shallow_submodules = { flag = ["--shallow-submodules"] }
 options.separate_git_dir = { flag = ["--separate-git-dir"], value = "required", when = [{ like = ["/*", "..", "../*", "*/..", "*/../*"], adds = ["outside_path"] }] }
 options.ref_format       = { flag = ["--ref-format"], value = "required" }
-options.config_option    = { flag = ["-c", "--config"], value = "required", repeated = true, adds = ["override_config", "run_program"] }
+options.config_option    = { flag = ["-c", "--config"], value = "required", repeated = true, adds = ["override_config", "run_program", "skip_hooks"] }
 options.server_option    = { flag = ["--server-option"], value = "required", repeated = true }
 options.ipv4             = { flag = ["-4", "--ipv4"] }
 options.ipv6             = { flag = ["-6", "--ipv6"] }
@@ -1081,12 +1081,12 @@ options.tags    = { flag = ["--tags"] }
 options.no_tags = { flag = ["--no-tags"] }
 options.mirror  = { flag = ["--mirror"], value = "optional" }
 operands.name = {}
-operands.url  = {}
+operands.url  = { when = [{ like = "ext::*", adds = ["run_program"] }] }
 
 [shell.remote_remove]
 usage   = "git [global options] remote remove <name>"
 aliases = ["remote rm"]
-adds    = ["override_config"]
+adds    = ["override_config", "delete_ref"]
 operands.name = {}
 
 [shell.remote_rename]
@@ -1104,7 +1104,7 @@ options.push   = { flag = ["--push"] }
 options.add    = { flag = ["--add"] }
 options.delete = { flag = ["--delete"] }
 operands.name   = {}
-operands.newurl = {}
+operands.newurl = { when = [{ like = "ext::*", adds = ["run_program"] }] }
 operands.oldurl = {}
 
 [shell.remote_get_url]
@@ -1121,14 +1121,14 @@ operands.name = { adds = ["network"] }
 
 [shell.remote_prune]
 usage = "git [global options] remote prune [options] <name>..."
-adds  = ["network"]
-options.dry_run = { flag = ["-n", "--dry-run"] }
+adds  = ["network", "delete_ref"]
+options.dry_run = { flag = ["-n", "--dry-run"], removes = ["delete_ref"] }
 operands.name = {}
 
 [shell.remote_update]
 usage = "git [global options] remote update [options] [<remote>...]"
 adds  = ["network"]
-options.prune = { flag = ["-p", "--prune"] }
+options.prune = { flag = ["-p", "--prune"], adds = ["delete_ref"] }
 operands.remote = {}
 
 # ================================================================ configuration
@@ -1178,7 +1178,7 @@ operands.name = {}
 
 [shell.config_set]
 usage = "git [global options] config set [options] <name> <value>"
-adds  = ["override_config"]
+adds  = ["override_config", "run_program", "skip_hooks"]
 options.global       = { flag = ["--global"] }
 options.system       = { flag = ["--system"] }
 options.local        = { flag = ["--local"] }
@@ -1195,7 +1195,7 @@ operands.value = {}
 
 [shell.config_unset]
 usage = "git [global options] config unset [options] <name>"
-adds  = ["override_config"]
+adds  = ["override_config", "run_program", "skip_hooks"]
 options.global       = { flag = ["--global"] }
 options.system       = { flag = ["--system"] }
 options.local        = { flag = ["--local"] }
@@ -1218,8 +1218,8 @@ options.list         = { flag = ["-l", "--list"] }
 options.get          = { flag = ["--get"], value = "required" }
 options.get_all      = { flag = ["--get-all"], value = "required" }
 options.get_regexp   = { flag = ["--get-regexp"], value = "required" }
-options.unset        = { flag = ["--unset"], value = "required", adds = ["override_config"] }
-options.unset_all    = { flag = ["--unset-all"], value = "required", adds = ["override_config"] }
+options.unset        = { flag = ["--unset"], value = "required", adds = ["override_config", "run_program", "skip_hooks"] }
+options.unset_all    = { flag = ["--unset-all"], value = "required", adds = ["override_config", "run_program", "skip_hooks"] }
 options.global       = { flag = ["--global"] }
 options.system       = { flag = ["--system"] }
 options.local        = { flag = ["--local"] }
@@ -1238,8 +1238,8 @@ options.path         = { flag = ["--path"] }
 options.includes     = { flag = ["--includes"] }
 options.no_includes  = { flag = ["--no-includes"] }
 options.default      = { flag = ["--default"], value = "required" }
-operands.name  = { adds = ["override_config"] }
-operands.value = { adds = ["override_config"] }
+operands.name  = { adds = ["override_config", "run_program", "skip_hooks"] }
+operands.value = { adds = ["override_config", "run_program", "skip_hooks"] }
 
 # ================================================================ repositories and worktrees
 
@@ -1277,7 +1277,7 @@ options.no_checkout    = { flag = ["--no-checkout"] }
 options.lock           = { flag = ["--lock"] }
 options.reason         = { flag = ["--reason"], value = "required" }
 options.quiet          = { flag = ["-q", "--quiet"] }
-options.track          = { flag = ["--track"] }
+options.track          = { flag = ["--track"], adds = ["override_config"] }
 options.no_track       = { flag = ["--no-track"] }
 options.guess_remote   = { flag = ["--guess-remote"] }
 options.no_guess_remote = { flag = ["--no-guess-remote"] }

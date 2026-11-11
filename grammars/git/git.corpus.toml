@@ -14,7 +14,7 @@
 argv = ["git", "-C", "../other", "status"]
 action = "status"
 fields = { change_directory = "../other" }
-effects = ["other_repository"]
+effects = ["other_repository", "run_program"]
 
 # git(1): `-c <name>=<value>` sets configuration for this command; configuration can name
 # programs (core.sshCommand) and skip hooks (core.hooksPath).
@@ -36,7 +36,7 @@ effects = ["override_config", "run_program", "skip_hooks"]
 argv = ["git", "--git-dir", "/srv/repo.git", "--work-tree=/srv/wt", "status", "-s"]
 action = "status"
 fields = { git_dir = "/srv/repo.git", short = true, work_tree = "/srv/wt" }
-effects = ["other_repository"]
+effects = ["other_repository", "run_program"]
 
 # git(1): `-P`/`--no-pager` and `--no-optional-locks` change no outcome.
 [[case]]
@@ -64,7 +64,7 @@ action = "unmodeled"
 argv = ["git", "-C", "push", "status"]
 action = "status"
 fields = { change_directory = "push" }
-effects = ["other_repository"]
+effects = ["other_repository", "run_program"]
 
 # Git accepts `-C` twice and joins the paths; the grammar declares it once.
 [[case]]
@@ -432,6 +432,7 @@ fields = { detach = true, target = "v1.0" }
 argv = ["git", "checkout", "-t", "origin/feature"]
 action = "checkout"
 fields = { target = "origin/feature", track = "" }
+effects = ["override_config"]
 
 # `-p` selects hunks to discard interactively.
 [[case]]
@@ -633,11 +634,13 @@ action = "rm"
 fields = { force = true, pathspec = ["build/"], recursive = true }
 effects = ["delete_files", "discard_changes"]
 
-# `--cached` removes from the index only.
+# `--cached` leaves the working tree alone; with `-f` it can drop staged content that matches
+# neither HEAD nor the working tree (builtin/rm.c), so `-f` keeps discard_changes.
 [[case]]
 argv = ["git", "rm", "--cached", "-r", "-f", "secrets/"]
 action = "rm"
 fields = { cached = true, force = true, pathspec = ["secrets/"], recursive = true }
+effects = ["discard_changes"]
 
 [[case]]
 argv = ["git", "rm", "-n", "a"]
@@ -1048,6 +1051,7 @@ fields = { merged = "main" }
 argv = ["git", "branch", "-u", "origin/main"]
 action = "branch"
 fields = { set_upstream_to = "origin/main" }
+effects = ["override_config"]
 
 # `--merged` with no value at the end of the line.
 [[case]]
@@ -1106,7 +1110,7 @@ effects = ["network"]
 argv = ["git", "push", "-u", "origin", "feature"]
 action = "push"
 fields = { refspec = ["feature"], repository = "origin", set_upstream = true }
-effects = ["network"]
+effects = ["network", "override_config"]
 
 # git-push(1): `-f`/`--force` replaces remote commits.
 [[case]]
@@ -1125,7 +1129,7 @@ effects = ["force_push", "network"]
 argv = ["git", "push", "-uf", "origin", "main"]
 action = "push"
 fields = { force = true, refspec = ["main"], repository = "origin", set_upstream = true }
-effects = ["force_push", "network"]
+effects = ["force_push", "network", "override_config"]
 
 # `--force-with-lease[=<refname>[:<expect>]]` takes only an attached value.
 [[case]]
@@ -1251,7 +1255,7 @@ effects = ["network"]
 argv = ["git", "fetch", "--prune", "origin"]
 action = "fetch"
 fields = { prune = true, repository = "origin" }
-effects = ["network"]
+effects = ["delete_ref", "network"]
 
 # For fetch, `-n` is `--no-tags`, not a dry run.
 [[case]]
@@ -1399,7 +1403,7 @@ effects = ["network", "run_program"]
 argv = ["git", "clone", "-c", "core.fsmonitor=/tmp/x", "https://example.com/r.git"]
 action = "clone"
 fields = { config_option = ["core.fsmonitor=/tmp/x"], repository = "https://example.com/r.git" }
-effects = ["network", "override_config", "run_program"]
+effects = ["network", "override_config", "run_program", "skip_hooks"]
 
 [[case]]
 argv = ["git", "clone", "--recursive", "https://example.com/r.git"]
@@ -1446,13 +1450,13 @@ effects = ["network", "override_config"]
 argv = ["git", "remote", "rm", "old"]
 action = "remote_remove"
 fields = { name = "old" }
-effects = ["override_config"]
+effects = ["delete_ref", "override_config"]
 
 [[case]]
 argv = ["git", "remote", "remove", "old"]
 action = "remote_remove"
 fields = { name = "old" }
-effects = ["override_config"]
+effects = ["delete_ref", "override_config"]
 
 [[case]]
 argv = ["git", "remote", "set-url", "--push", "origin", "git@example.com:r.git"]
@@ -1493,7 +1497,7 @@ effects = ["network"]
 argv = ["git", "remote", "update", "-p"]
 action = "remote_update"
 fields = { prune = true }
-effects = ["network"]
+effects = ["delete_ref", "network"]
 
 # `-v` must come before the subcommand, and then the subcommand word is not adjacent.
 [[case]]
@@ -1529,19 +1533,19 @@ fields = { all = true, global = true, name = "remote.origin.fetch" }
 argv = ["git", "config", "set", "--global", "user.name", "Ada Lovelace"]
 action = "config_set"
 fields = { global = true, name = "user.name", value = "Ada Lovelace" }
-effects = ["override_config"]
+effects = ["override_config", "run_program", "skip_hooks"]
 
 [[case]]
 argv = ["git", "config", "set", "-f", "/home/u/.bashrc", "x.y", "z"]
 action = "config_set"
 fields = { file = "/home/u/.bashrc", name = "x.y", value = "z" }
-effects = ["outside_path", "override_config"]
+effects = ["outside_path", "override_config", "run_program", "skip_hooks"]
 
 [[case]]
 argv = ["git", "config", "unset", "core.pager"]
 action = "config_unset"
 fields = { name = "core.pager" }
-effects = ["override_config"]
+effects = ["override_config", "run_program", "skip_hooks"]
 
 # Git reads `set user.name --global` as the value "--global"; here the value is missing.
 [[case]]
@@ -1554,7 +1558,7 @@ action = "unmodeled"
 argv = ["git", "config", "edit"]
 action = "config"
 fields = { name = "edit" }
-effects = ["override_config"]
+effects = ["override_config", "run_program", "skip_hooks"]
 
 # The older form: `--list` and `--get <name>` read.
 [[case]]
@@ -1582,13 +1586,13 @@ fields = { get_regexp = "^alias\\.", global = true }
 argv = ["git", "config", "user.email", "a@example.com"]
 action = "config"
 fields = { name = "user.email", value = "a@example.com" }
-effects = ["override_config"]
+effects = ["override_config", "run_program", "skip_hooks"]
 
 [[case]]
 argv = ["git", "config", "--global", "core.sshCommand", "ssh -i key"]
 action = "config"
 fields = { global = true, name = "core.sshCommand", value = "ssh -i key" }
-effects = ["override_config"]
+effects = ["override_config", "run_program", "skip_hooks"]
 
 # In git, `config user.name --global` writes "--global" as the value (options stop at the first
 # operand). Any operand adds override_config, so this is never read as a read.
@@ -1596,13 +1600,13 @@ effects = ["override_config"]
 argv = ["git", "config", "user.name", "--global"]
 action = "config"
 fields = { global = true, name = "user.name" }
-effects = ["override_config"]
+effects = ["override_config", "run_program", "skip_hooks"]
 
 [[case]]
 argv = ["git", "config", "--unset", "core.pager"]
 action = "config"
 fields = { unset = "core.pager" }
-effects = ["override_config"]
+effects = ["override_config", "run_program", "skip_hooks"]
 
 [[case]]
 argv = ["git", "config", "--edit"]
@@ -1719,7 +1723,7 @@ action = "unmodeled"
 argv = ["git", "config", "--get", "remote.origin.url", "github"]
 action = "config"
 fields = { get = "remote.origin.url", name = "github" }
-effects = ["override_config"]
+effects = ["override_config", "run_program", "skip_hooks"]
 
 # revision.c reads `--format` only with `=`; a bare `--format` gets the empty value here, and
 # the next word is a revision. Git refuses the line.
@@ -1845,7 +1849,7 @@ action = "unmodeled"
 argv = ["git", "--git-dir=../x/.git", "log", "--oneline"]
 action = "log"
 fields = { git_dir = "../x/.git", oneline = true }
-effects = ["other_repository"]
+effects = ["other_repository", "run_program"]
 
 # git.c run_argv: an alias is only tried after the builtins; a non-builtin name is unmodeled.
 [[case]]
@@ -1994,7 +1998,7 @@ action = "unmodeled"
 argv = ["git", "config", "core.hooksPath", "--global"]
 action = "config"
 fields = { name = "core.hooksPath", global = true }
-effects = ["override_config"]
+effects = ["override_config", "run_program", "skip_hooks"]
 
 # old config form: --get with a value pattern is a read; the grammar holds the pattern as <name>.
 [[case]]
@@ -2005,11 +2009,12 @@ effects = []
 
 # config set of a key that names a program: git runs core.fsmonitor on later commands.
 # VERIFIER: git runs this program later, like `-c core.fsmonitor=...`, which adds run_program.
+# AUTHOR (fix F3): a config write now carries the same effects as global `-c`, skip_hooks included.
 [[case]]
 argv = ["git", "config", "set", "--local", "core.fsmonitor", "./x.sh"]
 action = "config_set"
 fields = { local = true, name = "core.fsmonitor", value = "./x.sh" }
-effects = ["override_config", "run_program"]
+effects = ["override_config", "run_program", "skip_hooks"]
 
 # config get reads.
 [[case]]
@@ -2108,3 +2113,64 @@ effects = ["network", "delete_remote_ref"]
 [[case]]
 argv = ["git", "checkout", "--end-of-options", "main"]
 action = "unmodeled"
+
+# ---------------------------------------------------------------- fixes after verification
+
+# F1: `--dry-run` prunes nothing, so it removes the `delete_ref` that `--prune` adds.
+[[case]]
+argv = ["git", "fetch", "--dry-run", "--prune", "origin"]
+action = "fetch"
+fields = { dry_run = true, prune = true, repository = "origin" }
+effects = ["network"]
+
+[[case]]
+argv = ["git", "pull", "-p"]
+action = "pull"
+fields = { prune = true }
+effects = ["delete_ref", "network"]
+
+# F2: `remote prune -n` reports and deletes nothing.
+[[case]]
+argv = ["git", "remote", "prune", "-n", "origin"]
+action = "remote_prune"
+fields = { dry_run = true, name = ["origin"] }
+effects = ["network"]
+
+# F9: an `ext::` URL stored as a remote runs a command on a later fetch or push.
+[[case]]
+argv = ["git", "remote", "add", "evil", "ext::sh -c id"]
+action = "remote_add"
+fields = { name = "evil", url = "ext::sh -c id" }
+effects = ["override_config", "run_program"]
+
+[[case]]
+argv = ["git", "remote", "set-url", "origin", "ext::sh -c id"]
+action = "remote_set_url"
+fields = { name = "origin", newurl = "ext::sh -c id" }
+effects = ["override_config", "run_program"]
+
+# F7: `--skip` resets the working tree of the commit in progress.
+[[case]]
+argv = ["git", "rebase", "--skip"]
+action = "rebase"
+fields = { skip = true }
+effects = ["discard_changes", "rewrite_history"]
+
+[[case]]
+argv = ["git", "cherry-pick", "--skip"]
+action = "cherry_pick"
+fields = { skip = true }
+effects = ["discard_changes"]
+
+# F4: `switch -t` and `branch --unset-upstream` write branch.<name>.remote/merge.
+[[case]]
+argv = ["git", "switch", "-c", "x", "-t", "origin/x"]
+action = "switch"
+fields = { branch = "origin/x", create = "x", track = "" }
+effects = ["override_config"]
+
+[[case]]
+argv = ["git", "branch", "--unset-upstream"]
+action = "branch"
+fields = { unset_upstream = true }
+effects = ["override_config"]

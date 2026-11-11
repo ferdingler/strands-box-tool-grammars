@@ -70,20 +70,25 @@ subcommand, and so does the grammar.
 | `delete_remote_ref` | Deletes a branch or tag on the remote | `push -d`, `push :<ref>`, `--prune`, `--mirror` |
 | `force_fetch` | Can replace commits on a local ref | `fetch -f`, `fetch -P`, a `+<src>:<dst>` refspec |
 | `rewrite_history` | Replaces local commits, or moves an existing branch or tag | `commit --amend`, `rebase`, `pull --rebase`, `reset <commit>`, `branch -f`/`-M`/`-C`, `tag -f`, `checkout -B`, `switch -C` |
-| `delete_ref` | Deletes a local branch, remote-tracking branch, or tag | `branch -d`/`-D`/`--delete-merged`, `tag -d`, `fetch -P` |
-| `discard_changes` | Can overwrite or delete uncommitted changes, or drop stashed changes | `reset --hard`/`--merge`/`--keep`, `restore`, `checkout <x>`, `switch -f`, `rm -f`, `mv -f`, `stash drop`/`clear`, `merge`/`rebase`/`cherry-pick`/`revert --abort`, `worktree remove -f` |
+| `delete_ref` | Deletes a local branch, remote-tracking branch, or tag | `branch -d`/`-D`/`--delete-merged`, `tag -d`, `fetch`/`pull -p`/`--prune` (with a `refs/tags/*` or `refs/heads/*` refspec it deletes local tags or branches), `fetch -P`, `remote prune`, `remote update -p`, `remote remove` |
+| `discard_changes` | Can overwrite or delete uncommitted changes, or drop stashed changes | `reset --hard`/`--merge`/`--keep`, `restore`, `checkout <x>`, `switch -f`, `rm -f`, `mv -f`, `stash drop`/`clear`, `merge`/`rebase`/`cherry-pick`/`revert --abort`, `rebase`/`cherry-pick`/`revert --skip`, `worktree remove -f` |
 | `delete_files` | Deletes files from the working tree | `clean`, `rm`, `worktree remove` |
-| `skip_hooks` | Skips hooks the repository configures | `commit -n`/`--no-verify`, `--no-post-rewrite`, `push`/`merge`/`pull`/`rebase --no-verify`, global `-c` |
-| `override_config` | Sets configuration, for one command or in a file | global `-c`/`--config-env`, `clone -c`, `config set`/`unset`, `config <name> <value>`, `remote add`/`remove`/`rename`/`set-url` |
-| `run_program` | Makes git run a program that the line names or installs | `rebase -x`, `-s <strategy>`, `--upload-pack`, `--receive-pack`, `--ext-diff`, `--textconv`, `--template`, an `ext::` URL, global `-c` |
-| `other_repository` | Points git at another repository or work tree | `-C`, `--git-dir`, `--work-tree` |
+| `skip_hooks` | Skips hooks the repository configures | `commit -n`/`--no-verify`, `--no-post-rewrite`, `push`/`merge`/`pull`/`rebase --no-verify`, global `-c`, `clone -c`, every configuration write |
+| `override_config` | Sets configuration, for one command or in a file | global `-c`/`--config-env`, `clone -c`, `config set`/`unset`, `config <name> <value>`, `remote add`/`remove`/`rename`/`set-url`, upstream writes (`branch -u`/`--unset-upstream`/`-t`, `push -u`, `fetch`/`pull --set-upstream`, `checkout`/`switch`/`worktree add -t`) |
+| `run_program` | Makes git run a program that the line names or installs | `rebase -x`, `-s <strategy>`, `--upload-pack`, `--receive-pack`, `--ext-diff`, `--textconv`, `--template`, an `ext::` URL (also when stored by `remote add`/`set-url`), global `-c`, every configuration write, `-C`/`--git-dir`/`--work-tree` |
+| `other_repository` | Points git at another repository or work tree | `-C`, `--git-dir`, `--work-tree` (these also add `run_program`, because that repository's configuration and hooks then apply) |
 | `write_file` | Writes the output to a named file | `log`/`show`/`diff --output` |
 | `outside_path` | A path on the line is absolute or contains `..` | `diff /etc/x`, `commit -F /tmp/m`, `clone <url> /tmp/x`, `worktree add ../wt`, `config -f ~/.x` |
 
 Dry runs remove what they do not do: `push -n` keeps `network` but drops `force_push` and
 `delete_remote_ref`; `clean -n`, `rm -n`, and `rm --cached` drop `delete_files`; `commit --dry-run`
 (and `--short`, `--porcelain`, `--long`, which imply it) drops `rewrite_history` and `skip_hooks`;
-`pull --dry-run` stops after the fetch; `restore --staged` touches only the index.
+`pull --dry-run` stops after the fetch; `fetch --dry-run` and `remote prune -n` delete no ref; `restore --staged` touches only the index.
+
+A configuration write (`config set`, `config unset`, `config <name> <value>`, `--unset`) carries
+the same effects as global `-c`: `override_config`, `run_program`, and `skip_hooks`, because a key
+such as `core.hooksPath`, `core.fsmonitor`, or `alias.*` changes every later command. So the
+`keep_hooks_and_work` rule below also refuses those writes.
 
 ## Example rules
 
@@ -161,6 +166,12 @@ Each of these makes the line `unmodeled`, so a policy refuses it unless it permi
 - **Options after an operand.** The `config` subcommands stop reading options at the first
   operand, so git reads a later `--global` as a value. The grammar reads it as the option. A write
   still carries `override_config` in both readings; only the field differs.
+- **Index-only loss.** `discard_changes` covers the working tree and the stash. Content that is
+  only staged is counted in one place: `rm --cached -f`, which can drop staged content that
+  matches neither HEAD nor the working tree. `reset --mixed` and `restore --staged` do not add it.
+- **Global option spellings.** git compares global options exactly, so it refuses `-Cdir`,
+  `-ckey=value`, and clusters such as `-pP`. The grammar accepts them (there is no "separate value
+  only" form); git then exits with an error and runs nothing. `--bare` adds no effect.
 - **Programs git chooses.** A built-in merge strategy (`-s ort`) runs no external program, but
   `-s` adds `run_program` for every value. `--ext-diff` and `--textconv` add `run_program`, but
   configuration can make `diff` and `log` run them without either flag.
