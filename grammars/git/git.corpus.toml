@@ -1765,3 +1765,346 @@ argv = ["git", "branch", "-r", "-d", "origin/old"]
 action = "branch"
 fields = { branchname = ["origin/old"], delete = true, remotes = true }
 effects = ["delete_ref"]
+
+# --- independent verifier cases ---
+# Written by the verifier from git 2.56.1 docs and source (git.c, parse-options.c, builtin/*.c),
+# not from the grammar's output. A case whose expectation disagrees with the grammar is a finding
+# in VERIFY.md, and the comment says so.
+
+# push: options after the operands are still read (parse_options permutes, push.c flags 0).
+[[case]]
+argv = ["git", "push", "origin", "main", "--force"]
+action = "push"
+fields = { repository = "origin", refspec = ["main"], force = true }
+effects = ["network", "force_push"]
+
+# push: --force-with-lease is PARSE_OPT_OPTARG, so the next word is the repository.
+[[case]]
+argv = ["git", "push", "--force-with-lease", "origin", "main"]
+action = "push"
+fields = { force_with_lease = "", repository = "origin", refspec = ["main"] }
+effects = ["network", "force_push"]
+
+# push: a stuck lease value.
+[[case]]
+argv = ["git", "push", "--force-with-lease=main:abc123", "--force-if-includes", "origin", "main"]
+action = "push"
+fields = { force_with_lease = "main:abc123", force_if_includes = true, repository = "origin", refspec = ["main"] }
+effects = ["network", "force_push"]
+
+# push: `--` ends options; `+main` after it is still a forcing refspec.
+[[case]]
+argv = ["git", "push", "origin", "--", "+main"]
+action = "push"
+fields = { repository = "origin", refspec = ["+main"] }
+effects = ["network", "force_push"]
+
+# push: a cluster with -n makes the whole push a dry run (TRANSPORT_PUSH_DRY_RUN).
+[[case]]
+argv = ["git", "push", "-nf", "origin", "main"]
+action = "push"
+fields = { dry_run = true, force = true, repository = "origin", refspec = ["main"] }
+effects = ["network"]
+
+# push: delete through a refspec with an empty source.
+[[case]]
+argv = ["git", "push", "origin", ":refs/tags/v1"]
+action = "push"
+fields = { repository = "origin", refspec = [":refs/tags/v1"] }
+effects = ["network", "delete_remote_ref"]
+
+# push: --prune with a glob refspec deletes remote branches.
+[[case]]
+argv = ["git", "push", "--prune", "origin", "refs/heads/*:refs/heads/*"]
+action = "push"
+fields = { prune = true, repository = "origin", refspec = ["refs/heads/*:refs/heads/*"] }
+effects = ["network", "delete_remote_ref"]
+
+# push: an abbreviation git accepts (--forc = --force) is unmodeled.
+[[case]]
+argv = ["git", "push", "--forc", "origin", "main"]
+action = "unmodeled"
+
+# push: --no-force-with-lease is a negation the grammar does not declare.
+[[case]]
+argv = ["git", "push", "--no-force-with-lease", "origin"]
+action = "unmodeled"
+
+# git.c: -C after the subcommand is not a global option, and push has no -C.
+[[case]]
+argv = ["git", "push", "-C", "/tmp", "origin"]
+action = "unmodeled"
+
+# git.c handle_options: --no-pager is read only before the command.
+[[case]]
+argv = ["git", "log", "--no-pager"]
+action = "unmodeled"
+
+# git.c: --git-dir=<path> before the command.
+[[case]]
+argv = ["git", "--git-dir=../x/.git", "log", "--oneline"]
+action = "log"
+fields = { git_dir = "../x/.git", oneline = true }
+effects = ["other_repository"]
+
+# git.c run_argv: an alias is only tried after the builtins; a non-builtin name is unmodeled.
+[[case]]
+argv = ["git", "-c", "alias.st=!rm -rf .", "st"]
+action = "unmodeled"
+
+# reset --hard to an older commit rewrites and discards.
+[[case]]
+argv = ["git", "reset", "--hard", "HEAD~1"]
+action = "reset"
+fields = { hard = true, commit = "HEAD~1" }
+effects = ["rewrite_history", "discard_changes"]
+
+# reset --hard @ does not move HEAD.
+[[case]]
+argv = ["git", "reset", "--hard", "@"]
+action = "reset"
+fields = { hard = true, commit = "@" }
+effects = ["discard_changes"]
+
+# reset <commit> -- with no path still moves HEAD.
+[[case]]
+argv = ["git", "reset", "HEAD~2", "--"]
+action = "reset"
+fields = { commit = "HEAD~2" }
+effects = ["rewrite_history"]
+
+# reset <commit> -- <path> updates only the index.
+[[case]]
+argv = ["git", "reset", "-q", "HEAD~1", "--", "src/a.c"]
+action = "reset"
+fields = { quiet = true, commit = "HEAD~1", pathspec = ["src/a.c"] }
+effects = []
+
+# clean -ffdx: -f twice also removes nested repositories (clean.c force > 1).
+[[case]]
+argv = ["git", "clean", "-ffdx"]
+action = "clean"
+fields = { force = true, directories = true, ignored = true }
+effects = ["delete_files"]
+
+# clean -n wins over -f (clean.c: dry_run guards each unlink).
+[[case]]
+argv = ["git", "clean", "-nfdx"]
+action = "clean"
+fields = { dry_run = true, force = true, directories = true, ignored = true }
+effects = []
+
+# checkout -b with a start point refuses paths, so no discard.
+[[case]]
+argv = ["git", "checkout", "-b", "feature", "origin/main"]
+action = "checkout"
+fields = { create = "feature", target = "origin/main" }
+effects = []
+
+# checkout -- . overwrites every modified file.
+[[case]]
+argv = ["git", "checkout", "--", "."]
+action = "checkout"
+fields = { pathspec = ["."] }
+effects = ["discard_changes"]
+
+# checkout -f is left out on purpose.
+[[case]]
+argv = ["git", "checkout", "-f", "main"]
+action = "unmodeled"
+
+# switch -C resets an existing branch.
+[[case]]
+argv = ["git", "switch", "-C", "main", "origin/main"]
+action = "switch"
+fields = { force_create = "main", branch = "origin/main" }
+effects = ["rewrite_history"]
+
+# restore -S -W writes the work tree; -W is not declared.
+[[case]]
+argv = ["git", "restore", "-SW", "file.txt"]
+action = "unmodeled"
+
+# restore --source overwrites the work tree file.
+[[case]]
+argv = ["git", "restore", "--source=HEAD~1", "file.txt"]
+action = "restore"
+fields = { source = "HEAD~1", pathspec = ["file.txt"] }
+effects = ["discard_changes"]
+
+# stash: a non-option word before `--` makes git refuse (stash.c push_stash).
+[[case]]
+argv = ["git", "stash", "file.txt"]
+action = "unmodeled"
+
+# stash drop loses the entry.
+[[case]]
+argv = ["git", "stash", "drop", "stash@{1}"]
+action = "stash_drop"
+fields = { stash = "stash@{1}" }
+effects = ["discard_changes"]
+
+# stash export/import are 2.51+ subcommands that write refs; not declared.
+[[case]]
+argv = ["git", "stash", "import", "refs/x"]
+action = "unmodeled"
+
+# rebase -x with a stuck value (OPT_STRING_LIST).
+[[case]]
+argv = ["git", "rebase", "-xmake", "--exec=npm test", "origin/main"]
+action = "rebase"
+fields = { exec = ["make", "npm test"], upstream = "origin/main" }
+effects = ["rewrite_history", "run_program"]
+
+# rebase --stat is the negation of --no-stat (parse-options).
+[[case]]
+argv = ["git", "rebase", "--stat", "main"]
+action = "rebase"
+fields = { stat = true, upstream = "main" }
+effects = ["rewrite_history"]
+
+# commit -nm: -n is --no-verify in commit.
+[[case]]
+argv = ["git", "commit", "-nm", "wip"]
+action = "commit"
+fields = { no_verify = true, message = ["wip"] }
+effects = ["skip_hooks"]
+
+# commit --amend --dry-run makes no commit (commit.c returns before prepare_to_commit).
+[[case]]
+argv = ["git", "commit", "--amend", "--dry-run"]
+action = "commit"
+fields = { amend = true, dry_run = true }
+effects = []
+
+# commit -m takes the next word even when it looks like an option.
+[[case]]
+argv = ["git", "commit", "-m", "--amend"]
+action = "commit"
+fields = { message = ["--amend"] }
+effects = []
+
+# commit --amen is an abbreviation git accepts; unmodeled.
+[[case]]
+argv = ["git", "commit", "--amen", "--no-edit"]
+action = "unmodeled"
+
+# old config form: git stops at the first operand, so `--global` is the value written.
+[[case]]
+argv = ["git", "config", "core.hooksPath", "--global"]
+action = "config"
+fields = { name = "core.hooksPath", global = true }
+effects = ["override_config"]
+
+# old config form: --get with a value pattern is a read; the grammar holds the pattern as <name>.
+[[case]]
+argv = ["git", "config", "--get", "core.pager"]
+action = "config"
+fields = { get = "core.pager" }
+effects = []
+
+# config set of a key that names a program: git runs core.fsmonitor on later commands.
+# VERIFIER: git runs this program later, like `-c core.fsmonitor=...`, which adds run_program.
+[[case]]
+argv = ["git", "config", "set", "--local", "core.fsmonitor", "./x.sh"]
+action = "config_set"
+fields = { local = true, name = "core.fsmonitor", value = "./x.sh" }
+effects = ["override_config", "run_program"]
+
+# config get reads.
+[[case]]
+argv = ["git", "config", "get", "--global", "user.email"]
+action = "config_get"
+fields = { global = true, name = "user.email" }
+effects = []
+
+# fetch --prune deletes remote-tracking refs that the remote no longer has.
+# VERIFIER: delete_ref is "Deletes a local branch, remote-tracking branch, or tag".
+[[case]]
+argv = ["git", "fetch", "--prune", "origin"]
+action = "fetch"
+fields = { prune = true, repository = "origin" }
+effects = ["network", "delete_ref"]
+
+# fetch --prune with a tag refspec deletes every local tag that the remote lacks (git-fetch(1),
+# PRUNING). VERIFIER: local tags are lost.
+[[case]]
+argv = ["git", "fetch", "-p", "origin", "refs/tags/*:refs/tags/*"]
+action = "fetch"
+fields = { prune = true, repository = "origin", refspec = ["refs/tags/*:refs/tags/*"] }
+effects = ["network", "delete_ref"]
+
+# remote prune deletes stale remote-tracking refs.
+[[case]]
+argv = ["git", "remote", "prune", "origin"]
+action = "remote_prune"
+fields = { name = ["origin"] }
+effects = ["network", "delete_ref"]
+
+# fetch with a forcing refspec to a local branch.
+[[case]]
+argv = ["git", "fetch", "origin", "+main:main"]
+action = "fetch"
+fields = { repository = "origin", refspec = ["+main:main"] }
+effects = ["network", "force_fetch"]
+
+# branch --delete-merged with --dry-run deletes nothing (branch.c).
+[[case]]
+argv = ["git", "branch", "--delete-merged", "origin/*", "--dry-run"]
+action = "branch"
+fields = { delete_merged = ["origin/*"], dry_run = true }
+effects = []
+
+# branch -f moves an existing branch.
+[[case]]
+argv = ["git", "branch", "-f", "main", "HEAD~3"]
+action = "branch"
+fields = { force = true, branchname = ["main", "HEAD~3"] }
+effects = ["rewrite_history"]
+
+# tag -fa cluster: -f replaces an existing tag.
+[[case]]
+argv = ["git", "tag", "-fam", "msg", "v1.0"]
+action = "tag"
+fields = { force = true, annotate = true, message = ["msg"], tagname = ["v1.0"] }
+effects = ["rewrite_history"]
+
+# global -p before the command.
+[[case]]
+argv = ["git", "-p", "log", "-n", "3"]
+action = "log"
+fields = { paginate = true, max_count = "3" }
+effects = []
+
+# pull -r is PARSE_OPT_OPTARG: `origin` is the repository.
+[[case]]
+argv = ["git", "pull", "-r", "origin", "main"]
+action = "pull"
+fields = { rebase = "", repository = "origin", refspec = ["main"] }
+effects = ["network", "rewrite_history"]
+
+# pull --rebase=false merges.
+[[case]]
+argv = ["git", "pull", "--rebase=false", "origin"]
+action = "pull"
+fields = { rebase = "false", repository = "origin" }
+effects = ["network"]
+
+# worktree remove -f of a sibling directory.
+[[case]]
+argv = ["git", "worktree", "remove", "-f", "../wt"]
+action = "worktree_remove"
+fields = { force = true, worktree = "../wt" }
+effects = ["delete_files", "discard_changes", "outside_path"]
+
+# push --delete.
+[[case]]
+argv = ["git", "push", "--delete", "origin", "feature"]
+action = "push"
+fields = { delete = true, repository = "origin", refspec = ["feature"] }
+effects = ["network", "delete_remote_ref"]
+
+# --end-of-options is git's other spelling of `--`; it is not declared.
+[[case]]
+argv = ["git", "checkout", "--end-of-options", "main"]
+action = "unmodeled"
