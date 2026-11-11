@@ -1248,3 +1248,24 @@ argv = ["vercel", "deploy", "--delete-project-after", "1h"]
 action = "deploy"
 fields = { delete_project_after = "1h" }
 effects = ["deploy", "deploy_production", "change_traffic", "write_remote", "export_local_env"]
+
+# --- independent verifier cases, round 3 ---
+# redeploy and promote POST /v13/deployments with only deploymentId, meta, name, and target
+# (commands-routing.js, commands-core.js), so neither copies local env.
+[[case]]
+argv = ["vercel", "redeploy", "dpl_1", "-e", "preview"]
+action = "redeploy"
+fields = { deployment = "dpl_1", environment = "preview" }
+effects = ["deploy"]
+
+[[case]]
+argv = ["vercel", "deploy", "--prebuilt", "--environment", "preview", "--dry"]
+action = "deploy"
+fields = { prebuilt = true, environment = "preview", dry = true }
+effects = ["export_local_env"]
+
+[[case]]
+argv = ["vercel", "deploy", "continue", "--deployment", "dpl_1"]
+action = "deploy_continue"
+fields = { deployment = "dpl_1" }
+effects = ["deploy", "deploy_production", "change_traffic"]
