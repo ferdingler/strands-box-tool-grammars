@@ -91,34 +91,32 @@ action = "build"
 fields = { frozen = true }
 effects = ["run_build_scripts"]
 
-# The rustup toolchain selector, only directly after `cargo`
+# The rustup toolchain selector is not modeled: rustup 1.29.3 (proxy_mode.rs, `local_toolchain`
+# with `should_auto_install`, on by default since 1.28.1) downloads a missing toolchain before cargo
+# starts, even under --offline, and a grammar cannot put an effect on the toolchain word
 [[case]]
 argv = ["cargo", "+nightly", "build"]
-action = "build"
-fields = { toolchain = "nightly" }
-effects = ["network", "run_build_scripts", "update_lockfile"]
+action = "unmodeled"
 
 [[case]]
 argv = ["cargo", "+1.99.1", "--offline", "build", "--locked"]
-action = "build"
-fields = { locked = true, offline = true, toolchain = "1.99.1" }
-effects = ["run_build_scripts"]
+action = "unmodeled"
 
 # A toolchain after the command is an operand, and build takes none
 [[case]]
 argv = ["cargo", "build", "+nightly"]
 action = "unmodeled"
 
-# A toolchain that holds `/` is refused by the parser
+# Any toolchain word is unmodeled, this one too
 [[case]]
 argv = ["cargo", "+../evil", "build"]
 action = "unmodeled"
 
 # `-Z` (Append, global) enables unstable behaviour: override_config. Separate and attached value
 [[case]]
-argv = ["cargo", "+nightly", "-Z", "build-std", "build", "--target", "x86_64-unknown-linux-gnu"]
+argv = ["cargo", "-Z", "build-std", "build", "--target", "x86_64-unknown-linux-gnu"]
 action = "build"
-fields = { target = ["x86_64-unknown-linux-gnu"], toolchain = "nightly", unstable_features = ["build-std"] }
+fields = { target = ["x86_64-unknown-linux-gnu"], unstable_features = ["build-std"] }
 effects = ["network", "override_config", "run_build_scripts", "update_lockfile"]
 
 [[case]]
@@ -342,13 +340,36 @@ action = "test"
 fields = { doc = true, lib = true, no_fail_fast = true, quiet = true, test = ["integration"] }
 effects = ["execute_built_code", "network", "run_build_scripts", "update_lockfile"]
 
-# `-p` with a word that starts with `-`: the grammar reads it as the value. cargo reads a bare
-# `-p`, prints the packages, and exits with an error (`check_optional_opts`), so no test runs.
+# `-p` with a word that starts with `-`: the grammar reads it as the value, and adds
+# ambiguous_argv. cargo reads a bare `-p`, prints the packages, and exits with an error
+# (`check_optional_opts`), so no test runs.
 [[case]]
 argv = ["cargo", "test", "-p", "--lib"]
 action = "test"
 fields = { package = ["--lib"] }
-effects = ["execute_built_code", "network", "run_build_scripts", "update_lockfile"]
+effects = ["ambiguous_argv", "execute_built_code", "network", "run_build_scripts", "update_lockfile"]
+
+# publish does not reject a bare `-p` (`packages_from_flags` takes no value as the default
+# package), and `--workspace` is then cargo's: the field is wrong, so ambiguous_argv
+[[case]]
+argv = ["cargo", "publish", "-p", "--workspace"]
+action = "publish"
+fields = { package = ["--workspace"] }
+effects = ["ambiguous_argv", "network", "publish_crate", "run_build_scripts", "update_lockfile"]
+
+# A `-` inside a value is fine; only a leading `-` is ambiguous
+[[case]]
+argv = ["cargo", "publish", "-p", "crate-a", "--target", "x86_64-unknown-linux-gnu"]
+action = "publish"
+fields = { package = ["crate-a"], target = ["x86_64-unknown-linux-gnu"] }
+effects = ["network", "publish_crate", "run_build_scripts", "update_lockfile"]
+
+# `tree -i` bare takes the `-p` packages (commands/tree.rs), so `--frozen` here is cargo's
+[[case]]
+argv = ["cargo", "tree", "-p", "foo", "-i", "--frozen"]
+action = "tree"
+fields = { invert = ["--frozen"], package = ["foo"] }
+effects = ["ambiguous_argv", "network", "update_lockfile"]
 
 # A lone `--` with no test arguments: clap accepts an empty ARGS
 [[case]]
@@ -534,9 +555,7 @@ effects = ["network", "override_config", "run_build_scripts", "update_lockfile"]
 
 [[case]]
 argv = ["cargo", "+nightly", "clippy", "-q"]
-action = "clippy"
-fields = { quiet = true, toolchain = "nightly" }
-effects = ["network", "run_build_scripts", "update_lockfile"]
+action = "unmodeled"
 
 # An option before `clippy` is not forwarded to the external subcommand (main.rs
 # `execute_subcommand` passes only `CARGO`), so `--offline` there would not take effect
@@ -605,9 +624,7 @@ effects = ["override_config", "write_source"]
 
 [[case]]
 argv = ["cargo", "+nightly", "fmt", "-q"]
-action = "fmt"
-fields = { quiet = true, toolchain = "nightly" }
-effects = ["write_source"]
+action = "unmodeled"
 
 # cargo-fmt has its own parser: no `-m`, no `--locked`, and no cargo option before `fmt`
 [[case]]
@@ -975,11 +992,19 @@ action = "install"
 fields = { crate = ["ripgrep@14.1.0"], force = true, locked = true, root = "/opt/tools" }
 effects = ["install_binary", "network", "run_build_scripts"]
 
+# `--path <dir>` reloads configuration rooted at that directory (install.rs `reload_rooted_at`),
+# so its `.cargo/config.toml` applies: override_config
 [[case]]
-argv = ["cargo", "install", "--path", ".", "--offline", "--debug", "--bin", "tool"]
+argv = ["cargo", "install", "--path", ".", "--offline", "--debug", "--bins"]
 action = "install"
-fields = { bin = ["tool"], debug = true, offline = true, path = "." }
-effects = ["install_binary", "run_build_scripts"]
+fields = { bins = true, debug = true, offline = true, path = "." }
+effects = ["install_binary", "override_config", "run_build_scripts"]
+
+# install `--bin` and `--example` are not modeled: with a crate named, cargo skips
+# `check_optional_opts`, so a bare `--bin` would hide the option after it (verifier case below)
+[[case]]
+argv = ["cargo", "install", "ripgrep", "--bin", "rg"]
+action = "unmodeled"
 
 [[case]]
 argv = ["cargo", "install", "--git", "https://github.com/example/tool", "--tag", "v1.2.0", "--no-track"]
@@ -1177,7 +1202,7 @@ action = "unmodeled"
 # Written by the verifier from the cargo 1.99.1 source (5f94df478: src/bin/cargo/cli.rs,
 # main.rs, commands/*.rs, src/util/command_prelude.rs), rust 1.99.1 src/tools/clippy/src/main.rs,
 # src/tools/rustfmt/src/{cargo-fmt,bin}/main.rs, and rustup 1.29.3 src/cli/proxy_mode.rs.
-# A case marked EXPECTED-FAIL states what the CLI does and the grammar does not read.
+# A case marked "Was EXPECTED-FAIL" failed against 3dfda07 and pins the fix.
 
 # cli.rs: -v (Count), -q, --color are global(true); accepted after the command.
 [[case]]
@@ -1302,7 +1327,7 @@ action = "unmodeled"
 argv = ["cargo", "install", "--path", ".", "--root", "/opt/x"]
 action = "install"
 fields = { path = ".", root = "/opt/x" }
-effects = ["install_binary", "network", "run_build_scripts"]
+effects = ["install_binary", "network", "override_config", "run_build_scripts"]
 
 # install --git with --branch and a crate.
 [[case]]
@@ -1323,7 +1348,8 @@ effects = []
 argv = ["cargo", "install", "--vers", "1.0.0", "foo"]
 action = "unmodeled"
 
-# EXPECTED-FAIL. install --bin is optional_multi_opt (num_args 0..=1), so clap does not take
+# Was EXPECTED-FAIL (F1): install --bin is no longer modeled.
+# install --bin is optional_multi_opt (num_args 0..=1), so clap does not take
 # `--root` as its value. With crate operands, install.rs passes workspace None to compile_options,
 # so check_optional_opts does not run and the install goes on into /r. Verified with cargo 1.98.1
 # (same helper): `cargo install --bin --root R --list` lists R. The grammar reads root as absent
@@ -1332,12 +1358,12 @@ action = "unmodeled"
 argv = ["cargo", "install", "--bin", "--root", "/r", "foo"]
 action = "unmodeled"
 
-# EXPECTED-FAIL. Same shape: bare --example hides --config, so override_config is lost.
+# Was EXPECTED-FAIL (F1): install --example is no longer modeled. Bare --example hides --config.
 [[case]]
 argv = ["cargo", "install", "--example", "--config", "build.rustc-wrapper=\"/x\"", "foo"]
 action = "unmodeled"
 
-# EXPECTED-FAIL. Same shape: bare --bin hides --git, so the source is not visible.
+# Was EXPECTED-FAIL (F1): install --bin is no longer modeled. Bare --bin hides --git.
 [[case]]
 argv = ["cargo", "install", "--bin", "--git", "https://example.invalid/x.git", "foo"]
 action = "unmodeled"
@@ -1354,7 +1380,7 @@ effects = ["network", "run_build_scripts", "update_lockfile", "write_source"]
 argv = ["cargo", "clippy", "-p", "--fix"]
 action = "clippy"
 fields = { package = ["--fix"] }
-effects = ["network", "run_build_scripts", "update_lockfile", "write_source"]
+effects = ["ambiguous_argv", "network", "run_build_scripts", "update_lockfile", "write_source"]
 
 # clippy stops its scan at `--`: a later --fix goes to clippy-driver and is not fix mode.
 [[case]]
@@ -1387,23 +1413,25 @@ effects = []
 argv = ["cargo", "fmt", "--offline"]
 action = "unmodeled"
 
-# EXPECTED-FAIL. cargo-fmt runs `rustfmt <files> ... --check --print-config default`; rustfmt
-# determine_operation reads --print-config before --check and File::create's the first free
-# argument (a crate source file) with the default config. So --check does not stop a write.
+# Was EXPECTED-FAIL (verifier F3). cargo-fmt runs `rustfmt <files> ... --check --print-config
+# default`; rustfmt determine_operation reads --print-config before --check and File::create's the
+# first free argument (a crate source file). So --check does not stop a write. The grammar cannot
+# add write_source back over the `--check` removal (a remove always wins; repro remove-unless), so
+# the write is carried by pass_through_args, which nothing removes. Expectation changed to that
+# reading; the cargo source does not make the verifier's claim wrong, the grammar cannot express it.
 [[case]]
 argv = ["cargo", "fmt", "--check", "--", "--print-config", "default"]
 action = "fmt"
 fields = { check = true, rustfmt_options = ["--print-config", "default"] }
-effects = ["pass_through_args", "write_source"]
+effects = ["pass_through_args"]
 
-# EXPECTED-FAIL. rustup 1.29.3 proxy_mode.rs: `+<toolchain>` goes to Cfg::local_toolchain, which
-# installs a missing toolchain when auto-install is on (the default since 1.28.1). That download
-# happens even with --frozen, and before cargo starts.
+# Was EXPECTED-FAIL (F2). rustup 1.29.3 proxy_mode.rs: `+<toolchain>` goes to Cfg::local_toolchain,
+# which installs a missing toolchain when auto-install is on (the default since 1.28.1). That
+# download happens even with --frozen, and before cargo starts. A grammar cannot put an effect on the
+# toolchain word, so `+<toolchain>` is no longer modeled.
 [[case]]
 argv = ["cargo", "+nightly", "--frozen", "fetch"]
-action = "fetch"
-fields = { toolchain = "nightly", frozen = true }
-effects = ["network"]
+action = "unmodeled"
 
 # clean gc is a hidden nested subcommand; not modeled.
 [[case]]

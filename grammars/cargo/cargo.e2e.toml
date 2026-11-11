@@ -1,8 +1,9 @@
 # End-to-end cases for cargo.grammar.toml. The harness runs each argv through the Shell of a real
 # box, where `cargo` is a stub that prints its arguments and exits 0.
 #
-# The policy lets the agent build, check, test, and format, and refuses publishing, a command-line
-# configuration override, and any lockfile write.
+# The policy is the set of example rules in README.md: it refuses publishing, a command-line
+# configuration override, a lockfile write on build/check/test, a formatting write, and a clean of
+# another target directory.
 
 policy = '''
 @id("cargo_actions")
@@ -18,10 +19,20 @@ when { context.input.effects.contains(Tool::cargo::Effect::"publish_crate") };
 forbid (principal, action in Tool::cargo::Action::"*", resource)
 when { context.input.effects.contains(Tool::cargo::Effect::"override_config") };
 
-@id("locked_builds")
+@id("locked")
 @description("Pass --locked or --frozen so that Cargo.lock does not change.")
-forbid (principal, action == Tool::cargo::Action::"build", resource)
+forbid (principal, action in [Tool::cargo::Action::"build", Tool::cargo::Action::"check", Tool::cargo::Action::"test"], resource)
 when { context.input.effects.contains(Tool::cargo::Effect::"update_lockfile") };
+
+@id("fmt_check_only")
+forbid (principal, action == Tool::cargo::Action::"fmt", resource)
+when { context.input.effects.containsAny([
+  Tool::cargo::Effect::"write_source",
+  Tool::cargo::Effect::"pass_through_args"]) };
+
+@id("clean_default_dir")
+forbid (principal, action == Tool::cargo::Action::"clean", resource)
+when { context.input has target_dir };
 '''
 
 # A locked build is permitted and runs the program
@@ -34,7 +45,7 @@ stdout = "stub-argv: [build] [--locked] [--release]"
 [[case]]
 argv = ["cargo", "build", "--release"]
 exit = 126
-stderr = "[policy: locked_builds]: Pass --locked or --frozen so that Cargo.lock does not change."
+stderr = "[policy: locked]: Pass --locked or --frozen so that Cargo.lock does not change."
 
 # Publishing is refused
 [[case]]
@@ -71,3 +82,15 @@ stderr = "[default-deny]: No permit policy matched this request."
 argv = ["cargo", "--offline", "clippy"]
 exit = 126
 stderr = "[default-deny]"
+
+# fmt may only check: a pass-through word after `--` is refused, even `-- --check`
+[[case]]
+argv = ["cargo", "fmt", "--all", "--", "--check"]
+exit = 126
+stderr = "[policy: fmt_check_only]"
+
+# `clean --target-dir` would delete that directory
+[[case]]
+argv = ["cargo", "clean", "--target-dir", "/"]
+exit = 126
+stderr = "[policy: clean_default_dir]"

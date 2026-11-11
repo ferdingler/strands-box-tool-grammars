@@ -6,7 +6,7 @@ box policy see what a `cargo` command line does (compile and run code, change `C
 
 | | |
 |---|---|
-| Executable | `cargo`, usually the rustup proxy, which reads `+<toolchain>` and runs that toolchain's cargo |
+| Executable | `cargo`, usually the rustup proxy, which picks a toolchain and runs that toolchain's cargo |
 | Version checked | cargo 1.99.1 (`5f94df478`, Rust 1.99.1), with the clippy and rustfmt of that toolchain, against `cargo <command> --help`, `cargo help <command>`, and the cargo source at that commit |
 | Policy namespace | `Tool::cargo` |
 
@@ -50,7 +50,7 @@ replaces the proxy, and Box refuses a grammar whose program file changed until t
 | Run code | `test`, `bench`, `run` | `test`/`bench`: words after `--` go to the test binary. `run`: the first operand and every word after it go to the program. |
 | Format | `fmt` | The `cargo-fmt` external subcommand, with its own options; words after `--` go to rustfmt. |
 | Dependencies | `add`, `remove`, `update`, `fetch`, `generate_lockfile`, `vendor` | |
-| Inspect | `tree`, `metadata`, `locate_project`, `version` | `metadata` and `tree` resolve the workspace unless `--no-deps` / `--frozen` say otherwise. |
+| Inspect | `tree`, `metadata`, `locate_project`, `version` | `metadata` and `tree` resolve the workspace; under `--frozen` they do not reach the network or write `Cargo.lock`, and `metadata --no-deps` does not resolve at all. |
 | Packages | `new`, `init`, `clean` | |
 | Registry | `search`, `publish`, `package`, `install`, `uninstall` | |
 
@@ -60,7 +60,7 @@ and `fmt`. `cargo` does not pass an option given before an external subcommand o
 `cargo --offline clippy` is `unmodeled`. `clippy` accepts those options after the command word,
 because cargo-clippy passes them to `cargo check`. `fmt` accepts only its own options.
 
-`+<toolchain>` is accepted directly after `cargo` on every action, as the field `toolchain`.
+`cargo +<toolchain> ...` is not modeled, so it is `unmodeled` (see Exclusions).
 
 ## Effects
 
@@ -70,9 +70,9 @@ because cargo-clippy passes them to `cargo check`. `fmt` accepts only its own op
 | `update_lockfile` | Can create or rewrite `Cargo.lock` | every command that resolves the workspace; `clean -p`/`--workspace` | `--locked`, `--frozen`; `--dry-run` on `add`, `remove`, `update`, `clean`; `metadata --no-deps` |
 | `run_build_scripts` | Compiles code, which runs build scripts and procedural macros | `build`, `check`, `test`, `bench`, `run`, `doc`, `clippy`, `install`, `publish`, `package` | `--no-verify` and `package --list`; `install --list` |
 | `execute_built_code` | Runs a test, bench, or binary that the build produced | `test`, `bench`, `run` | `--no-run` on `test` and `bench` |
-| `override_config` | Changes configuration or the manifest from the command line | `--config`, `-Z`, `-m`/`--manifest-path`, `vendor --sync` | nothing |
+| `override_config` | Changes configuration or the manifest from the command line | `--config`, `-Z`, `-m`/`--manifest-path`, `vendor --sync`, `install --path` (cargo reads that directory's `.cargo/config.toml`) | nothing |
 | `edit_manifest` | Writes dependency changes to `Cargo.toml` | `add`, `remove` | `--dry-run` |
-| `write_source` | Rewrites source files | `fmt`; `clippy --fix` (also when `--fix` is the value of another option, as cargo-clippy reads it) | `fmt --check` |
+| `write_source` | Rewrites source files | `fmt`; `clippy --fix` (also when `--fix` is the value of another option, as cargo-clippy reads it) | `fmt --check`, which does not stop a write that words after `--` cause (`-- --print-config default` overwrites a source file); those carry `pass_through_args` |
 | `pass_through_args` | Passes words straight to rustfmt or the clippy driver | words after `--` on `fmt` and `clippy` | nothing |
 | `create_package` | Creates a package, and can add it to a parent workspace | `new`, `init` | nothing |
 | `write_files` | Writes a vendor directory and deletes stale crates there | `vendor` | nothing |
@@ -81,6 +81,7 @@ because cargo-clippy passes them to `cargo check`. `fmt` accepts only its own op
 | `install_binary` | Installs binaries into the install root | `install` | `install --list` |
 | `uninstall_binary` | Deletes installed binaries | `uninstall` | nothing |
 | `open_browser` | Opens the docs with a browser program | `doc --open` | nothing |
+| `ambiguous_argv` | An optional-value option got a word that starts with `-`, which cargo reads as its own option, so the fields can be wrong | a value like `-*` on `-p`, `--bin`, `--example`, `--test`, `--bench`, `--target`, `tree -i` | nothing |
 
 `--offline` alone still lets cargo write `Cargo.lock` from its local cache; only `--locked` and
 `--frozen` stop that. An action with no effect (`version`, `locate_project`, `fmt --check`,
@@ -123,7 +124,8 @@ forbid (principal, action == Tool::cargo::Action::"clean", resource)
 when { context.input has target_dir };
 ```
 
-Each rule above ran in a real box against this grammar.
+These rules are the policy of `cargo.e2e.toml`, and each one refuses a line there in a real box.
+To refuse a line whose fields can be misread, also forbid `Tool::cargo::Effect::"ambiguous_argv"`.
 
 ## Exclusions
 
@@ -133,6 +135,12 @@ These are deliberately not modeled, so their lines are `unmodeled` and fall to d
   `.cargo/config.toml` before its built-in alias, so a project can make `cargo t` mean
   `cargo publish`. Spell the full command: a config alias cannot replace `build`, `test`, and so on.
 - `cargo up`: not a cargo 1.99.1 command or built-in alias.
+- `cargo +<toolchain> ...`: the rustup proxy downloads and installs a missing toolchain before cargo
+  starts (auto-install is on by default since rustup 1.28.1), even for `cargo +beta --frozen fetch`.
+  A grammar cannot put an effect on the toolchain word, so these lines are `unmodeled`.
+- `install --bin` and `install --example`: their value is optional, and with a crate named cargo
+  does not reject a bare one, so `cargo install --bin --root /r foo` installs into `/r`. The grammar
+  would read `--root` as the binary name and hide the install root.
 - `login`, `logout`, `owner`, `yank` (registry credentials and registry writes), `fix`, `rustc`,
   `rustdoc`, `report`, `pkgid`, `info`, `config`, `help`, `miri`, the deprecated `read-manifest` and
   `verify-project`, and every other `cargo-<x>` external subcommand.
@@ -147,6 +155,9 @@ These are deliberately not modeled, so their lines are `unmodeled` and fall to d
 
 ## Known limits
 
+- **Toolchain files are invisible.** `rust-toolchain.toml` and `RUSTUP_TOOLCHAIN` choose the
+  toolchain, and rustup can download a missing one even for `cargo version`. Set
+  `RUSTUP_AUTO_INSTALL=0` in the tool's environment to stop that.
 - **Configuration files and the environment are invisible.** `.cargo/config.toml` (in the project
   and every parent) and `$CARGO_HOME/config.toml` can set `build.rustc-wrapper`,
   `target.<triple>.runner`, `net.offline`, registries, and aliases; so can `CARGO_*` and `RUSTFLAGS`
@@ -157,9 +168,13 @@ These are deliberately not modeled, so their lines are `unmodeled` and fall to d
   all run inside the tool's own sandbox. `clippy` and `fmt` are found as `cargo-clippy` and
   `cargo-fmt` on `$CARGO_HOME/bin` or `PATH`, and a config alias can shadow them.
 - **A value that looks like a flag.** The grammar takes the next word as an option's value, even
-  `--release`. Cargo (clap) refuses such a line, and for `-p`, `--bin`, `--example`, `--test`,
-  `--bench`, `--target`, and `tree -i`, which take an optional value, it lists the choices and exits.
-  In both cases cargo builds and runs nothing, though the grammar reads the line as the action.
+  `--release`. For an option with a required value, cargo (clap) refuses that line and runs
+  nothing. For `-p`, `--bin`, `--example`, `--test`, `--bench`, `--target`, and `tree -i`, whose
+  value is optional, cargo reads the word as its own option. Most commands then list the choices and
+  exit, but `publish -p`, `package -p`, and `tree -p <x> -i` go on with the default. Each such value
+  adds `ambiguous_argv`, so a policy can refuse the line. Where cargo goes on, no flag it can
+  swallow there adds an effect, and a swallowed option with a value leaves a word those commands do
+  not accept, so the line is `unmodeled`. Elsewhere cargo exits before it does anything.
 - **Short `=` values.** `-p=foo` is valid to cargo and `unmodeled` here; write `-pfoo`, `-p foo`, or
   `--package=foo`.
 - **Values are sets.** `add serde -F derive tokio -F full` records `features = ["derive", "full"]`
