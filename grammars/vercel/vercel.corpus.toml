@@ -1269,3 +1269,50 @@ argv = ["vercel", "deploy", "continue", "--deployment", "dpl_1"]
 action = "deploy_continue"
 fields = { deployment = "dpl_1" }
 effects = ["deploy", "deploy_production", "change_traffic"]
+
+# ================================================================ negated patterns (strands-agents/box#408)
+
+# `-e` adds `production_env` for every value other than exactly `preview` or `development`.
+[[case]]
+argv = ["vercel", "env", "pull", "-e", "preview"]
+action = "env_pull"
+fields = { environment = "preview" }
+effects = ["read_secret", "write_local_files"]
+
+[[case]]
+argv = ["vercel", "env", "pull", "-e", "development"]
+action = "env_pull"
+fields = { environment = "development" }
+effects = ["read_secret", "write_local_files"]
+
+[[case]]
+argv = ["vercel", "env", "pull", "-e", "Production"]
+action = "env_pull"
+fields = { environment = "Production" }
+effects = ["read_secret", "write_local_files", "production_env"]
+
+# A custom environment keeps `production_env`, because the grammar cannot tell that it is not production.
+[[case]]
+argv = ["vercel", "env", "pull", "-e", "staging"]
+action = "env_pull"
+fields = { environment = "staging" }
+effects = ["read_secret", "write_local_files", "production_env"]
+
+[[case]]
+argv = ["vercel", "env", "add", "API_URL", "-e", "preview", "-e", "development"]
+action = "env_add"
+fields = { name = "API_URL", environment = ["development", "preview"] }
+effects = ["write_secret"]
+
+# One value outside the patterns is enough.
+[[case]]
+argv = ["vercel", "env", "add", "API_URL", "-e", "preview", "-e", "staging"]
+action = "env_add"
+fields = { name = "API_URL", environment = ["preview", "staging"] }
+effects = ["write_secret", "production_env"]
+
+[[case]]
+argv = ["vercel", "build", "-e", "PREVIEW"]
+action = "build"
+fields = { environment = "PREVIEW" }
+effects = ["run_local_code", "read_secret", "write_local_files", "production_env"]

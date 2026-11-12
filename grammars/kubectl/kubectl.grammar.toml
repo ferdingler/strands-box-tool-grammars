@@ -39,7 +39,7 @@ read_secrets      = "Reads Secret objects, or kubeconfig credentials without red
 write_secrets     = "Creates or changes a Secret"
 run_program       = "Runs a program inside a container"
 network_listen    = "Opens a listening port on this host that forwards to the cluster"
-listen_address    = "Sets the listen address; a value other than localhost exposes the port to other hosts"
+listen_address    = "Listens on an address other than localhost, 127.0.0.1, or ::1, which can expose the port to other hosts"
 upload_files      = "Sends the contents of local files to the cluster"
 write_local_files = "Writes files on this host"
 manifest_input    = "Reads objects or changes from a file, directory, URL, or kustomization the grammar cannot see"
@@ -104,38 +104,15 @@ options.watch          = { flag = ["-w", "--watch"] }
 options.watch_only     = { flag = ["--watch-only"], value = "optional" }
 
 [shell.get.operands.type]
+case = "insensitive"
 adds = ["read_secrets"]
-# Every upper and lower case spelling of `secret`.
-like = [
-  "*secret*", "*secreT*", "*secrEt*", "*secrET*", "*secRet*", "*secReT*",
-  "*secREt*", "*secRET*", "*seCret*", "*seCreT*", "*seCrEt*", "*seCrET*",
-  "*seCRet*", "*seCReT*", "*seCREt*", "*seCRET*", "*sEcret*", "*sEcreT*",
-  "*sEcrEt*", "*sEcrET*", "*sEcRet*", "*sEcReT*", "*sEcREt*", "*sEcRET*",
-  "*sECret*", "*sECreT*", "*sECrEt*", "*sECrET*", "*sECRet*", "*sECReT*",
-  "*sECREt*", "*sECRET*", "*Secret*", "*SecreT*", "*SecrEt*", "*SecrET*",
-  "*SecRet*", "*SecReT*", "*SecREt*", "*SecRET*", "*SeCret*", "*SeCreT*",
-  "*SeCrEt*", "*SeCrET*", "*SeCRet*", "*SeCReT*", "*SeCREt*", "*SeCRET*",
-  "*SEcret*", "*SEcreT*", "*SEcrEt*", "*SEcrET*", "*SEcRet*", "*SEcReT*",
-  "*SEcREt*", "*SEcRET*", "*SECret*", "*SECreT*", "*SECrEt*", "*SECrET*",
-  "*SECRet*", "*SECReT*", "*SECREt*", "*SECRET*",
-]
+like = ["*secret*"]
 
 [shell.get.operands.name]
+case = "insensitive"
 adds = ["read_secrets"]
-# A TYPE/NAME word whose type is a Secret, in any case.
-like = [
-  "*secret*/*", "*secreT*/*", "*secrEt*/*", "*secrET*/*", "*secRet*/*", "*secReT*/*",
-  "*secREt*/*", "*secRET*/*", "*seCret*/*", "*seCreT*/*", "*seCrEt*/*", "*seCrET*/*",
-  "*seCRet*/*", "*seCReT*/*", "*seCREt*/*", "*seCRET*/*", "*sEcret*/*", "*sEcreT*/*",
-  "*sEcrEt*/*", "*sEcrET*/*", "*sEcRet*/*", "*sEcReT*/*", "*sEcREt*/*", "*sEcRET*/*",
-  "*sECret*/*", "*sECreT*/*", "*sECrEt*/*", "*sECrET*/*", "*sECRet*/*", "*sECReT*/*",
-  "*sECREt*/*", "*sECRET*/*", "*Secret*/*", "*SecreT*/*", "*SecrEt*/*", "*SecrET*/*",
-  "*SecRet*/*", "*SecReT*/*", "*SecREt*/*", "*SecRET*/*", "*SeCret*/*", "*SeCreT*/*",
-  "*SeCrEt*/*", "*SeCrET*/*", "*SeCRet*/*", "*SeCReT*/*", "*SeCREt*/*", "*SeCRET*/*",
-  "*SEcret*/*", "*SEcreT*/*", "*SEcrEt*/*", "*SEcrET*/*", "*SEcRet*/*", "*SEcReT*/*",
-  "*SEcREt*/*", "*SEcRET*/*", "*SECret*/*", "*SECreT*/*", "*SECrEt*/*", "*SECrET*/*",
-  "*SECRet*/*", "*SECReT*/*", "*SECREt*/*", "*SECRET*/*",
-]
+# A TYPE/NAME word whose type is a Secret.
+like = ["*secret*/*"]
 
 # kubectl describe. For a service-account-token Secret it prints the token (describe.go
 # describeSecret), so a Secret type or a -f/-k input adds `read_secrets`.
@@ -153,38 +130,15 @@ options.show_events    = { flag = ["--show-events"], value = "optional" }
 # kubectl logs [-f] [-p] (POD | TYPE/NAME) [CONTAINER]. Zero operands needs -l.
 
 [shell.describe.operands.type]
+case = "insensitive"
 adds = ["read_secrets"]
-# Every upper and lower case spelling of `secret`.
-like = [
-  "*secret*", "*secreT*", "*secrEt*", "*secrET*", "*secRet*", "*secReT*",
-  "*secREt*", "*secRET*", "*seCret*", "*seCreT*", "*seCrEt*", "*seCrET*",
-  "*seCRet*", "*seCReT*", "*seCREt*", "*seCRET*", "*sEcret*", "*sEcreT*",
-  "*sEcrEt*", "*sEcrET*", "*sEcRet*", "*sEcReT*", "*sEcREt*", "*sEcRET*",
-  "*sECret*", "*sECreT*", "*sECrEt*", "*sECrET*", "*sECRet*", "*sECReT*",
-  "*sECREt*", "*sECRET*", "*Secret*", "*SecreT*", "*SecrEt*", "*SecrET*",
-  "*SecRet*", "*SecReT*", "*SecREt*", "*SecRET*", "*SeCret*", "*SeCreT*",
-  "*SeCrEt*", "*SeCrET*", "*SeCRet*", "*SeCReT*", "*SeCREt*", "*SeCRET*",
-  "*SEcret*", "*SEcreT*", "*SEcrEt*", "*SEcrET*", "*SEcRet*", "*SEcReT*",
-  "*SEcREt*", "*SEcRET*", "*SECret*", "*SECreT*", "*SECrEt*", "*SECrET*",
-  "*SECRet*", "*SECReT*", "*SECREt*", "*SECRET*",
-]
+like = ["*secret*"]
 
 [shell.describe.operands.name]
+case = "insensitive"
 adds = ["read_secrets"]
-# A TYPE/NAME word whose type is a Secret, in any case.
-like = [
-  "*secret*/*", "*secreT*/*", "*secrEt*/*", "*secrET*/*", "*secRet*/*", "*secReT*/*",
-  "*secREt*/*", "*secRET*/*", "*seCret*/*", "*seCreT*/*", "*seCrEt*/*", "*seCrET*/*",
-  "*seCRet*/*", "*seCReT*/*", "*seCREt*/*", "*seCRET*/*", "*sEcret*/*", "*sEcreT*/*",
-  "*sEcrEt*/*", "*sEcrET*/*", "*sEcRet*/*", "*sEcReT*/*", "*sEcREt*/*", "*sEcRET*/*",
-  "*sECret*/*", "*sECreT*/*", "*sECrEt*/*", "*sECrET*/*", "*sECRet*/*", "*sECReT*/*",
-  "*sECREt*/*", "*sECRET*/*", "*Secret*/*", "*SecreT*/*", "*SecrEt*/*", "*SecrET*/*",
-  "*SecRet*/*", "*SecReT*/*", "*SecREt*/*", "*SecRET*/*", "*SeCret*/*", "*SeCreT*/*",
-  "*SeCrEt*/*", "*SeCrET*/*", "*SeCRet*/*", "*SeCReT*/*", "*SeCREt*/*", "*SeCRET*/*",
-  "*SEcret*/*", "*SEcreT*/*", "*SEcrEt*/*", "*SEcrET*/*", "*SEcRet*/*", "*SEcReT*/*",
-  "*SEcREt*/*", "*SEcRET*/*", "*SECret*/*", "*SECreT*/*", "*SECrEt*/*", "*SECrET*/*",
-  "*SECRet*/*", "*SECReT*/*", "*SECREt*/*", "*SECRET*/*",
-]
+# A TYPE/NAME word whose type is a Secret.
+like = ["*secret*/*"]
 
 [shell.logs]
 usage = "kubectl [global options] logs [options] [<pod>] [<container>]"
@@ -483,191 +437,33 @@ options.wait      = { flag = ["--wait"], value = "optional" }
 # --local only prints the patched object, so it removes the write effects.
 
 [shell.delete.operands.type]
-# A Secret, in any case.
+case = "insensitive"
+# A Secret.
 [[shell.delete.operands.type.when]]
-like = [
-  "*secret*", "*secreT*", "*secrEt*", "*secrET*", "*secRet*", "*secReT*",
-  "*secREt*", "*secRET*", "*seCret*", "*seCreT*", "*seCrEt*", "*seCrET*",
-  "*seCRet*", "*seCReT*", "*seCREt*", "*seCRET*", "*sEcret*", "*sEcreT*",
-  "*sEcrEt*", "*sEcrET*", "*sEcRet*", "*sEcReT*", "*sEcREt*", "*sEcRET*",
-  "*sECret*", "*sECreT*", "*sECrEt*", "*sECrET*", "*sECRet*", "*sECReT*",
-  "*sECREt*", "*sECRET*", "*Secret*", "*SecreT*", "*SecrEt*", "*SecrET*",
-  "*SecRet*", "*SecReT*", "*SecREt*", "*SecRET*", "*SeCret*", "*SeCreT*",
-  "*SeCrEt*", "*SeCrET*", "*SeCRet*", "*SeCReT*", "*SeCREt*", "*SeCRET*",
-  "*SEcret*", "*SEcreT*", "*SEcrEt*", "*SEcrET*", "*SEcRet*", "*SEcReT*",
-  "*SEcREt*", "*SEcRET*", "*SECret*", "*SECreT*", "*SECrEt*", "*SECrET*",
-  "*SECRet*", "*SECReT*", "*SECREt*", "*SECRET*",
-]
+like = ["*secret*"]
 adds = ["write_secrets"]
 
-# A Namespace (`ns` as a whole type, with any .version.group suffix, or `namespace`, any case)
-# or a CustomResourceDefinition (`crd`, or `efin` from `definition`, any case).
+# A Namespace (`ns` as a whole type, with any .version.group suffix, or `namespace`) or a
+# CustomResourceDefinition (`crd` or `customresourcedefinition`).
 [[shell.delete.operands.type.when]]
 like = [
   "ns", "ns.*", "ns/*", "ns,*", "*,ns", "*,ns.*", "*,ns/*", "*,ns,*",
-  "nS", "nS.*", "nS/*", "nS,*", "*,nS", "*,nS.*", "*,nS/*", "*,nS,*",
-  "Ns", "Ns.*", "Ns/*", "Ns,*", "*,Ns", "*,Ns.*", "*,Ns/*", "*,Ns,*",
-  "NS", "NS.*", "NS/*", "NS,*", "*,NS", "*,NS.*", "*,NS/*", "*,NS,*",
-  "*namespace*", "*namespacE*", "*namespaCe*", "*namespaCE*", "*namespAce*", "*namespAcE*", "*namespACe*", "*namespACE*",
-  "*namesPace*", "*namesPacE*", "*namesPaCe*", "*namesPaCE*", "*namesPAce*", "*namesPAcE*", "*namesPACe*", "*namesPACE*",
-  "*nameSpace*", "*nameSpacE*", "*nameSpaCe*", "*nameSpaCE*", "*nameSpAce*", "*nameSpAcE*", "*nameSpACe*", "*nameSpACE*",
-  "*nameSPace*", "*nameSPacE*", "*nameSPaCe*", "*nameSPaCE*", "*nameSPAce*", "*nameSPAcE*", "*nameSPACe*", "*nameSPACE*",
-  "*namEspace*", "*namEspacE*", "*namEspaCe*", "*namEspaCE*", "*namEspAce*", "*namEspAcE*", "*namEspACe*", "*namEspACE*",
-  "*namEsPace*", "*namEsPacE*", "*namEsPaCe*", "*namEsPaCE*", "*namEsPAce*", "*namEsPAcE*", "*namEsPACe*", "*namEsPACE*",
-  "*namESpace*", "*namESpacE*", "*namESpaCe*", "*namESpaCE*", "*namESpAce*", "*namESpAcE*", "*namESpACe*", "*namESpACE*",
-  "*namESPace*", "*namESPacE*", "*namESPaCe*", "*namESPaCE*", "*namESPAce*", "*namESPAcE*", "*namESPACe*", "*namESPACE*",
-  "*naMespace*", "*naMespacE*", "*naMespaCe*", "*naMespaCE*", "*naMespAce*", "*naMespAcE*", "*naMespACe*", "*naMespACE*",
-  "*naMesPace*", "*naMesPacE*", "*naMesPaCe*", "*naMesPaCE*", "*naMesPAce*", "*naMesPAcE*", "*naMesPACe*", "*naMesPACE*",
-  "*naMeSpace*", "*naMeSpacE*", "*naMeSpaCe*", "*naMeSpaCE*", "*naMeSpAce*", "*naMeSpAcE*", "*naMeSpACe*", "*naMeSpACE*",
-  "*naMeSPace*", "*naMeSPacE*", "*naMeSPaCe*", "*naMeSPaCE*", "*naMeSPAce*", "*naMeSPAcE*", "*naMeSPACe*", "*naMeSPACE*",
-  "*naMEspace*", "*naMEspacE*", "*naMEspaCe*", "*naMEspaCE*", "*naMEspAce*", "*naMEspAcE*", "*naMEspACe*", "*naMEspACE*",
-  "*naMEsPace*", "*naMEsPacE*", "*naMEsPaCe*", "*naMEsPaCE*", "*naMEsPAce*", "*naMEsPAcE*", "*naMEsPACe*", "*naMEsPACE*",
-  "*naMESpace*", "*naMESpacE*", "*naMESpaCe*", "*naMESpaCE*", "*naMESpAce*", "*naMESpAcE*", "*naMESpACe*", "*naMESpACE*",
-  "*naMESPace*", "*naMESPacE*", "*naMESPaCe*", "*naMESPaCE*", "*naMESPAce*", "*naMESPAcE*", "*naMESPACe*", "*naMESPACE*",
-  "*nAmespace*", "*nAmespacE*", "*nAmespaCe*", "*nAmespaCE*", "*nAmespAce*", "*nAmespAcE*", "*nAmespACe*", "*nAmespACE*",
-  "*nAmesPace*", "*nAmesPacE*", "*nAmesPaCe*", "*nAmesPaCE*", "*nAmesPAce*", "*nAmesPAcE*", "*nAmesPACe*", "*nAmesPACE*",
-  "*nAmeSpace*", "*nAmeSpacE*", "*nAmeSpaCe*", "*nAmeSpaCE*", "*nAmeSpAce*", "*nAmeSpAcE*", "*nAmeSpACe*", "*nAmeSpACE*",
-  "*nAmeSPace*", "*nAmeSPacE*", "*nAmeSPaCe*", "*nAmeSPaCE*", "*nAmeSPAce*", "*nAmeSPAcE*", "*nAmeSPACe*", "*nAmeSPACE*",
-  "*nAmEspace*", "*nAmEspacE*", "*nAmEspaCe*", "*nAmEspaCE*", "*nAmEspAce*", "*nAmEspAcE*", "*nAmEspACe*", "*nAmEspACE*",
-  "*nAmEsPace*", "*nAmEsPacE*", "*nAmEsPaCe*", "*nAmEsPaCE*", "*nAmEsPAce*", "*nAmEsPAcE*", "*nAmEsPACe*", "*nAmEsPACE*",
-  "*nAmESpace*", "*nAmESpacE*", "*nAmESpaCe*", "*nAmESpaCE*", "*nAmESpAce*", "*nAmESpAcE*", "*nAmESpACe*", "*nAmESpACE*",
-  "*nAmESPace*", "*nAmESPacE*", "*nAmESPaCe*", "*nAmESPaCE*", "*nAmESPAce*", "*nAmESPAcE*", "*nAmESPACe*", "*nAmESPACE*",
-  "*nAMespace*", "*nAMespacE*", "*nAMespaCe*", "*nAMespaCE*", "*nAMespAce*", "*nAMespAcE*", "*nAMespACe*", "*nAMespACE*",
-  "*nAMesPace*", "*nAMesPacE*", "*nAMesPaCe*", "*nAMesPaCE*", "*nAMesPAce*", "*nAMesPAcE*", "*nAMesPACe*", "*nAMesPACE*",
-  "*nAMeSpace*", "*nAMeSpacE*", "*nAMeSpaCe*", "*nAMeSpaCE*", "*nAMeSpAce*", "*nAMeSpAcE*", "*nAMeSpACe*", "*nAMeSpACE*",
-  "*nAMeSPace*", "*nAMeSPacE*", "*nAMeSPaCe*", "*nAMeSPaCE*", "*nAMeSPAce*", "*nAMeSPAcE*", "*nAMeSPACe*", "*nAMeSPACE*",
-  "*nAMEspace*", "*nAMEspacE*", "*nAMEspaCe*", "*nAMEspaCE*", "*nAMEspAce*", "*nAMEspAcE*", "*nAMEspACe*", "*nAMEspACE*",
-  "*nAMEsPace*", "*nAMEsPacE*", "*nAMEsPaCe*", "*nAMEsPaCE*", "*nAMEsPAce*", "*nAMEsPAcE*", "*nAMEsPACe*", "*nAMEsPACE*",
-  "*nAMESpace*", "*nAMESpacE*", "*nAMESpaCe*", "*nAMESpaCE*", "*nAMESpAce*", "*nAMESpAcE*", "*nAMESpACe*", "*nAMESpACE*",
-  "*nAMESPace*", "*nAMESPacE*", "*nAMESPaCe*", "*nAMESPaCE*", "*nAMESPAce*", "*nAMESPAcE*", "*nAMESPACe*", "*nAMESPACE*",
-  "*Namespace*", "*NamespacE*", "*NamespaCe*", "*NamespaCE*", "*NamespAce*", "*NamespAcE*", "*NamespACe*", "*NamespACE*",
-  "*NamesPace*", "*NamesPacE*", "*NamesPaCe*", "*NamesPaCE*", "*NamesPAce*", "*NamesPAcE*", "*NamesPACe*", "*NamesPACE*",
-  "*NameSpace*", "*NameSpacE*", "*NameSpaCe*", "*NameSpaCE*", "*NameSpAce*", "*NameSpAcE*", "*NameSpACe*", "*NameSpACE*",
-  "*NameSPace*", "*NameSPacE*", "*NameSPaCe*", "*NameSPaCE*", "*NameSPAce*", "*NameSPAcE*", "*NameSPACe*", "*NameSPACE*",
-  "*NamEspace*", "*NamEspacE*", "*NamEspaCe*", "*NamEspaCE*", "*NamEspAce*", "*NamEspAcE*", "*NamEspACe*", "*NamEspACE*",
-  "*NamEsPace*", "*NamEsPacE*", "*NamEsPaCe*", "*NamEsPaCE*", "*NamEsPAce*", "*NamEsPAcE*", "*NamEsPACe*", "*NamEsPACE*",
-  "*NamESpace*", "*NamESpacE*", "*NamESpaCe*", "*NamESpaCE*", "*NamESpAce*", "*NamESpAcE*", "*NamESpACe*", "*NamESpACE*",
-  "*NamESPace*", "*NamESPacE*", "*NamESPaCe*", "*NamESPaCE*", "*NamESPAce*", "*NamESPAcE*", "*NamESPACe*", "*NamESPACE*",
-  "*NaMespace*", "*NaMespacE*", "*NaMespaCe*", "*NaMespaCE*", "*NaMespAce*", "*NaMespAcE*", "*NaMespACe*", "*NaMespACE*",
-  "*NaMesPace*", "*NaMesPacE*", "*NaMesPaCe*", "*NaMesPaCE*", "*NaMesPAce*", "*NaMesPAcE*", "*NaMesPACe*", "*NaMesPACE*",
-  "*NaMeSpace*", "*NaMeSpacE*", "*NaMeSpaCe*", "*NaMeSpaCE*", "*NaMeSpAce*", "*NaMeSpAcE*", "*NaMeSpACe*", "*NaMeSpACE*",
-  "*NaMeSPace*", "*NaMeSPacE*", "*NaMeSPaCe*", "*NaMeSPaCE*", "*NaMeSPAce*", "*NaMeSPAcE*", "*NaMeSPACe*", "*NaMeSPACE*",
-  "*NaMEspace*", "*NaMEspacE*", "*NaMEspaCe*", "*NaMEspaCE*", "*NaMEspAce*", "*NaMEspAcE*", "*NaMEspACe*", "*NaMEspACE*",
-  "*NaMEsPace*", "*NaMEsPacE*", "*NaMEsPaCe*", "*NaMEsPaCE*", "*NaMEsPAce*", "*NaMEsPAcE*", "*NaMEsPACe*", "*NaMEsPACE*",
-  "*NaMESpace*", "*NaMESpacE*", "*NaMESpaCe*", "*NaMESpaCE*", "*NaMESpAce*", "*NaMESpAcE*", "*NaMESpACe*", "*NaMESpACE*",
-  "*NaMESPace*", "*NaMESPacE*", "*NaMESPaCe*", "*NaMESPaCE*", "*NaMESPAce*", "*NaMESPAcE*", "*NaMESPACe*", "*NaMESPACE*",
-  "*NAmespace*", "*NAmespacE*", "*NAmespaCe*", "*NAmespaCE*", "*NAmespAce*", "*NAmespAcE*", "*NAmespACe*", "*NAmespACE*",
-  "*NAmesPace*", "*NAmesPacE*", "*NAmesPaCe*", "*NAmesPaCE*", "*NAmesPAce*", "*NAmesPAcE*", "*NAmesPACe*", "*NAmesPACE*",
-  "*NAmeSpace*", "*NAmeSpacE*", "*NAmeSpaCe*", "*NAmeSpaCE*", "*NAmeSpAce*", "*NAmeSpAcE*", "*NAmeSpACe*", "*NAmeSpACE*",
-  "*NAmeSPace*", "*NAmeSPacE*", "*NAmeSPaCe*", "*NAmeSPaCE*", "*NAmeSPAce*", "*NAmeSPAcE*", "*NAmeSPACe*", "*NAmeSPACE*",
-  "*NAmEspace*", "*NAmEspacE*", "*NAmEspaCe*", "*NAmEspaCE*", "*NAmEspAce*", "*NAmEspAcE*", "*NAmEspACe*", "*NAmEspACE*",
-  "*NAmEsPace*", "*NAmEsPacE*", "*NAmEsPaCe*", "*NAmEsPaCE*", "*NAmEsPAce*", "*NAmEsPAcE*", "*NAmEsPACe*", "*NAmEsPACE*",
-  "*NAmESpace*", "*NAmESpacE*", "*NAmESpaCe*", "*NAmESpaCE*", "*NAmESpAce*", "*NAmESpAcE*", "*NAmESpACe*", "*NAmESpACE*",
-  "*NAmESPace*", "*NAmESPacE*", "*NAmESPaCe*", "*NAmESPaCE*", "*NAmESPAce*", "*NAmESPAcE*", "*NAmESPACe*", "*NAmESPACE*",
-  "*NAMespace*", "*NAMespacE*", "*NAMespaCe*", "*NAMespaCE*", "*NAMespAce*", "*NAMespAcE*", "*NAMespACe*", "*NAMespACE*",
-  "*NAMesPace*", "*NAMesPacE*", "*NAMesPaCe*", "*NAMesPaCE*", "*NAMesPAce*", "*NAMesPAcE*", "*NAMesPACe*", "*NAMesPACE*",
-  "*NAMeSpace*", "*NAMeSpacE*", "*NAMeSpaCe*", "*NAMeSpaCE*", "*NAMeSpAce*", "*NAMeSpAcE*", "*NAMeSpACe*", "*NAMeSpACE*",
-  "*NAMeSPace*", "*NAMeSPacE*", "*NAMeSPaCe*", "*NAMeSPaCE*", "*NAMeSPAce*", "*NAMeSPAcE*", "*NAMeSPACe*", "*NAMeSPACE*",
-  "*NAMEspace*", "*NAMEspacE*", "*NAMEspaCe*", "*NAMEspaCE*", "*NAMEspAce*", "*NAMEspAcE*", "*NAMEspACe*", "*NAMEspACE*",
-  "*NAMEsPace*", "*NAMEsPacE*", "*NAMEsPaCe*", "*NAMEsPaCE*", "*NAMEsPAce*", "*NAMEsPAcE*", "*NAMEsPACe*", "*NAMEsPACE*",
-  "*NAMESpace*", "*NAMESpacE*", "*NAMESpaCe*", "*NAMESpaCE*", "*NAMESpAce*", "*NAMESpAcE*", "*NAMESpACe*", "*NAMESpACE*",
-  "*NAMESPace*", "*NAMESPacE*", "*NAMESPaCe*", "*NAMESPaCE*", "*NAMESPAce*", "*NAMESPAcE*", "*NAMESPACe*", "*NAMESPACE*",
-  "*crd*", "*crD*", "*cRd*", "*cRD*", "*Crd*", "*CrD*", "*CRd*", "*CRD*",
-  "*efin*", "*efiN*", "*efIn*", "*efIN*", "*eFin*", "*eFiN*", "*eFIn*", "*eFIN*",
-  "*Efin*", "*EfiN*", "*EfIn*", "*EfIN*", "*EFin*", "*EFiN*", "*EFIn*", "*EFIN*",
+  "*namespace*", "*crd*", "*customresourcedefinition*",
 ]
 adds = ["broad_delete"]
 
 [shell.delete.operands.name]
-# A Secret, in any case.
+case = "insensitive"
+# A Secret.
 [[shell.delete.operands.name.when]]
-like = [
-  "*secret*/*", "*secreT*/*", "*secrEt*/*", "*secrET*/*", "*secRet*/*", "*secReT*/*",
-  "*secREt*/*", "*secRET*/*", "*seCret*/*", "*seCreT*/*", "*seCrEt*/*", "*seCrET*/*",
-  "*seCRet*/*", "*seCReT*/*", "*seCREt*/*", "*seCRET*/*", "*sEcret*/*", "*sEcreT*/*",
-  "*sEcrEt*/*", "*sEcrET*/*", "*sEcRet*/*", "*sEcReT*/*", "*sEcREt*/*", "*sEcRET*/*",
-  "*sECret*/*", "*sECreT*/*", "*sECrEt*/*", "*sECrET*/*", "*sECRet*/*", "*sECReT*/*",
-  "*sECREt*/*", "*sECRET*/*", "*Secret*/*", "*SecreT*/*", "*SecrEt*/*", "*SecrET*/*",
-  "*SecRet*/*", "*SecReT*/*", "*SecREt*/*", "*SecRET*/*", "*SeCret*/*", "*SeCreT*/*",
-  "*SeCrEt*/*", "*SeCrET*/*", "*SeCRet*/*", "*SeCReT*/*", "*SeCREt*/*", "*SeCRET*/*",
-  "*SEcret*/*", "*SEcreT*/*", "*SEcrEt*/*", "*SEcrET*/*", "*SEcRet*/*", "*SEcReT*/*",
-  "*SEcREt*/*", "*SEcRET*/*", "*SECret*/*", "*SECreT*/*", "*SECrEt*/*", "*SECrET*/*",
-  "*SECRet*/*", "*SECReT*/*", "*SECREt*/*", "*SECRET*/*",
-]
+like = ["*secret*/*"]
 adds = ["write_secrets"]
 
-# A Namespace (`ns` as a whole type, with any .version.group suffix, or `namespace`, any case)
-# or a CustomResourceDefinition (`crd`, or `efin` from `definition`, any case).
+# A Namespace (`ns` as a whole type, with any .version.group suffix, or `namespace`) or a
+# CustomResourceDefinition (`crd` or `customresourcedefinition`).
 [[shell.delete.operands.name.when]]
 like = [
-  "ns/*", "nS/*", "Ns/*", "NS/*", "ns.*/*", "nS.*/*", "Ns.*/*", "NS.*/*",
-  "*namespace*/*", "*namespacE*/*", "*namespaCe*/*", "*namespaCE*/*", "*namespAce*/*", "*namespAcE*/*", "*namespACe*/*", "*namespACE*/*",
-  "*namesPace*/*", "*namesPacE*/*", "*namesPaCe*/*", "*namesPaCE*/*", "*namesPAce*/*", "*namesPAcE*/*", "*namesPACe*/*", "*namesPACE*/*",
-  "*nameSpace*/*", "*nameSpacE*/*", "*nameSpaCe*/*", "*nameSpaCE*/*", "*nameSpAce*/*", "*nameSpAcE*/*", "*nameSpACe*/*", "*nameSpACE*/*",
-  "*nameSPace*/*", "*nameSPacE*/*", "*nameSPaCe*/*", "*nameSPaCE*/*", "*nameSPAce*/*", "*nameSPAcE*/*", "*nameSPACe*/*", "*nameSPACE*/*",
-  "*namEspace*/*", "*namEspacE*/*", "*namEspaCe*/*", "*namEspaCE*/*", "*namEspAce*/*", "*namEspAcE*/*", "*namEspACe*/*", "*namEspACE*/*",
-  "*namEsPace*/*", "*namEsPacE*/*", "*namEsPaCe*/*", "*namEsPaCE*/*", "*namEsPAce*/*", "*namEsPAcE*/*", "*namEsPACe*/*", "*namEsPACE*/*",
-  "*namESpace*/*", "*namESpacE*/*", "*namESpaCe*/*", "*namESpaCE*/*", "*namESpAce*/*", "*namESpAcE*/*", "*namESpACe*/*", "*namESpACE*/*",
-  "*namESPace*/*", "*namESPacE*/*", "*namESPaCe*/*", "*namESPaCE*/*", "*namESPAce*/*", "*namESPAcE*/*", "*namESPACe*/*", "*namESPACE*/*",
-  "*naMespace*/*", "*naMespacE*/*", "*naMespaCe*/*", "*naMespaCE*/*", "*naMespAce*/*", "*naMespAcE*/*", "*naMespACe*/*", "*naMespACE*/*",
-  "*naMesPace*/*", "*naMesPacE*/*", "*naMesPaCe*/*", "*naMesPaCE*/*", "*naMesPAce*/*", "*naMesPAcE*/*", "*naMesPACe*/*", "*naMesPACE*/*",
-  "*naMeSpace*/*", "*naMeSpacE*/*", "*naMeSpaCe*/*", "*naMeSpaCE*/*", "*naMeSpAce*/*", "*naMeSpAcE*/*", "*naMeSpACe*/*", "*naMeSpACE*/*",
-  "*naMeSPace*/*", "*naMeSPacE*/*", "*naMeSPaCe*/*", "*naMeSPaCE*/*", "*naMeSPAce*/*", "*naMeSPAcE*/*", "*naMeSPACe*/*", "*naMeSPACE*/*",
-  "*naMEspace*/*", "*naMEspacE*/*", "*naMEspaCe*/*", "*naMEspaCE*/*", "*naMEspAce*/*", "*naMEspAcE*/*", "*naMEspACe*/*", "*naMEspACE*/*",
-  "*naMEsPace*/*", "*naMEsPacE*/*", "*naMEsPaCe*/*", "*naMEsPaCE*/*", "*naMEsPAce*/*", "*naMEsPAcE*/*", "*naMEsPACe*/*", "*naMEsPACE*/*",
-  "*naMESpace*/*", "*naMESpacE*/*", "*naMESpaCe*/*", "*naMESpaCE*/*", "*naMESpAce*/*", "*naMESpAcE*/*", "*naMESpACe*/*", "*naMESpACE*/*",
-  "*naMESPace*/*", "*naMESPacE*/*", "*naMESPaCe*/*", "*naMESPaCE*/*", "*naMESPAce*/*", "*naMESPAcE*/*", "*naMESPACe*/*", "*naMESPACE*/*",
-  "*nAmespace*/*", "*nAmespacE*/*", "*nAmespaCe*/*", "*nAmespaCE*/*", "*nAmespAce*/*", "*nAmespAcE*/*", "*nAmespACe*/*", "*nAmespACE*/*",
-  "*nAmesPace*/*", "*nAmesPacE*/*", "*nAmesPaCe*/*", "*nAmesPaCE*/*", "*nAmesPAce*/*", "*nAmesPAcE*/*", "*nAmesPACe*/*", "*nAmesPACE*/*",
-  "*nAmeSpace*/*", "*nAmeSpacE*/*", "*nAmeSpaCe*/*", "*nAmeSpaCE*/*", "*nAmeSpAce*/*", "*nAmeSpAcE*/*", "*nAmeSpACe*/*", "*nAmeSpACE*/*",
-  "*nAmeSPace*/*", "*nAmeSPacE*/*", "*nAmeSPaCe*/*", "*nAmeSPaCE*/*", "*nAmeSPAce*/*", "*nAmeSPAcE*/*", "*nAmeSPACe*/*", "*nAmeSPACE*/*",
-  "*nAmEspace*/*", "*nAmEspacE*/*", "*nAmEspaCe*/*", "*nAmEspaCE*/*", "*nAmEspAce*/*", "*nAmEspAcE*/*", "*nAmEspACe*/*", "*nAmEspACE*/*",
-  "*nAmEsPace*/*", "*nAmEsPacE*/*", "*nAmEsPaCe*/*", "*nAmEsPaCE*/*", "*nAmEsPAce*/*", "*nAmEsPAcE*/*", "*nAmEsPACe*/*", "*nAmEsPACE*/*",
-  "*nAmESpace*/*", "*nAmESpacE*/*", "*nAmESpaCe*/*", "*nAmESpaCE*/*", "*nAmESpAce*/*", "*nAmESpAcE*/*", "*nAmESpACe*/*", "*nAmESpACE*/*",
-  "*nAmESPace*/*", "*nAmESPacE*/*", "*nAmESPaCe*/*", "*nAmESPaCE*/*", "*nAmESPAce*/*", "*nAmESPAcE*/*", "*nAmESPACe*/*", "*nAmESPACE*/*",
-  "*nAMespace*/*", "*nAMespacE*/*", "*nAMespaCe*/*", "*nAMespaCE*/*", "*nAMespAce*/*", "*nAMespAcE*/*", "*nAMespACe*/*", "*nAMespACE*/*",
-  "*nAMesPace*/*", "*nAMesPacE*/*", "*nAMesPaCe*/*", "*nAMesPaCE*/*", "*nAMesPAce*/*", "*nAMesPAcE*/*", "*nAMesPACe*/*", "*nAMesPACE*/*",
-  "*nAMeSpace*/*", "*nAMeSpacE*/*", "*nAMeSpaCe*/*", "*nAMeSpaCE*/*", "*nAMeSpAce*/*", "*nAMeSpAcE*/*", "*nAMeSpACe*/*", "*nAMeSpACE*/*",
-  "*nAMeSPace*/*", "*nAMeSPacE*/*", "*nAMeSPaCe*/*", "*nAMeSPaCE*/*", "*nAMeSPAce*/*", "*nAMeSPAcE*/*", "*nAMeSPACe*/*", "*nAMeSPACE*/*",
-  "*nAMEspace*/*", "*nAMEspacE*/*", "*nAMEspaCe*/*", "*nAMEspaCE*/*", "*nAMEspAce*/*", "*nAMEspAcE*/*", "*nAMEspACe*/*", "*nAMEspACE*/*",
-  "*nAMEsPace*/*", "*nAMEsPacE*/*", "*nAMEsPaCe*/*", "*nAMEsPaCE*/*", "*nAMEsPAce*/*", "*nAMEsPAcE*/*", "*nAMEsPACe*/*", "*nAMEsPACE*/*",
-  "*nAMESpace*/*", "*nAMESpacE*/*", "*nAMESpaCe*/*", "*nAMESpaCE*/*", "*nAMESpAce*/*", "*nAMESpAcE*/*", "*nAMESpACe*/*", "*nAMESpACE*/*",
-  "*nAMESPace*/*", "*nAMESPacE*/*", "*nAMESPaCe*/*", "*nAMESPaCE*/*", "*nAMESPAce*/*", "*nAMESPAcE*/*", "*nAMESPACe*/*", "*nAMESPACE*/*",
-  "*Namespace*/*", "*NamespacE*/*", "*NamespaCe*/*", "*NamespaCE*/*", "*NamespAce*/*", "*NamespAcE*/*", "*NamespACe*/*", "*NamespACE*/*",
-  "*NamesPace*/*", "*NamesPacE*/*", "*NamesPaCe*/*", "*NamesPaCE*/*", "*NamesPAce*/*", "*NamesPAcE*/*", "*NamesPACe*/*", "*NamesPACE*/*",
-  "*NameSpace*/*", "*NameSpacE*/*", "*NameSpaCe*/*", "*NameSpaCE*/*", "*NameSpAce*/*", "*NameSpAcE*/*", "*NameSpACe*/*", "*NameSpACE*/*",
-  "*NameSPace*/*", "*NameSPacE*/*", "*NameSPaCe*/*", "*NameSPaCE*/*", "*NameSPAce*/*", "*NameSPAcE*/*", "*NameSPACe*/*", "*NameSPACE*/*",
-  "*NamEspace*/*", "*NamEspacE*/*", "*NamEspaCe*/*", "*NamEspaCE*/*", "*NamEspAce*/*", "*NamEspAcE*/*", "*NamEspACe*/*", "*NamEspACE*/*",
-  "*NamEsPace*/*", "*NamEsPacE*/*", "*NamEsPaCe*/*", "*NamEsPaCE*/*", "*NamEsPAce*/*", "*NamEsPAcE*/*", "*NamEsPACe*/*", "*NamEsPACE*/*",
-  "*NamESpace*/*", "*NamESpacE*/*", "*NamESpaCe*/*", "*NamESpaCE*/*", "*NamESpAce*/*", "*NamESpAcE*/*", "*NamESpACe*/*", "*NamESpACE*/*",
-  "*NamESPace*/*", "*NamESPacE*/*", "*NamESPaCe*/*", "*NamESPaCE*/*", "*NamESPAce*/*", "*NamESPAcE*/*", "*NamESPACe*/*", "*NamESPACE*/*",
-  "*NaMespace*/*", "*NaMespacE*/*", "*NaMespaCe*/*", "*NaMespaCE*/*", "*NaMespAce*/*", "*NaMespAcE*/*", "*NaMespACe*/*", "*NaMespACE*/*",
-  "*NaMesPace*/*", "*NaMesPacE*/*", "*NaMesPaCe*/*", "*NaMesPaCE*/*", "*NaMesPAce*/*", "*NaMesPAcE*/*", "*NaMesPACe*/*", "*NaMesPACE*/*",
-  "*NaMeSpace*/*", "*NaMeSpacE*/*", "*NaMeSpaCe*/*", "*NaMeSpaCE*/*", "*NaMeSpAce*/*", "*NaMeSpAcE*/*", "*NaMeSpACe*/*", "*NaMeSpACE*/*",
-  "*NaMeSPace*/*", "*NaMeSPacE*/*", "*NaMeSPaCe*/*", "*NaMeSPaCE*/*", "*NaMeSPAce*/*", "*NaMeSPAcE*/*", "*NaMeSPACe*/*", "*NaMeSPACE*/*",
-  "*NaMEspace*/*", "*NaMEspacE*/*", "*NaMEspaCe*/*", "*NaMEspaCE*/*", "*NaMEspAce*/*", "*NaMEspAcE*/*", "*NaMEspACe*/*", "*NaMEspACE*/*",
-  "*NaMEsPace*/*", "*NaMEsPacE*/*", "*NaMEsPaCe*/*", "*NaMEsPaCE*/*", "*NaMEsPAce*/*", "*NaMEsPAcE*/*", "*NaMEsPACe*/*", "*NaMEsPACE*/*",
-  "*NaMESpace*/*", "*NaMESpacE*/*", "*NaMESpaCe*/*", "*NaMESpaCE*/*", "*NaMESpAce*/*", "*NaMESpAcE*/*", "*NaMESpACe*/*", "*NaMESpACE*/*",
-  "*NaMESPace*/*", "*NaMESPacE*/*", "*NaMESPaCe*/*", "*NaMESPaCE*/*", "*NaMESPAce*/*", "*NaMESPAcE*/*", "*NaMESPACe*/*", "*NaMESPACE*/*",
-  "*NAmespace*/*", "*NAmespacE*/*", "*NAmespaCe*/*", "*NAmespaCE*/*", "*NAmespAce*/*", "*NAmespAcE*/*", "*NAmespACe*/*", "*NAmespACE*/*",
-  "*NAmesPace*/*", "*NAmesPacE*/*", "*NAmesPaCe*/*", "*NAmesPaCE*/*", "*NAmesPAce*/*", "*NAmesPAcE*/*", "*NAmesPACe*/*", "*NAmesPACE*/*",
-  "*NAmeSpace*/*", "*NAmeSpacE*/*", "*NAmeSpaCe*/*", "*NAmeSpaCE*/*", "*NAmeSpAce*/*", "*NAmeSpAcE*/*", "*NAmeSpACe*/*", "*NAmeSpACE*/*",
-  "*NAmeSPace*/*", "*NAmeSPacE*/*", "*NAmeSPaCe*/*", "*NAmeSPaCE*/*", "*NAmeSPAce*/*", "*NAmeSPAcE*/*", "*NAmeSPACe*/*", "*NAmeSPACE*/*",
-  "*NAmEspace*/*", "*NAmEspacE*/*", "*NAmEspaCe*/*", "*NAmEspaCE*/*", "*NAmEspAce*/*", "*NAmEspAcE*/*", "*NAmEspACe*/*", "*NAmEspACE*/*",
-  "*NAmEsPace*/*", "*NAmEsPacE*/*", "*NAmEsPaCe*/*", "*NAmEsPaCE*/*", "*NAmEsPAce*/*", "*NAmEsPAcE*/*", "*NAmEsPACe*/*", "*NAmEsPACE*/*",
-  "*NAmESpace*/*", "*NAmESpacE*/*", "*NAmESpaCe*/*", "*NAmESpaCE*/*", "*NAmESpAce*/*", "*NAmESpAcE*/*", "*NAmESpACe*/*", "*NAmESpACE*/*",
-  "*NAmESPace*/*", "*NAmESPacE*/*", "*NAmESPaCe*/*", "*NAmESPaCE*/*", "*NAmESPAce*/*", "*NAmESPAcE*/*", "*NAmESPACe*/*", "*NAmESPACE*/*",
-  "*NAMespace*/*", "*NAMespacE*/*", "*NAMespaCe*/*", "*NAMespaCE*/*", "*NAMespAce*/*", "*NAMespAcE*/*", "*NAMespACe*/*", "*NAMespACE*/*",
-  "*NAMesPace*/*", "*NAMesPacE*/*", "*NAMesPaCe*/*", "*NAMesPaCE*/*", "*NAMesPAce*/*", "*NAMesPAcE*/*", "*NAMesPACe*/*", "*NAMesPACE*/*",
-  "*NAMeSpace*/*", "*NAMeSpacE*/*", "*NAMeSpaCe*/*", "*NAMeSpaCE*/*", "*NAMeSpAce*/*", "*NAMeSpAcE*/*", "*NAMeSpACe*/*", "*NAMeSpACE*/*",
-  "*NAMeSPace*/*", "*NAMeSPacE*/*", "*NAMeSPaCe*/*", "*NAMeSPaCE*/*", "*NAMeSPAce*/*", "*NAMeSPAcE*/*", "*NAMeSPACe*/*", "*NAMeSPACE*/*",
-  "*NAMEspace*/*", "*NAMEspacE*/*", "*NAMEspaCe*/*", "*NAMEspaCE*/*", "*NAMEspAce*/*", "*NAMEspAcE*/*", "*NAMEspACe*/*", "*NAMEspACE*/*",
-  "*NAMEsPace*/*", "*NAMEsPacE*/*", "*NAMEsPaCe*/*", "*NAMEsPaCE*/*", "*NAMEsPAce*/*", "*NAMEsPAcE*/*", "*NAMEsPACe*/*", "*NAMEsPACE*/*",
-  "*NAMESpace*/*", "*NAMESpacE*/*", "*NAMESpaCe*/*", "*NAMESpaCE*/*", "*NAMESpAce*/*", "*NAMESpAcE*/*", "*NAMESpACe*/*", "*NAMESpACE*/*",
-  "*NAMESPace*/*", "*NAMESPacE*/*", "*NAMESPaCe*/*", "*NAMESPaCE*/*", "*NAMESPAce*/*", "*NAMESPAcE*/*", "*NAMESPACe*/*", "*NAMESPACE*/*",
-  "*crd*/*", "*crD*/*", "*cRd*/*", "*cRD*/*", "*Crd*/*", "*CrD*/*", "*CRd*/*", "*CRD*/*",
-  "*efin*/*", "*efiN*/*", "*efIn*/*", "*efIN*/*", "*eFin*/*", "*eFiN*/*", "*eFIn*/*", "*eFIN*/*",
-  "*Efin*/*", "*EfiN*/*", "*EfIn*/*", "*EfIN*/*", "*EFin*/*", "*EFiN*/*", "*EFIn*/*", "*EFIN*/*",
+  "ns/*", "ns.*/*", "*namespace*/*", "*crd*/*", "*customresourcedefinition*/*",
 ]
 adds = ["broad_delete"]
 
@@ -690,38 +486,15 @@ options.template  = { flag = ["--template"], value = "required", adds = ["read_s
 options.type_option = { flag = ["--type"], value = "required" }  # `type` is the operand
 
 [shell.patch.operands.type]
+case = "insensitive"
 adds = ["read_secrets", "write_secrets"]
-# Every upper and lower case spelling of `secret`.
-like = [
-  "*secret*", "*secreT*", "*secrEt*", "*secrET*", "*secRet*", "*secReT*",
-  "*secREt*", "*secRET*", "*seCret*", "*seCreT*", "*seCrEt*", "*seCrET*",
-  "*seCRet*", "*seCReT*", "*seCREt*", "*seCRET*", "*sEcret*", "*sEcreT*",
-  "*sEcrEt*", "*sEcrET*", "*sEcRet*", "*sEcReT*", "*sEcREt*", "*sEcRET*",
-  "*sECret*", "*sECreT*", "*sECrEt*", "*sECrET*", "*sECRet*", "*sECReT*",
-  "*sECREt*", "*sECRET*", "*Secret*", "*SecreT*", "*SecrEt*", "*SecrET*",
-  "*SecRet*", "*SecReT*", "*SecREt*", "*SecRET*", "*SeCret*", "*SeCreT*",
-  "*SeCrEt*", "*SeCrET*", "*SeCRet*", "*SeCReT*", "*SeCREt*", "*SeCRET*",
-  "*SEcret*", "*SEcreT*", "*SEcrEt*", "*SEcrET*", "*SEcRet*", "*SEcReT*",
-  "*SEcREt*", "*SEcRET*", "*SECret*", "*SECreT*", "*SECrEt*", "*SECrET*",
-  "*SECRet*", "*SECReT*", "*SECREt*", "*SECRET*",
-]
+like = ["*secret*"]
 
 [shell.patch.operands.name]
+case = "insensitive"
 adds = ["read_secrets", "write_secrets"]
-# A TYPE/NAME word whose type is a Secret, in any case.
-like = [
-  "*secret*/*", "*secreT*/*", "*secrEt*/*", "*secrET*/*", "*secRet*/*", "*secReT*/*",
-  "*secREt*/*", "*secRET*/*", "*seCret*/*", "*seCreT*/*", "*seCrEt*/*", "*seCrET*/*",
-  "*seCRet*/*", "*seCReT*/*", "*seCREt*/*", "*seCRET*/*", "*sEcret*/*", "*sEcreT*/*",
-  "*sEcrEt*/*", "*sEcrET*/*", "*sEcRet*/*", "*sEcReT*/*", "*sEcREt*/*", "*sEcRET*/*",
-  "*sECret*/*", "*sECreT*/*", "*sECrEt*/*", "*sECrET*/*", "*sECRet*/*", "*sECReT*/*",
-  "*sECREt*/*", "*sECRET*/*", "*Secret*/*", "*SecreT*/*", "*SecrEt*/*", "*SecrET*/*",
-  "*SecRet*/*", "*SecReT*/*", "*SecREt*/*", "*SecRET*/*", "*SeCret*/*", "*SeCreT*/*",
-  "*SeCrEt*/*", "*SeCrET*/*", "*SeCRet*/*", "*SeCReT*/*", "*SeCREt*/*", "*SeCRET*/*",
-  "*SEcret*/*", "*SEcreT*/*", "*SEcrEt*/*", "*SEcrET*/*", "*SEcRet*/*", "*SEcReT*/*",
-  "*SEcREt*/*", "*SEcRET*/*", "*SECret*/*", "*SECreT*/*", "*SECrEt*/*", "*SECrET*/*",
-  "*SECRet*/*", "*SECReT*/*", "*SECREt*/*", "*SECRET*/*",
-]
+# A TYPE/NAME word whose type is a Secret.
+like = ["*secret*/*"]
 
 # kubectl label and annotate take TYPE NAME... KEY=VAL... KEY-... as one list of operands, which
 # the grammar cannot split. --list is not modeled.
@@ -746,21 +519,10 @@ options.show_managed_fields = { flag = ["--show-managed-fields"], value = "optio
 options.template  = { flag = ["--template"], value = "required", adds = ["read_secrets"] }
 
 [shell.label.operands.operands]
+case = "insensitive"
 adds = ["read_secrets", "write_secrets"]
-# Any word that contains `secret`, in any case, because the type is not a separate field.
-like = [
-  "*secret*", "*secreT*", "*secrEt*", "*secrET*", "*secRet*", "*secReT*",
-  "*secREt*", "*secRET*", "*seCret*", "*seCreT*", "*seCrEt*", "*seCrET*",
-  "*seCRet*", "*seCReT*", "*seCREt*", "*seCRET*", "*sEcret*", "*sEcreT*",
-  "*sEcrEt*", "*sEcrET*", "*sEcRet*", "*sEcReT*", "*sEcREt*", "*sEcRET*",
-  "*sECret*", "*sECreT*", "*sECrEt*", "*sECrET*", "*sECRet*", "*sECReT*",
-  "*sECREt*", "*sECRET*", "*Secret*", "*SecreT*", "*SecrEt*", "*SecrET*",
-  "*SecRet*", "*SecReT*", "*SecREt*", "*SecRET*", "*SeCret*", "*SeCreT*",
-  "*SeCrEt*", "*SeCrET*", "*SeCRet*", "*SeCReT*", "*SeCREt*", "*SeCRET*",
-  "*SEcret*", "*SEcreT*", "*SEcrEt*", "*SEcrET*", "*SEcRet*", "*SEcReT*",
-  "*SEcREt*", "*SEcRET*", "*SECret*", "*SECreT*", "*SECrEt*", "*SECrET*",
-  "*SECRet*", "*SECReT*", "*SECREt*", "*SECRET*",
-]
+# Any word that contains `secret`, because the type is not a separate field.
+like = ["*secret*"]
 
 [shell.annotate]
 usage = "kubectl [global options] annotate [options] [<operands>...]"
@@ -783,21 +545,10 @@ options.show_managed_fields = { flag = ["--show-managed-fields"], value = "optio
 options.template  = { flag = ["--template"], value = "required", adds = ["read_secrets"] }
 
 [shell.annotate.operands.operands]
+case = "insensitive"
 adds = ["read_secrets", "write_secrets"]
-# Any word that contains `secret`, in any case, because the type is not a separate field.
-like = [
-  "*secret*", "*secreT*", "*secrEt*", "*secrET*", "*secRet*", "*secReT*",
-  "*secREt*", "*secRET*", "*seCret*", "*seCreT*", "*seCrEt*", "*seCrET*",
-  "*seCRet*", "*seCReT*", "*seCREt*", "*seCRET*", "*sEcret*", "*sEcreT*",
-  "*sEcrEt*", "*sEcrET*", "*sEcRet*", "*sEcReT*", "*sEcREt*", "*sEcRET*",
-  "*sECret*", "*sECreT*", "*sECrEt*", "*sECrET*", "*sECRet*", "*sECReT*",
-  "*sECREt*", "*sECRET*", "*Secret*", "*SecreT*", "*SecrEt*", "*SecrET*",
-  "*SecRet*", "*SecReT*", "*SecREt*", "*SecRET*", "*SeCret*", "*SeCreT*",
-  "*SeCrEt*", "*SeCrET*", "*SeCRet*", "*SeCReT*", "*SeCREt*", "*SeCRET*",
-  "*SEcret*", "*SEcreT*", "*SEcrEt*", "*SEcrET*", "*SEcRet*", "*SEcReT*",
-  "*SEcREt*", "*SEcRET*", "*SECret*", "*SECreT*", "*SECrEt*", "*SECrET*",
-  "*SECRet*", "*SECReT*", "*SECREt*", "*SECRET*",
-]
+# Any word that contains `secret`, because the type is not a separate field.
+like = ["*secret*"]
 
 [shell.scale]
 usage = "kubectl [global options] scale [options] [<type>] [<name>...]"
@@ -818,38 +569,15 @@ options.template  = { flag = ["--template"], value = "required", adds = ["read_s
 options.timeout   = { flag = ["--timeout"], value = "required" }
 
 [shell.scale.operands.type]
+case = "insensitive"
 adds = ["read_secrets"]
-# Every upper and lower case spelling of `secret`.
-like = [
-  "*secret*", "*secreT*", "*secrEt*", "*secrET*", "*secRet*", "*secReT*",
-  "*secREt*", "*secRET*", "*seCret*", "*seCreT*", "*seCrEt*", "*seCrET*",
-  "*seCRet*", "*seCReT*", "*seCREt*", "*seCRET*", "*sEcret*", "*sEcreT*",
-  "*sEcrEt*", "*sEcrET*", "*sEcRet*", "*sEcReT*", "*sEcREt*", "*sEcRET*",
-  "*sECret*", "*sECreT*", "*sECrEt*", "*sECrET*", "*sECRet*", "*sECReT*",
-  "*sECREt*", "*sECRET*", "*Secret*", "*SecreT*", "*SecrEt*", "*SecrET*",
-  "*SecRet*", "*SecReT*", "*SecREt*", "*SecRET*", "*SeCret*", "*SeCreT*",
-  "*SeCrEt*", "*SeCrET*", "*SeCRet*", "*SeCReT*", "*SeCREt*", "*SeCRET*",
-  "*SEcret*", "*SEcreT*", "*SEcrEt*", "*SEcrET*", "*SEcRet*", "*SEcReT*",
-  "*SEcREt*", "*SEcRET*", "*SECret*", "*SECreT*", "*SECrEt*", "*SECrET*",
-  "*SECRet*", "*SECReT*", "*SECREt*", "*SECRET*",
-]
+like = ["*secret*"]
 
 [shell.scale.operands.name]
+case = "insensitive"
 adds = ["read_secrets"]
-# A TYPE/NAME word whose type is a Secret, in any case.
-like = [
-  "*secret*/*", "*secreT*/*", "*secrEt*/*", "*secrET*/*", "*secRet*/*", "*secReT*/*",
-  "*secREt*/*", "*secRET*/*", "*seCret*/*", "*seCreT*/*", "*seCrEt*/*", "*seCrET*/*",
-  "*seCRet*/*", "*seCReT*/*", "*seCREt*/*", "*seCRET*/*", "*sEcret*/*", "*sEcreT*/*",
-  "*sEcrEt*/*", "*sEcrET*/*", "*sEcRet*/*", "*sEcReT*/*", "*sEcREt*/*", "*sEcRET*/*",
-  "*sECret*/*", "*sECreT*/*", "*sECrEt*/*", "*sECrET*/*", "*sECRet*/*", "*sECReT*/*",
-  "*sECREt*/*", "*sECRET*/*", "*Secret*/*", "*SecreT*/*", "*SecrEt*/*", "*SecrET*/*",
-  "*SecRet*/*", "*SecReT*/*", "*SecREt*/*", "*SecRET*/*", "*SeCret*/*", "*SeCreT*/*",
-  "*SeCrEt*/*", "*SeCrET*/*", "*SeCRet*/*", "*SeCReT*/*", "*SeCREt*/*", "*SeCRET*/*",
-  "*SEcret*/*", "*SEcreT*/*", "*SEcrEt*/*", "*SEcrET*/*", "*SEcRet*/*", "*SEcReT*/*",
-  "*SEcREt*/*", "*SEcRET*/*", "*SECret*/*", "*SECreT*/*", "*SECrEt*/*", "*SECrET*/*",
-  "*SECRet*/*", "*SECReT*/*", "*SECREt*/*", "*SECRET*/*",
-]
+# A TYPE/NAME word whose type is a Secret.
+like = ["*secret*/*"]
 
 [shell.rollout_restart]
 usage = "kubectl [global options] rollout restart [options] [<type>] [<name>...]"
@@ -923,7 +651,7 @@ options.tty       = { flag = ["-t", "--tty"] }
 [shell.port_forward]
 usage = "kubectl [global options] port-forward [options] <target> <ports>..."
 adds  = ["network_listen"]
-options.address = { flag = ["--address"], value = "required", repeated = true, adds = ["listen_address"] }
+options.address = { flag = ["--address"], value = "required", repeated = true, not_like = ["localhost", "127.0.0.1", "::1"], adds = ["listen_address"] }
 options.pod_running_timeout = { flag = ["--pod-running-timeout"], value = "required" }
 
 # kubectl cp <file-spec-src> <file-spec-dest>. A spec with `:` names a pod; kubectl runs `tar`

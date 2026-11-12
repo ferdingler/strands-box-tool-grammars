@@ -269,7 +269,7 @@ options.project     = { flag = ["-p", "--project"], value = "required" }
 [shell.env_add]
 usage = "vercel [global options] env add [options] <name>"
 adds  = ["write_secret"]
-options.environment  = { flag = ["-e", "--environment"], value = "required", repeated = true, like = ["*production*"], adds = ["production_env"] }
+options.environment  = { flag = ["-e", "--environment"], value = "required", repeated = true, not_like = ["preview", "development"], adds = ["production_env"] }
 options.force        = { flag = ["--force"] }
 options.git_branch   = { flag = ["--git-branch"], value = "required" }
 options.guidance     = { flag = ["--guidance"] }
@@ -308,7 +308,7 @@ options.yes         = { flag = ["-y", "--yes"], adds = ["skip_prompt"] }
 usage = "vercel [global options] env pull [options] [<filename>]"
 adds  = ["read_secret", "write_local_files"]
 options.deployment  = { flag = ["--deployment"], value = "required" }
-options.environment = { flag = ["-e", "--environment"], value = "required", like = ["*production*"], adds = ["production_env"] }
+options.environment = { flag = ["-e", "--environment"], value = "required", not_like = ["preview", "development"], adds = ["production_env"] }
 options.git_branch  = { flag = ["--git-branch"], value = "required" }
 options.project     = { flag = ["-p", "--project"], value = "required" }
 options.yes         = { flag = ["-y", "--yes"], adds = ["skip_prompt"] }
@@ -317,7 +317,7 @@ options.yes         = { flag = ["-y", "--yes"], adds = ["skip_prompt"] }
 [shell.env_run]
 usage = "vercel [global options] env run [options] -- <command>..."
 adds  = ["run_local_code", "read_secret"]
-options.environment = { flag = ["-e", "--environment"], value = "required", like = ["*production*"], adds = ["production_env"] }
+options.environment = { flag = ["-e", "--environment"], value = "required", not_like = ["preview", "development"], adds = ["production_env"] }
 options.git_branch  = { flag = ["--git-branch"], value = "required" }
 options.project     = { flag = ["-p", "--project"], value = "required" }
 
@@ -326,7 +326,7 @@ options.project     = { flag = ["-p", "--project"], value = "required" }
 [shell.pull]
 usage = "vercel [global options] pull [options] [<project_path>]"
 adds  = ["read_secret", "write_local_files"]
-options.environment = { flag = ["-e", "--environment"], value = "required", like = ["*production*"], adds = ["production_env"] }
+options.environment = { flag = ["-e", "--environment"], value = "required", not_like = ["preview", "development"], adds = ["production_env"] }
 options.git_branch  = { flag = ["--git-branch"], value = "required" }
 options.json        = { flag = ["--json"] }
 options.project     = { flag = ["-p", "--project"], value = "required" }
@@ -337,7 +337,7 @@ options.yes         = { flag = ["-y", "--yes"], adds = ["skip_prompt", "write_re
 usage = "vercel [global options] build [options]"
 adds  = ["run_local_code", "read_secret", "write_local_files"]
 options.deployment  = { flag = ["--deployment"], value = "required" }
-options.environment = { flag = ["-e", "--environment"], value = "required", like = ["*production*"], adds = ["production_env"] }
+options.environment = { flag = ["-e", "--environment"], value = "required", not_like = ["preview", "development"], adds = ["production_env"] }
 options.output      = { flag = ["-o", "--output"], value = "required" }
 options.prod        = { flag = ["--prod"], adds = ["production_env"] }
 options.project     = { flag = ["-p", "--project"], value = "required" }
