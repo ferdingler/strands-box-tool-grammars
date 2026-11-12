@@ -60,7 +60,10 @@ and `fmt`. `cargo` does not pass an option given before an external subcommand o
 `cargo --offline clippy` is `unmodeled`. `clippy` accepts those options after the command word,
 because cargo-clippy passes them to `cargo check`. `fmt` accepts only its own options.
 
-`cargo +<toolchain> ...` is not modeled, so it is `unmodeled` (see Exclusions).
+Every action accepts `cargo +<toolchain> ...`. The word goes into the field `toolchain`, without its
+`+`, and adds `install_toolchain`, because the rustup proxy downloads and installs a missing toolchain
+before cargo starts (auto-install is on by default since rustup 1.28.1), even for
+`cargo +beta --frozen fetch`.
 
 ## Effects
 
@@ -81,6 +84,7 @@ because cargo-clippy passes them to `cargo check`. `fmt` accepts only its own op
 | `install_binary` | Installs binaries into the install root | `install` | `install --list` |
 | `uninstall_binary` | Deletes installed binaries | `uninstall` | nothing |
 | `open_browser` | Opens the docs with a browser program | `doc --open` | nothing |
+| `install_toolchain` | The rustup proxy can download and install the toolchain that a `+<toolchain>` word names | `+<toolchain>` on every action | nothing |
 | `ambiguous_argv` | An optional-value option got a word that starts with `-`, which cargo reads as its own option, so the fields can be wrong | a value like `-*` on `-p`, `--bin`, `--example`, `--test`, `--bench`, `--target`, `tree -i` | nothing |
 
 `--offline` alone still lets cargo write `Cargo.lock` from its local cache; only `--locked` and
@@ -135,9 +139,6 @@ These are deliberately not modeled, so their lines are `unmodeled` and fall to d
   `.cargo/config.toml` before its built-in alias, so a project can make `cargo t` mean
   `cargo publish`. Spell the full command: a config alias cannot replace `build`, `test`, and so on.
 - `cargo up`: not a cargo 1.99.1 command or built-in alias.
-- `cargo +<toolchain> ...`: the rustup proxy downloads and installs a missing toolchain before cargo
-  starts (auto-install is on by default since rustup 1.28.1), even for `cargo +beta --frozen fetch`.
-  A grammar cannot put an effect on the toolchain word, so these lines are `unmodeled`.
 - `install --bin` and `install --example`: their value is optional, and with a crate named cargo
   does not reject a bare one, so `cargo install --bin --root /r foo` installs into `/r`. The grammar
   would read `--root` as the binary name and hide the install root.
