@@ -197,7 +197,7 @@ git config user.name --global     # writes the value "--global" to the local con
 options and operands in any order. **Workaround:** every operand of the older `git config` form adds
 `override_config`, so any line with an operand counts as a write.
 
-**Box change:** strands-agents/box#BOX_PR adds the action key `options_first`. The git grammar's
+**Box change:** strands-agents/box#424 adds the action key `options_first`. The git grammar's
 `config` actions set it, so `--global` here is the written value, and a `<name>` alone reads.
 
 ### An optional value that takes the next word unless it looks like a flag
