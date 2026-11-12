@@ -60,7 +60,7 @@ settings.
 | Apply and create | `apply`, `create -f`, `create namespace` (`ns`), `create secret generic`, `create configmap` (`cm`), `create deployment` (`deploy`) | `cluster_write`; `-f`/`-k` add `manifest_input`; `apply --prune` adds `cluster_delete` and `broad_delete`; `--from-file` adds `upload_files` |
 | Change | `patch`, `label`, `annotate`, `scale`, `rollout restart`, `rollout pause`, `rollout resume`, `rollout undo` | `cluster_write`; a Secret target adds `read_secrets` (and `write_secrets` on `patch`, `label`, `annotate`); `-o`/`--template` add `read_secrets` |
 | Delete | `delete` | `cluster_delete`; `--all`, `-A`, `-l`, `--field-selector`, `-R`, `-k`, a Namespace, or a CRD add `broad_delete`; a Secret adds `write_secrets` |
-| Containers | `exec POD -- CMD...`, `cp`, `port-forward` | `run_program`; `cp` adds `upload_files` or `write_local_files`; `port-forward` adds `network_listen`, and `--address` adds `listen_address` |
+| Containers | `exec POD -- CMD...`, `cp`, `port-forward` | `run_program`; `cp` adds `upload_files` or `write_local_files`; `port-forward` adds `network_listen`, and an `--address` other than localhost adds `listen_address` |
 
 The persistent flags `-n/--namespace`, `--context`, `--kubeconfig`, `--cluster`, `--user`,
 `-s/--server`, `--as`, `--as-group`, `--as-uid`, `--token`, `--username`, `--password`,
@@ -86,7 +86,7 @@ On `apply`, `create -f`, `create secret generic`, `patch`, `label`, `annotate`, 
 | `write_secrets` | Creates or changes a Secret |
 | `run_program` | Runs a program inside a container (`exec`, and the `tar` that `cp` runs) |
 | `network_listen` | Opens a listening port on this host that forwards to the cluster |
-| `listen_address` | Sets the listen address; a value other than localhost exposes the port to other hosts |
+| `listen_address` | Listens on an address other than localhost, 127.0.0.1, or ::1, which can expose the port to other hosts |
 | `upload_files` | Sends the contents of local files to the cluster |
 | `write_local_files` | Writes files on this host |
 | `manifest_input` | Reads objects or changes from a file, directory, URL, or kustomization the grammar cannot see |
@@ -172,9 +172,9 @@ These are deliberately `unmodeled`:
   OIDC tokens) and `exec` env values print in clear. So every `config view` carries `read_secrets`.
 - **Broad deletes.** A Namespace or a CRD adds `broad_delete`, in any case: `ns` as a whole type or
   comma item, with any `.version.group` suffix (`ns.`, `ns.v1.`), and any type that contains
-  `namespace`, `crd`, or `efin`. kubectl lowercases the type, and every casing of
-  `customresourcedefinition` holds a casing of `efin`, so the 16 casings of `*efin*` cover it. Any
-  other type that contains `efin` also gets `broad_delete`, which is the safe direction.
+  `namespace`, `crd`, or `customresourcedefinition`. kubectl lowercases the type, so each operand
+  pattern sets `case = "insensitive"`. Any other type that contains `namespace` or `crd` also gets
+  `broad_delete`, which is the safe direction.
 - **Operands.** `label` and `annotate` take the type, names, and `KEY=VAL` words as one set,
   `operands`. In `get`, `delete`, `scale`, and the rollout verbs, the first word is `type` and the
   rest are `name`. `exec` and `create deployment` keep the command after `--` as a set, so word

@@ -109,7 +109,10 @@ original deployment's environment. So `deploy`, `deploy_init`, `deploy_continue`
 always have `deploy_production` and `change_traffic`, unless `--environment preview` (`-e preview`
 on `redeploy`) names the preview target. The CLI ignores `--prod` when `--environment` is set, and
 the grammar does the same. A custom environment name keeps the production effects, because the
-grammar cannot tell that it is not production. `--skip-domain` removes `change_traffic`, and `--dry`
+grammar cannot tell that it is not production. For the same reason, `-e` on the Environment
+Variable actions, `pull`, and `build` adds `production_env` for every value other than exactly
+`preview` or `development` (`not_like`), so `Production`, a custom environment, and a
+comma list that holds `production` all carry it. `--skip-domain` removes `change_traffic`, and `--dry`
 removes all three.
 
 ## Effects
@@ -124,7 +127,7 @@ removes all three.
 | `delete_remote` | Deletes a Vercel resource | `remove`, `env rm`, `alias rm`, `domains rm`, `project delete`, `certs delete` |
 | `write_secret` | Sets an Environment Variable value | `env add`, `env update` |
 | `read_secret` | Reads decrypted Environment Variable values | `env pull`, `env run`, `env ls --json`, `pull`, `build`, `dev` |
-| `production_env` | Acts on production Environment Variables | `-e` naming `production` on `env add`/`pull`/`run`, `pull`, `build`, and `build --prod`; always on `env update`, and on `env rm` without `-e preview` or `-e development` |
+| `production_env` | Acts on production Environment Variables | `-e` naming any environment other than exactly `preview` or `development` on `env add`/`pull`/`run`, `pull`, and `build`, and `build --prod`; always on `env update`, and on `env rm` without `-e preview` or `-e development` |
 | `write_local_files` | Writes files in the project directory | `pull`, `env pull`, `build`, `link`, `deploy -y`, `deploy --temporary`, `deploy describe` |
 | `run_local_code` | Runs project code or a named command on this machine | `build`, `dev`, `env run`, `deploy --temporary` |
 | `listen` | Starts a local server on a network port | `dev` |

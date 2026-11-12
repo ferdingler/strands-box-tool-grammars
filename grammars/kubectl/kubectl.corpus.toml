@@ -1892,3 +1892,70 @@ argv = ["kubectl", "delete", "deployments.v1.apps", "web"]
 action = "delete"
 fields = { type = "deployments.v1.apps", name = ["web"] }
 effects = ["cluster_delete"]
+
+# ---------------------------------------------------------------------------------------------
+# Case-insensitive and negated patterns (strands-agents/box#408)
+# ---------------------------------------------------------------------------------------------
+
+# The reproducers: kubectl lowercases the type, so each casing reads a Secret or removes a CRD.
+[[case]]
+argv = ["kubectl", "get", "Secret", "db", "-o", "yaml"]
+action = "get"
+fields = { type = "Secret", name = ["db"], output = "yaml" }
+effects = ["cluster_read", "read_secrets"]
+
+[[case]]
+argv = ["kubectl", "get", "SECRETS"]
+action = "get"
+fields = { type = "SECRETS" }
+effects = ["cluster_read", "read_secrets"]
+
+[[case]]
+argv = ["kubectl", "describe", "sEcReT/db"]
+action = "describe"
+fields = { type = "sEcReT/db" }
+effects = ["cluster_read", "read_secrets"]
+
+[[case]]
+argv = ["kubectl", "delete", "customResourceDefinitions", "x"]
+action = "delete"
+fields = { type = "customResourceDefinitions", name = ["x"] }
+effects = ["broad_delete", "cluster_delete"]
+
+[[case]]
+argv = ["kubectl", "delete", "CustomResourceDefinition.apiextensions.k8s.io/widgets.example.com"]
+action = "delete"
+fields = { type = "CustomResourceDefinition.apiextensions.k8s.io/widgets.example.com" }
+effects = ["broad_delete", "cluster_delete"]
+
+[[case]]
+argv = ["kubectl", "delete", "pod", "CRDS/widgets.example.com"]
+action = "delete"
+fields = { type = "pod", name = ["CRDS/widgets.example.com"] }
+effects = ["broad_delete", "cluster_delete"]
+
+# A custom type that only contains `efin` no longer gets `broad_delete`.
+[[case]]
+argv = ["kubectl", "delete", "PipelineDefinitions", "nightly"]
+action = "delete"
+fields = { type = "PipelineDefinitions", name = ["nightly"] }
+effects = ["cluster_delete"]
+
+# --address: each value other than localhost, 127.0.0.1, or ::1 adds `listen_address`.
+[[case]]
+argv = ["kubectl", "port-forward", "--address", "localhost", "pod/mypod", "8888:5000"]
+action = "port_forward"
+fields = { address = ["localhost"], target = "pod/mypod", ports = ["8888:5000"] }
+effects = ["network_listen"]
+
+[[case]]
+argv = ["kubectl", "port-forward", "--address=127.0.0.1", "--address", "::1", "pod/mypod", "8888:5000"]
+action = "port_forward"
+fields = { address = ["127.0.0.1", "::1"], target = "pod/mypod", ports = ["8888:5000"] }
+effects = ["network_listen"]
+
+[[case]]
+argv = ["kubectl", "port-forward", "--address", "localhost,0.0.0.0", "pod/mypod", "8888:5000"]
+action = "port_forward"
+fields = { address = ["localhost,0.0.0.0"], target = "pod/mypod", ports = ["8888:5000"] }
+effects = ["listen_address", "network_listen"]
