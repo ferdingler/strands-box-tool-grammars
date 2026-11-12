@@ -431,7 +431,7 @@ action = "drive_revisions_update"
 fields = { params = '{"fileId":"f1","revisionId":"1"}', json = '{"keepForever":true}' }
 effects = ["write_data"]
 
-# `+upload` is a gws helper command. `+` cannot start a command word, so it is unmodeled
+# `+upload` is a gws helper command that the grammar does not model, so it is unmodeled
 # (help/gws_drive_+upload.txt).
 [[case]]
 argv = ["gws", "drive", "+upload", "notes.txt"]
@@ -463,14 +463,28 @@ fields = { params = '{"fileId":"f1"}', dry_run = true }
 argv = ["gws", "drive", "files", "delete", "--json", "{}"]
 action = "unmodeled"
 
-# `files emptyTrash` empties the trash. A camelCase method name cannot be a command word, so it is
-# unmodeled, and so is any lowercase spelling (clap would refuse `emptytrash`).
+# `files emptyTrash` permanently deletes every file in the trash. A command word is
+# case-sensitive, so a lowercase spelling is unmodeled (clap refuses `emptytrash` too).
 [[case]]
 argv = ["gws", "drive", "files", "emptyTrash"]
-action = "unmodeled"
+action = "drive_files_empty_trash"
+effects = ["delete_data"]
+
+[[case]]
+argv = ["gws", "drive", "files", "emptyTrash", "--dry-run"]
+action = "drive_files_empty_trash"
+fields = { dry_run = true }
 
 [[case]]
 argv = ["gws", "drive", "files", "emptytrash"]
+action = "unmodeled"
+
+[[case]]
+argv = ["gws", "drive", "files", "EmptyTrash"]
+action = "unmodeled"
+
+[[case]]
+argv = ["gws", "drive", "files", "empty_trash"]
 action = "unmodeled"
 
 [[case]]
@@ -632,9 +646,55 @@ fields = { dry_run = true, params = '{"userId":"me"}', json = '{"raw":"eA=="}' }
 argv = ["gws", "gmail", "users", "messages", "send", "--jsn", "{}"]
 action = "unmodeled"
 
-# `+send`, `+reply`, `+forward`, `+triage` are gws helpers; unmodeled (help/gws_gmail_+send.txt).
+# `+send` is a gws helper: a command word with a leading `+` (help/gws_gmail_+send.txt).
 [[case]]
 argv = ["gws", "gmail", "+send", "--to", "alex@example.com", "--subject", "hi", "--body", "hello"]
+action = "gmail_helper_send"
+fields = { body = "hello", subject = "hi", to = "alex@example.com" }
+effects = ["send_email"]
+
+[[case]]
+argv = ["gws", "gmail", "+send", "--to=alex@example.com", "--subject", "hi", "--body", "hi", "--cc", "sam@example.com", "--html"]
+action = "gmail_helper_send"
+fields = { body = "hi", cc = "sam@example.com", html = true, subject = "hi", to = "alex@example.com" }
+effects = ["send_email"]
+
+# An attachment sends the content of a local file
+[[case]]
+argv = ["gws", "gmail", "+send", "--to", "alex@example.com", "--subject", "r", "--body", "b", "-a", "report.pdf", "--attach", "b.csv"]
+action = "gmail_helper_send"
+fields = { attach = ["b.csv", "report.pdf"], body = "b", subject = "r", to = "alex@example.com" }
+effects = ["send_email", "upload_file"]
+
+# `--draft` saves a draft and sends nothing
+[[case]]
+argv = ["gws", "gmail", "+send", "--to", "alex@example.com", "--subject", "hi", "--body", "hello", "--draft"]
+action = "gmail_helper_send"
+fields = { body = "hello", draft = true, subject = "hi", to = "alex@example.com" }
+effects = ["write_data"]
+
+[[case]]
+argv = ["gws", "gmail", "+send", "--to", "alex@example.com", "--subject", "hi", "--body", "hello", "-a", "x.txt", "--dry-run"]
+action = "gmail_helper_send"
+fields = { attach = ["x.txt"], body = "hello", dry_run = true, subject = "hi", to = "alex@example.com" }
+
+# The `+` is part of the word: `send` and `++send` are other words
+[[case]]
+argv = ["gws", "gmail", "send", "--to", "alex@example.com"]
+action = "unmodeled"
+
+[[case]]
+argv = ["gws", "gmail", "++send", "--to", "alex@example.com"]
+action = "unmodeled"
+
+# An option that the helper does not declare
+[[case]]
+argv = ["gws", "gmail", "+send", "--to", "alex@example.com", "--sanitize", "t"]
+action = "unmodeled"
+
+# `+reply`, `+forward`, and `+triage` are helpers that the grammar does not model.
+[[case]]
+argv = ["gws", "gmail", "+reply", "--message-id", "m1", "--body", "ok"]
 action = "unmodeled"
 
 [[case]]
@@ -684,15 +744,29 @@ action = "gmail_users_messages_delete"
 fields = { params = '{"userId":"me","id":"m1"}' }
 effects = ["delete_data"]
 
-# batchDelete and batchModify are camelCase; unmodeled.
+# batchDelete and batchModify: camelCase method names
 [[case]]
-argv = ["gws", "gmail", "users", "messages", "batchDelete", "--params", '{"userId":"me"}']
+argv = ["gws", "gmail", "users", "messages", "batchDelete", "--params", '{"userId":"me"}', "--json", '{"ids":["m1","m2"]}']
+action = "gmail_users_messages_batch_delete"
+fields = { json = '{"ids":["m1","m2"]}', params = '{"userId":"me"}' }
+effects = ["delete_data"]
+
+[[case]]
+argv = ["gws", "gmail", "users", "messages", "batchModify", "--params", '{"userId":"me"}', "--json", '{"ids":["m1"],"addLabelIds":["TRASH"]}']
+action = "gmail_users_messages_batch_modify"
+fields = { json = '{"ids":["m1"],"addLabelIds":["TRASH"]}', params = '{"userId":"me"}' }
+effects = ["trash_data", "write_data"]
+
+[[case]]
+argv = ["gws", "gmail", "users", "messages", "batchmodify", "--params", '{"userId":"me"}']
 action = "unmodeled"
 
-# users getProfile is camelCase; unmodeled.
+# users getProfile: a camelCase method name
 [[case]]
 argv = ["gws", "gmail", "users", "getProfile", "--params", '{"userId":"me"}']
-action = "unmodeled"
+action = "gmail_users_get_profile"
+fields = { params = '{"userId":"me"}' }
+effects = ["read_data"]
 
 [[case]]
 argv = ["gws", "gmail", "users", "drafts", "list", "--params", '{"userId":"me"}']
@@ -916,9 +990,20 @@ action = "unmodeled"
 argv = ["gws", "calendar", "+agenda"]
 action = "unmodeled"
 
-# The calendarList resource is camelCase, so listing the user's calendars is unmodeled.
+# calendarList: a camelCase resource name
 [[case]]
 argv = ["gws", "calendar", "calendarList", "list"]
+action = "calendar_calendar_list_list"
+effects = ["read_data"]
+
+[[case]]
+argv = ["gws", "calendar", "calendarList", "get", "--params", '{"calendarId":"primary"}']
+action = "calendar_calendar_list_get"
+fields = { params = '{"calendarId":"primary"}' }
+effects = ["read_data"]
+
+[[case]]
+argv = ["gws", "calendar", "calendarlist", "list"]
 action = "unmodeled"
 
 [[case]]
@@ -1061,14 +1146,19 @@ action = "sheets_spreadsheets_values_clear"
 fields = { params = '{"spreadsheetId":"s1","range":"A1:Z"}', json = "{}" }
 effects = ["delete_data"]
 
-# batchUpdate, values batchGet, and the helpers `+read` and `+append` are unmodeled.
+# batchUpdate and values batchGet: camelCase method names. The helpers `+read` and `+append` are
+# unmodeled.
 [[case]]
 argv = ["gws", "sheets", "spreadsheets", "batchUpdate", "--params", '{"spreadsheetId":"s1"}', "--json", '{"requests":[]}']
-action = "unmodeled"
+action = "sheets_spreadsheets_batch_update"
+fields = { json = '{"requests":[]}', params = '{"spreadsheetId":"s1"}' }
+effects = ["write_data"]
 
 [[case]]
 argv = ["gws", "sheets", "spreadsheets", "values", "batchGet", "--params", '{"spreadsheetId":"s1"}']
-action = "unmodeled"
+action = "sheets_spreadsheets_values_batch_get"
+fields = { params = '{"spreadsheetId":"s1"}' }
+effects = ["read_data"]
 
 [[case]]
 argv = ["gws", "sheets", "+append", "--spreadsheet", "s1", "--values", "a,b"]
@@ -1090,9 +1180,15 @@ action = "docs_documents_create"
 fields = { json = '{"title":"Notes"}' }
 effects = ["write_data"]
 
-# documents batchUpdate is the only way to edit a document's text; camelCase, so unmodeled.
+# documents batchUpdate is the only way to edit a document's text.
 [[case]]
 argv = ["gws", "docs", "documents", "batchUpdate", "--params", '{"documentId":"d1"}', "--json", '{"requests":[]}']
+action = "docs_documents_batch_update"
+fields = { json = '{"requests":[]}', params = '{"documentId":"d1"}' }
+effects = ["write_data"]
+
+[[case]]
+argv = ["gws", "docs", "documents", "batchupdate", "--params", '{"documentId":"d1"}']
 action = "unmodeled"
 
 [[case]]

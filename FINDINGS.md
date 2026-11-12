@@ -74,7 +74,7 @@ Each limit has an example from a real CLI and what the grammar does about it. Un
 otherwise, Level 1 corpus cases pin the grammar's choice, and a small repro grammar showed the limit
 in Level 1.
 
-### Command words are lowercase `[a-z0-9-]` only
+### Command words were lowercase `[a-z0-9-]` only
 
 ```
 gws drive files emptyTrash        # camelCase Discovery method
@@ -82,10 +82,11 @@ gws gmail +send --to ...          # helper command
 stripe payment_intents list       # `_` in the command name
 ```
 
-The loader refuses such a `usage`. The CLIs accept only these exact spellings. **Workaround:** these
-commands are `unmodeled`. gws models the generic method that each helper wraps. stripe leaves
-`payment_intents`, `payment_methods`, `setup_intents`, `webhook_endpoints`, and every `test_helpers`
-group `unmodeled`. These are among stripe's most used objects.
+The loader refused such a `usage`, and the CLIs accept only these exact spellings. **Resolved** by
+strands-agents/box#408: a command word may hold `_` and uppercase letters, and may start with one
+`+`. It stays literal and case-sensitive. gws now models `emptyTrash`, `batchUpdate`, and the other
+camelCase methods it lists, and `gmail +send`. stripe models `payment_intents`,
+`webhook_endpoints`, and `test_helpers test_clocks`.
 
 ### No action for a bare program
 

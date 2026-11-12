@@ -39,10 +39,12 @@
 #     the credentials and in the --params JSON.
 #   - Child processes: `gws auth setup` runs gcloud. It is unmodeled.
 #
-# Deliberately unmodeled (no action, or an undeclared option): helper commands such as
-# `gmail +send` (`+` cannot start a command word), every camelCase method or resource such as
-# `files emptyTrash`, `documents batchUpdate`, `spreadsheets batchUpdate`, `calendarList` (a command
-# word is lowercase), `--api-version` and the `<service>:<version>` form (they change which API
+# A command word is case-sensitive, like the gws command tree. So `drive files emptyTrash` is
+# modeled, and `drive files emptytrash` is unmodeled (gws refuses it too).
+#
+# Deliberately unmodeled (no action, or an undeclared option): every helper command other than
+# `gmail +send`, such as `gmail +reply` and `drive +upload`, `--api-version` and the
+# `<service>:<version>` form (they change which API
 # the method names mean), `--sanitize`, `watch` methods (they register a push channel to a URL),
 # `gws auth login|logout|setup|export`, `gws generate-skills`, and every service not listed here.
 
@@ -60,7 +62,7 @@ send_email       = "Sends email: a message, a draft, a Drive share or calendar A
 share_external   = "Grants or changes access for another user, group, domain, or anyone, or gives a file or event the audience of a folder or calendar"
 make_public      = "Can grant access to anyone: a Drive permission or revision publish, a Drive permission update, or any calendar ACL write"
 change_sharing_rules = "Changes who may reshare, copy, or download a file, or a shared drive's sharing limits; grants no access itself"
-upload_file      = "Sends the content of a local file (--upload) to Google"
+upload_file      = "Sends the content of a local file (--upload, or a `+send` attachment) to Google"
 write_local_file = "Writes the response to a local file (-o, --output)"
 read_credentials = "Reads the stored Google credentials and asks Google which account they belong to"
 
@@ -78,6 +80,28 @@ adds  = ["read_credentials"]
 [shell.schema]
 usage = "gws schema [options] <method_path>"
 options.resolve_refs = { flag = ["--resolve-refs"] }
+
+# --------------------------------------------------------------------------------------------------
+# Helper commands (hand-written in gws, not from Discovery)
+# --------------------------------------------------------------------------------------------------
+
+# `gws gmail +send` builds one message and sends it (helpers/gmail/mod.rs, send.rs). `--draft`
+# saves it as a draft and sends nothing. `-a` reads a local file and attaches it. `--dry-run`
+# prints the request, and gets no token. The other helpers are unmodeled.
+[shell.gmail_helper_send]
+usage = "gws gmail +send [options]"
+adds  = ["send_email"]
+options.to      = { flag = ["--to"], value = "required" }
+options.subject = { flag = ["--subject"], value = "required" }
+options.body    = { flag = ["--body"], value = "required" }
+options.from    = { flag = ["--from"], value = "required" }
+options.cc      = { flag = ["--cc"], value = "required" }
+options.bcc     = { flag = ["--bcc"], value = "required" }
+options.attach  = { flag = ["-a", "--attach"], value = "required", repeated = true, adds = ["upload_file"] }
+options.html    = { flag = ["--html"] }
+options.draft   = { flag = ["--draft"], adds = ["write_data"], removes = ["send_email"] }
+options.format  = { flag = ["--format"], value = "required" }
+options.dry_run = { flag = ["--dry-run"], removes = ["send_email", "upload_file", "write_data"] }
 
 # --------------------------------------------------------------------------------------------------
 # Drive v3
@@ -557,6 +581,17 @@ options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data"
 
 [shell.drive_files_delete]
 usage = "gws drive files delete [options]"
+adds  = ["delete_data"]
+options.params    = { flag = ["--params"], value = "required" }
+options.output    = { flag = ["-o", "--output"], value = "required", adds = ["write_local_file"] }
+options.format    = { flag = ["--format"], value = "required" }
+options.page_all  = { flag = ["--page-all"] }
+options.page_limit = { flag = ["--page-limit"], value = "required" }
+options.page_delay = { flag = ["--page-delay"], value = "required" }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
+
+[shell.drive_files_empty_trash]
+usage = "gws drive files emptyTrash [options]"
 adds  = ["delete_data"]
 options.params    = { flag = ["--params"], value = "required" }
 options.output    = { flag = ["-o", "--output"], value = "required", adds = ["write_local_file"] }
@@ -1133,6 +1168,38 @@ options.page_limit = { flag = ["--page-limit"], value = "required" }
 options.page_delay = { flag = ["--page-delay"], value = "required" }
 options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
 
+[shell.gmail_users_messages_batch_modify]
+usage = "gws gmail users messages batchModify [options]"
+adds  = ["write_data"]
+options.params    = { flag = ["--params"], value = "required" }
+options.json = { flag = ["--json"], value = "required", when = [
+  { adds = ["trash_data"], like = [
+    '*trash*', '*trasH*', '*traSh*', '*traSH*', '*trAsh*', '*trAsH*', '*trASh*', '*trASH*',
+    '*tRash*', '*tRasH*', '*tRaSh*', '*tRaSH*', '*tRAsh*', '*tRAsH*', '*tRASh*', '*tRASH*',
+    '*Trash*', '*TrasH*', '*TraSh*', '*TraSH*', '*TrAsh*', '*TrAsH*', '*TrASh*', '*TrASH*',
+    '*TRash*', '*TRasH*', '*TRaSh*', '*TRaSH*', '*TRAsh*', '*TRAsH*', '*TRASh*', '*TRASH*',
+    '*\u*',
+  ] },
+] }
+options.output    = { flag = ["-o", "--output"], value = "required", adds = ["write_local_file"] }
+options.format    = { flag = ["--format"], value = "required" }
+options.page_all  = { flag = ["--page-all"] }
+options.page_limit = { flag = ["--page-limit"], value = "required" }
+options.page_delay = { flag = ["--page-delay"], value = "required" }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
+
+[shell.gmail_users_messages_batch_delete]
+usage = "gws gmail users messages batchDelete [options]"
+adds  = ["delete_data"]
+options.params    = { flag = ["--params"], value = "required" }
+options.json      = { flag = ["--json"], value = "required" }
+options.output    = { flag = ["-o", "--output"], value = "required", adds = ["write_local_file"] }
+options.format    = { flag = ["--format"], value = "required" }
+options.page_all  = { flag = ["--page-all"] }
+options.page_limit = { flag = ["--page-limit"], value = "required" }
+options.page_delay = { flag = ["--page-delay"], value = "required" }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
+
 [shell.gmail_users_messages_attachments_get]
 usage = "gws gmail users messages attachments get [options]"
 adds  = ["read_data"]
@@ -1387,6 +1454,17 @@ options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data"
 
 [shell.gmail_users_settings_filters_get]
 usage = "gws gmail users settings filters get [options]"
+adds  = ["read_data"]
+options.params    = { flag = ["--params"], value = "required" }
+options.output    = { flag = ["-o", "--output"], value = "required", adds = ["write_local_file"] }
+options.format    = { flag = ["--format"], value = "required" }
+options.page_all  = { flag = ["--page-all"] }
+options.page_limit = { flag = ["--page-limit"], value = "required" }
+options.page_delay = { flag = ["--page-delay"], value = "required" }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
+
+[shell.gmail_users_get_profile]
+usage = "gws gmail users getProfile [options]"
 adds  = ["read_data"]
 options.params    = { flag = ["--params"], value = "required" }
 options.output    = { flag = ["-o", "--output"], value = "required", adds = ["write_local_file"] }
@@ -1706,6 +1784,28 @@ options.page_limit = { flag = ["--page-limit"], value = "required" }
 options.page_delay = { flag = ["--page-delay"], value = "required" }
 options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
 
+[shell.calendar_calendar_list_list]
+usage = "gws calendar calendarList list [options]"
+adds  = ["read_data"]
+options.params    = { flag = ["--params"], value = "required" }
+options.output    = { flag = ["-o", "--output"], value = "required", adds = ["write_local_file"] }
+options.format    = { flag = ["--format"], value = "required" }
+options.page_all  = { flag = ["--page-all"] }
+options.page_limit = { flag = ["--page-limit"], value = "required" }
+options.page_delay = { flag = ["--page-delay"], value = "required" }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
+
+[shell.calendar_calendar_list_get]
+usage = "gws calendar calendarList get [options]"
+adds  = ["read_data"]
+options.params    = { flag = ["--params"], value = "required" }
+options.output    = { flag = ["-o", "--output"], value = "required", adds = ["write_local_file"] }
+options.format    = { flag = ["--format"], value = "required" }
+options.page_all  = { flag = ["--page-all"] }
+options.page_limit = { flag = ["--page-limit"], value = "required" }
+options.page_delay = { flag = ["--page-delay"], value = "required" }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
+
 # --------------------------------------------------------------------------------------------------
 # Sheets v4
 # --------------------------------------------------------------------------------------------------
@@ -1733,8 +1833,31 @@ options.page_limit = { flag = ["--page-limit"], value = "required" }
 options.page_delay = { flag = ["--page-delay"], value = "required" }
 options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
 
+[shell.sheets_spreadsheets_batch_update]
+usage = "gws sheets spreadsheets batchUpdate [options]"
+adds  = ["write_data"]
+options.params    = { flag = ["--params"], value = "required" }
+options.json      = { flag = ["--json"], value = "required" }
+options.output    = { flag = ["-o", "--output"], value = "required", adds = ["write_local_file"] }
+options.format    = { flag = ["--format"], value = "required" }
+options.page_all  = { flag = ["--page-all"] }
+options.page_limit = { flag = ["--page-limit"], value = "required" }
+options.page_delay = { flag = ["--page-delay"], value = "required" }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
+
 [shell.sheets_spreadsheets_values_get]
 usage = "gws sheets spreadsheets values get [options]"
+adds  = ["read_data"]
+options.params    = { flag = ["--params"], value = "required" }
+options.output    = { flag = ["-o", "--output"], value = "required", adds = ["write_local_file"] }
+options.format    = { flag = ["--format"], value = "required" }
+options.page_all  = { flag = ["--page-all"] }
+options.page_limit = { flag = ["--page-limit"], value = "required" }
+options.page_delay = { flag = ["--page-delay"], value = "required" }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
+
+[shell.sheets_spreadsheets_values_batch_get]
+usage = "gws sheets spreadsheets values batchGet [options]"
 adds  = ["read_data"]
 options.params    = { flag = ["--params"], value = "required" }
 options.output    = { flag = ["-o", "--output"], value = "required", adds = ["write_local_file"] }
@@ -1797,6 +1920,18 @@ options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data"
 
 [shell.docs_documents_create]
 usage = "gws docs documents create [options]"
+adds  = ["write_data"]
+options.params    = { flag = ["--params"], value = "required" }
+options.json      = { flag = ["--json"], value = "required" }
+options.output    = { flag = ["-o", "--output"], value = "required", adds = ["write_local_file"] }
+options.format    = { flag = ["--format"], value = "required" }
+options.page_all  = { flag = ["--page-all"] }
+options.page_limit = { flag = ["--page-limit"], value = "required" }
+options.page_delay = { flag = ["--page-delay"], value = "required" }
+options.dry_run   = { flag = ["--dry-run"], removes = ["read_data", "write_data", "delete_data", "trash_data", "send_email", "share_external", "make_public", "change_sharing_rules", "upload_file", "write_local_file"] }
+
+[shell.docs_documents_batch_update]
+usage = "gws docs documents batchUpdate [options]"
 adds  = ["write_data"]
 options.params    = { flag = ["--params"], value = "required" }
 options.json      = { flag = ["--json"], value = "required" }

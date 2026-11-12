@@ -1,5 +1,6 @@
 """Generate gws.grammar.toml. From grammars/gws: python3 -I gen/gen_grammar.py > gws.grammar.toml"""
 import itertools
+import re
 
 R, W, D, T, S, SEND = "read", "write", "delete", "trash", "share", "send"
 ADDS = {R: ["read_data"], W: ["write_data"], D: ["delete_data"], T: ["trash_data"],
@@ -32,6 +33,7 @@ SPECIAL = {
     "drive revisions update":   {"json": [(["make_public", "share_external"], PUBLISH)]},
     "gmail users messages modify": {"json": [(["trash_data"], TRASH)]},
     "gmail users threads modify":  {"json": [(["trash_data"], TRASH)]},
+    "gmail users messages batchModify": {"json": [(["trash_data"], TRASH)]},
     "calendar acl insert": {"adds": ["make_public", "send_email"]},
     "calendar acl patch":  {"adds": ["make_public", "send_email"]},
     "calendar acl update": {"adds": ["make_public", "send_email"]},
@@ -53,6 +55,7 @@ FAMILIES = [
     ("drive files create", W, 1, 1, None),
     ("drive files update", W, 1, 1, None),
     ("drive files delete", D, 0, 0, None),
+    ("drive files emptyTrash", D, 0, 0, None),
     ("drive permissions list", R, 0, 0, None),
     ("drive permissions get", R, 0, 0, None),
     ("drive permissions create", S, 1, 0, None),
@@ -91,6 +94,8 @@ FAMILIES = [
     ("gmail users messages trash", T, 0, 0, None),
     ("gmail users messages untrash", W, 0, 0, None),
     ("gmail users messages delete", D, 0, 0, None),
+    ("gmail users messages batchModify", W, 1, 0, None),
+    ("gmail users messages batchDelete", D, 1, 0, None),
     ("gmail users messages attachments get", R, 0, 0, None),
     ("gmail users drafts list", R, 0, 0, None),
     ("gmail users drafts get", R, 0, 0, None),
@@ -113,6 +118,7 @@ FAMILIES = [
     ("gmail users history list", R, 0, 0, None),
     ("gmail users settings filters list", R, 0, 0, None),
     ("gmail users settings filters get", R, 0, 0, None),
+    ("gmail users getProfile", R, 0, 0, None),
   ]),
   ("Calendar v3", [
     ("calendar events list", R, 0, 0, None),
@@ -140,11 +146,15 @@ FAMILIES = [
     ("calendar colors get", R, 0, 0, None),
     ("calendar settings list", R, 0, 0, None),
     ("calendar settings get", R, 0, 0, None),
+    ("calendar calendarList list", R, 0, 0, None),
+    ("calendar calendarList get", R, 0, 0, None),
   ]),
   ("Sheets v4", [
     ("sheets spreadsheets get", R, 0, 0, None),
     ("sheets spreadsheets create", W, 1, 0, None),
+    ("sheets spreadsheets batchUpdate", W, 1, 0, None),
     ("sheets spreadsheets values get", R, 0, 0, None),
+    ("sheets spreadsheets values batchGet", R, 0, 0, None),
     ("sheets spreadsheets values append", W, 1, 0, None),
     ("sheets spreadsheets values update", W, 1, 0, None),
     ("sheets spreadsheets values clear", D, 1, 0, None),
@@ -152,6 +162,7 @@ FAMILIES = [
   ("Docs v1", [
     ("docs documents get", R, 0, 0, None),
     ("docs documents create", W, 1, 0, None),
+    ("docs documents batchUpdate", W, 1, 0, None),
   ]),
 ]
 
@@ -176,7 +187,7 @@ for title, actions in FAMILIES:
     p(f"# {title}")
     p("# " + "-" * 98)
     for words, kind, body, upload, extra in actions:
-        name = words.replace(" ", "_").replace("-", "_")
+        name = re.sub(r"([a-z])([A-Z])", r"\1_\2", words).lower().replace(" ", "_").replace("-", "_")
         sp = SPECIAL.get(words, {})
         adds = list(ADDS[kind]) + sp.get("adds", [])
         p("")

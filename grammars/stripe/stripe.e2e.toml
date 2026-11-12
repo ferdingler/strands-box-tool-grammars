@@ -49,9 +49,27 @@ argv = ["stripe", "--api-key", "sk_live_example", "customers", "list"]
 exit = 126
 stderr = "[policy: no_live_mode]"
 
-# A resource name with `_` cannot be modeled, so nothing permits it
+# A resource name with `_`: a test-mode read runs
 [[case]]
 argv = ["stripe", "payment_intents", "list"]
+exit = 0
+stdout = "stub-argv: [payment_intents] [list]"
+
+# Confirming a payment intent moves money, so it is refused
+[[case]]
+argv = ["stripe", "payment_intents", "confirm", "pi_1"]
+exit = 126
+stderr = "[policy: no_money_movement]"
+
+# Two command words with `_`
+[[case]]
+argv = ["stripe", "test_helpers", "test_clocks", "list"]
+exit = 0
+stdout = "stub-argv: [test_helpers] [test_clocks] [list]"
+
+# An operation that the grammar does not model is unmodeled, and nothing permits it
+[[case]]
+argv = ["stripe", "payment_methods", "list"]
 exit = 126
 stderr = "[default-deny]: No permit policy matched this request."
 
