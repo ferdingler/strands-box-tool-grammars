@@ -1135,6 +1135,7 @@ operands.remote = {}
 
 # The subcommands (git 2.46 and later). Each stops reading options at its first operand
 # (PARSE_OPT_STOP_AT_NON_OPTION), so a later word that looks like an option is an operand in git.
+# `options_first` reads them the same way.
 [shell.config_list]
 usage = "git [global options] config list [options]"
 options.global       = { flag = ["--global"] }
@@ -1154,6 +1155,7 @@ options.no_includes  = { flag = ["--no-includes"] }
 
 [shell.config_get]
 usage = "git [global options] config get [options] <name>"
+options_first = true
 options.global       = { flag = ["--global"] }
 options.system       = { flag = ["--system"] }
 options.local        = { flag = ["--local"] }
@@ -1178,6 +1180,7 @@ operands.name = {}
 
 [shell.config_set]
 usage = "git [global options] config set [options] <name> <value>"
+options_first = true
 adds  = ["override_config", "run_program", "skip_hooks"]
 options.global       = { flag = ["--global"] }
 options.system       = { flag = ["--system"] }
@@ -1195,6 +1198,7 @@ operands.value = {}
 
 [shell.config_unset]
 usage = "git [global options] config unset [options] <name>"
+options_first = true
 adds  = ["override_config", "run_program", "skip_hooks"]
 options.global       = { flag = ["--global"] }
 options.system       = { flag = ["--system"] }
@@ -1207,13 +1211,15 @@ options.fixed_value  = { flag = ["--fixed-value"] }
 operands.name = {}
 
 # The older form. Git stops reading options at the first operand, so in `git config <name> --x`
-# the word `--x` is a value that git writes. Here every operand adds `override_config`, whatever
-# follows, so a write is never read as a read. `--get`, `--get-all`, `--get-regexp`, `--unset`,
+# the word `--x` is a value that git writes. `options_first` reads it the same way, so a `<value>`
+# writes and a `<name>` alone reads. `edit` alone opens an editor on the file (git 2.46 and later),
+# so that name writes too. `--get`, `--get-all`, `--get-regexp`, `--unset`,
 # and `--unset-all` are modes in git that take the name as the next word; here each holds that
 # name as its value. `-e`/`--edit`, `--add`, `--replace-all`, the section modes, and the color
 # modes are left out.
 [shell.config]
 usage = "git [global options] config [options] [<name>] [<value>]"
+options_first = true
 options.list         = { flag = ["-l", "--list"] }
 options.get          = { flag = ["--get"], value = "required" }
 options.get_all      = { flag = ["--get-all"], value = "required" }
@@ -1238,7 +1244,7 @@ options.path         = { flag = ["--path"] }
 options.includes     = { flag = ["--includes"] }
 options.no_includes  = { flag = ["--no-includes"] }
 options.default      = { flag = ["--default"], value = "required" }
-operands.name  = { adds = ["override_config", "run_program", "skip_hooks"] }
+operands.name  = { when = [{ like = "edit", adds = ["override_config", "run_program", "skip_hooks"] }] }
 operands.value = { adds = ["override_config", "run_program", "skip_hooks"] }
 
 # ================================================================ repositories and worktrees
