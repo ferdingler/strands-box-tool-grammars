@@ -96,19 +96,15 @@ argv = ["valyu", "-p", "a", "search", "q", "-p", "b"]
 action = "unmodeled"
 
 # A value that starts with `-p`: commander's top level takes `-p` as the profile option (here valyu
-# then errors, because --include-source has no value left). The worst case is another account.
+# then errors, because --include-source has no value left). The line is unmodeled.
 [[case]]
 argv = ["valyu", "search", "q", "--include-source", "-p"]
-action = "search"
-fields = { type_or_query = "q", include_source = ["-p"] }
-effects = ["network", "spend_credits", "option_like_value", "other_account"]
+action = "unmodeled"
 
 # A value that starts with `--`
 [[case]]
 argv = ["valyu", "search", "q", "--instructions", "--json"]
-action = "search"
-fields = { type_or_query = "q", instructions = "--json" }
-effects = ["network", "spend_credits", "option_like_value", "other_account"]
+action = "unmodeled"
 
 # A word after `--` is an operand, for valyu too (commander's leaf does not parse operands again).
 # An operand that starts with `-` adds `option_like_value` as a warning only.
@@ -366,9 +362,7 @@ effects = ["network", "spend_credits", "upload_file"]
 # A value that looks like a top-level option, and the cost effect at the same time
 [[case]]
 argv = ["valyu", "deepresearch", "create", "q", "-m", "heavy", "--research-strategy", "-pprod"]
-action = "deepresearch_create"
-fields = { query = "q", mode = "heavy", research_strategy = "-pprod" }
-effects = ["network", "spend_credits", "high_cost", "option_like_value", "other_account", "upload_file", "expose_mcp", "notify_external"]
+action = "unmodeled"
 
 # create needs exactly one query; `--pdf` is not defined (only --no-pdf); -m twice is unmodeled
 [[case]]
@@ -927,34 +921,25 @@ fields = { urls = ["--webhook-url", "https://x.example", "https://a.example"] }
 effects = ["network", "spend_credits", "option_like_value"]
 
 # A global option inside a value: valyu uses profile prod (key prodkey) and names the batch "q1".
-# Amended by the author for B2 (this case and the next two): a top-level option word in a value adds
-# the worst case of the action, so more effects than this one line causes (see AUTHOR_NOTES).
+# A top-level option word in a value makes the line unmodeled (this case and the next two).
 [[case]]
 argv = ["valyu", "batch", "create", "--name", "-p", "prod", "q1"]
-action = "batch_create"
-fields = { name = "-p", queries = ["prod", "q1"] }
-effects = ["network", "spend_credits", "option_like_value", "other_account", "high_cost", "upload_file", "expose_mcp", "notify_external"]
+action = "unmodeled"
 
 # A global flag inside a value shifts the words: valyu sends the MCP config (with its tokens)
 [[case]]
 argv = ["valyu", "batch", "create", "--name", "--json", "--metadata", "--mcp-config", "cfg.json"]
-action = "batch_create"
-fields = { name = "--json", metadata = ["--mcp-config"], queries = ["cfg.json"] }
-effects = ["network", "spend_credits", "option_like_value", "other_account", "high_cost", "upload_file", "expose_mcp", "notify_external"]
+action = "unmodeled"
 
 # The same shift: valyu sends mode max
 [[case]]
 argv = ["valyu", "batch", "create", "--name", "--json", "--metadata", "-m", "max"]
-action = "batch_create"
-fields = { name = "--json", metadata = ["-m"], queries = ["max"] }
-effects = ["network", "spend_credits", "option_like_value", "other_account", "high_cost", "upload_file", "expose_mcp", "notify_external"]
+action = "unmodeled"
 
 # A global option inside a search value: valyu sends key KEY and reads the query from stdin
 [[case]]
 argv = ["valyu", "search", "--instructions", "--api-key", "KEY", "Y"]
-action = "search"
-fields = { instructions = "--api-key", type_or_query = "KEY", query = "Y" }
-effects = ["network", "spend_credits", "option_like_value", "other_account"]
+action = "unmodeled"
 
 # `-h` as a value is a value: valyu sends instructions "-h"
 [[case]]
@@ -1071,12 +1056,10 @@ effects = ["network", "spend_credits"]
 # Expectations come from valyu 1.3.2 run with fetch stubbed. Where Box cannot give the exact
 # reading, the expectation is the over-stated reading, and the comment names what valyu did.
 
-# A hidden second -m: valyu sends mode max and webhook "--alert-email-url". Every run is high_cost.
+# A hidden second -m: valyu sends mode max and webhook "--alert-email-url". The line is unmodeled.
 [[case]]
 argv = ["valyu", "workflows", "run", "slug", "-m", "fast", "--webhook-url", "--json", "--alert-email-url", "-wmmax"]
-action = "workflows_run"
-fields = { slug = "slug", mode = "fast", webhook_url = "--json", alert_email_url = "-wmmax" }
-effects = ["network", "spend_credits", "high_cost", "option_like_value", "other_account", "upload_file", "notify_external"]
+action = "unmodeled"
 
 # -m standard still keeps high_cost (over-states; valyu sends mode standard)
 [[case]]
@@ -1109,9 +1092,7 @@ effects = ["network", "spend_credits", "option_like_value"]
 # `--profile=` inside a value: valyu uses profile prod (it then errors: no query on stdin here)
 [[case]]
 argv = ["valyu", "answer", "--system-instructions", "--profile=prod", "q"]
-action = "answer"
-fields = { system_instructions = "--profile=prod", query = "q" }
-effects = ["network", "spend_credits", "option_like_value", "other_account", "upload_file"]
+action = "unmodeled"
 
 # A leaf-unknown dash value is a plain value for valyu too: instructions "-x"
 [[case]]
@@ -1130,9 +1111,7 @@ effects = ["network"]
 # `=`-attached hazard value: valyu does not take it (one word), the grammar over-flags it (safe)
 [[case]]
 argv = ["valyu", "search", "--instructions=-p", "q"]
-action = "search"
-fields = { instructions = "-p", type_or_query = "q" }
-effects = ["network", "spend_credits", "option_like_value", "other_account"]
+action = "unmodeled"
 
 # Cluster of top-level letters inside a value (valyu takes -q and -p prod, then errors)
 [[case]]
@@ -1141,30 +1120,22 @@ action = "unmodeled"
 
 [[case]]
 argv = ["valyu", "deepresearch", "create", "q", "--report-format", "-qp"]
-action = "deepresearch_create"
-fields = { query = "q", report_format = "-qp" }
-effects = ["network", "spend_credits", "option_like_value", "other_account", "high_cost", "upload_file", "expose_mcp", "notify_external"]
+action = "unmodeled"
 
-# A key-management line with a hazard value keeps manage_keys and adds the worst case
+# A key-management line with a hazard value is unmodeled
 [[case]]
 argv = ["valyu", "account", "keys", "create", "--name", "-p"]
-action = "account_keys_create"
-fields = { name = "-p" }
-effects = ["network", "manage_keys", "option_like_value", "other_account"]
+action = "unmodeled"
 
-# respond with a hazard value adds upload_file (from --response-file) and other_account
+# respond with a hazard value is unmodeled
 [[case]]
 argv = ["valyu", "deepresearch", "respond", "t1", "--response", "--json"]
-action = "deepresearch_respond"
-fields = { id = "t1", response = "--json" }
-effects = ["network", "steer_task", "option_like_value", "other_account", "upload_file"]
+action = "unmodeled"
 
-# `-v` as a value: valyu prints its version and runs nothing; the grammar over-states
+# `-v` as a value: valyu prints its version and runs nothing; the line is unmodeled
 [[case]]
 argv = ["valyu", "batch", "add", "b1", "--tasks-file", "-v"]
-action = "batch_add"
-fields = { id = "b1", tasks_file = "-v" }
-effects = ["network", "spend_credits", "option_like_value", "other_account", "upload_file"]
+action = "unmodeled"
 
 # `--` then `-y` on delete: valyu reads "-y" as the id and prompts
 [[case]]

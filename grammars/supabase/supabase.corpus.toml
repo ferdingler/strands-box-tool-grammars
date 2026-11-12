@@ -690,12 +690,10 @@ fields = { names = ["MY_SECRET", "OTHER_SECRET"] }
 effects = ["remote", "write_secret"]
 
 # A boolean literal after a boolean flag is read here as an operand. The CLI reads it as the flag's
-# value (a real unset of every secret), so the literal operand adds ambiguous_argv and all_targets
+# value (a real unset of every secret), so the literal operand makes the line unmodeled
 [[case]]
 argv = ["supabase", "secrets", "unset", "--dry-run", "false", "--all"]
-action = "secrets_unset"
-fields = { dry_run = true, names = ["false"], all = true }
-effects = ["remote", "write_secret", "ambiguous_argv", "all_targets"]
+action = "unmodeled"
 
 [[case]]
 argv = ["supabase", "secrets", "get"]
@@ -1002,39 +1000,29 @@ action = "unmodeled"
 
 # A bare `--remote` followed by a database URL: the CLI joins them (remote-argv.ts
 # joinRemoteOperands, DB_URL_PATTERN). The grammar reads the URL as the operand, so the `p*://*`
-# pattern adds the hosted effects and ambiguous_argv
+# pattern makes the line unmodeled
 [[case]]
 argv = ["supabase", "db", "pull", "--remote", "postgresql://u@db.example.com/postgres"]
-action = "db_pull"
-fields = { remote = "", migration_name = "postgresql://u@db.example.com/postgres" }
-effects = ["write_files", "remote", "write_remote_db", "clear_network_bans", "ambiguous_argv"]
+action = "unmodeled"
 
 [[case]]
 argv = ["supabase", "gen", "types", "--remote", "Postgres://u@db.example.com/postgres"]
-action = "gen_types"
-fields = { remote = "", language = "Postgres://u@db.example.com/postgres" }
-effects = ["remote", "clear_network_bans", "ambiguous_argv"]
+action = "unmodeled"
 
 # `--debug false` on storage rm: the CLI sees no path, which with -r clears every bucket
 [[case]]
 argv = ["supabase", "storage", "rm", "-r", "--debug", "false"]
-action = "storage_rm"
-fields = { recursive = true, debug = true, file = ["false"] }
-effects = ["delete_storage", "ambiguous_argv", "all_targets"]
+action = "unmodeled"
 
-# A literal on an action where an empty operand is not "all" adds only ambiguous_argv
+# A literal on an action where an empty operand is not "all" makes the line unmodeled too
 [[case]]
 argv = ["supabase", "functions", "delete", "--debug", "n"]
-action = "functions_delete"
-fields = { debug = true, function_name = "n" }
-effects = ["remote", "delete_remote_data", "ambiguous_argv"]
+action = "unmodeled"
 
 # `--remote` accepts a true-literal in any case (LINKED_LITERAL is /i)
 [[case]]
 argv = ["supabase", "branches", "delete", "--remote", "TRUE"]
-action = "branches_delete"
-fields = { remote = "", name = "TRUE" }
-effects = ["remote", "delete_remote_data", "ambiguous_argv"]
+action = "unmodeled"
 
 # An ordinary name is not ambiguous
 [[case]]
@@ -1165,60 +1153,48 @@ action = "unmodeled"
 # The hosted write targets that URL, not the linked project and not an operand.
 # [author] The verifier expected the CLI's own reading, which no grammar can produce (see
 # AUTHOR_NOTES.md). This pins the mitigation: the URL lands in `sql`, and the `p*://*` operand pattern
-# adds ambiguous_argv beside the hosted effects.
+# makes the line unmodeled.
 [[case]]
 argv = ["supabase", "db", "query", "--remote", "postgresql://u@prod.example.com/postgres", "-f", "drop.sql"]
-action = "db_query"
-fields = { remote = "", sql = "postgresql://u@prod.example.com/postgres", file = "drop.sql" }
-effects = ["remote", "run_sql", "write_remote_db", "clear_network_bans", "ambiguous_argv"]
+action = "unmodeled"
 
 # CLI: test db takes [path...]; the URL is joined to `--remote=<url>`; every test runs there.
 # [author] The verifier expected the CLI's own reading, which no grammar can produce (see
-# AUTHOR_NOTES.md). This pins the mitigation: the URL lands in `path`, which adds ambiguous_argv.
+# AUTHOR_NOTES.md). This pins the mitigation: the URL lands in `path`, which makes the line unmodeled.
 [[case]]
 argv = ["supabase", "test", "db", "--remote", "postgresql://u@prod.example.com/postgres"]
-action = "test_db"
-fields = { remote = "", path = ["postgresql://u@prod.example.com/postgres"] }
-effects = ["remote", "run_sql", "write_remote_db", "clear_network_bans", "ambiguous_argv"]
+action = "unmodeled"
 
 # CLI: migration repair takes [version...]; the URL is joined to `--remote=<url>`.
 # [author] The CLI reading cannot be expressed (see AUTHOR_NOTES.md); this pins the mitigation:
-# the URL lands in `version`, which adds ambiguous_argv.
+# the URL lands in `version`, which makes the line unmodeled.
 [[case]]
 argv = ["supabase", "migration", "repair", "--status", "reverted", "--remote", "postgresql://u@prod.example.com/postgres", "20240101000000"]
-action = "migration_repair"
-fields = { status = "reverted", remote = "", version = ["postgresql://u@prod.example.com/postgres", "20240101000000"] }
-effects = ["remote", "write_remote_db", "clear_network_bans", "ambiguous_argv"]
+action = "unmodeled"
 
 # CLI: `--debug false` sets debug to false and consumes `false`; with no function name,
 # functions deploy deploys EVERY function in supabase/functions/ (deploy.command.ts
 # "Deploys all if omitted"). The grammar must not read this as a deploy of a function named "false".
 # [author] The CLI reading cannot be expressed (see AUTHOR_NOTES.md); this pins the mitigation:
-# the literal operand adds ambiguous_argv and all_targets.
+# the literal operand makes the line unmodeled.
 [[case]]
 argv = ["supabase", "functions", "deploy", "--debug", "false"]
-action = "functions_deploy"
-fields = { debug = true, function_name = ["false"] }
-effects = ["remote", "deploy_remote", "ambiguous_argv", "all_targets"]
+action = "unmodeled"
 
 # CLI: same, through a command boolean; deploys every function with JWT checks off.
 # [author] The CLI reading cannot be expressed (see AUTHOR_NOTES.md); this pins the mitigation:
-# the literal operand adds ambiguous_argv and all_targets.
+# the literal operand makes the line unmodeled.
 [[case]]
 argv = ["supabase", "functions", "deploy", "--no-verify-jwt", "true", "--yes"]
-action = "functions_deploy"
-fields = { no_verify_jwt = true, yes = true, function_name = ["true"] }
-effects = ["remote", "deploy_remote", "skip_confirmation", "ambiguous_argv", "all_targets"]
+action = "unmodeled"
 
 # CLI: `--remote yes` is the linked project (LINKED_LITERAL, joined). With -r and no path,
 # storage rm clears and deletes EVERY bucket of the hosted project (rm SIDE_EFFECTS.md).
 # [author] The CLI reading cannot be expressed (see AUTHOR_NOTES.md); this pins the mitigation:
-# the literal operand adds ambiguous_argv and all_targets.
+# the literal operand makes the line unmodeled.
 [[case]]
 argv = ["supabase", "storage", "rm", "-r", "--remote", "yes", "--yes"]
-action = "storage_rm"
-fields = { recursive = true, remote = "", yes = true, file = ["yes"] }
-effects = ["delete_storage", "remote", "skip_confirmation", "ambiguous_argv", "all_targets"]
+action = "unmodeled"
 
 # CLI: a short flag with an attached value is split into letters (lexer.ts), so `-j4` is
 # `-j -4` and the CLI fails with a missing value for --jobs.
@@ -1332,69 +1308,49 @@ effects = ["remote", "skip_confirmation", "clear_network_bans"]
 # So `tRUE` after a bare --remote is the linked project, and `storage rm -r` then empties every bucket.
 [[case]]
 argv = ["supabase", "storage", "rm", "-r", "--remote", "tRUE", "--yes"]
-action = "storage_rm"
-fields = { recursive = true, remote = "", yes = true, file = ["tRUE"] }
-effects = ["delete_storage", "remote", "skip_confirmation", "ambiguous_argv", "all_targets"]
+action = "unmodeled"
 
 [[case]]
 argv = ["supabase", "functions", "deploy", "--remote", "Yes"]
-action = "functions_deploy"
-fields = { remote = "", function_name = ["Yes"] }
-effects = ["remote", "deploy_remote", "ambiguous_argv", "all_targets"]
+action = "unmodeled"
 
 [[case]]
 argv = ["supabase", "secrets", "unset", "--remote", "oN"]
-action = "secrets_unset"
-fields = { remote = "", names = ["oN"] }
-effects = ["remote", "write_secret", "ambiguous_argv", "all_targets"]
+action = "unmodeled"
 
 # CLI: a short boolean takes a literal too. `-r true` is recursive with no paths: every bucket.
 [[case]]
 argv = ["supabase", "storage", "rm", "-r", "true", "--remote"]
-action = "storage_rm"
-fields = { recursive = true, remote = "", file = ["true"] }
-effects = ["delete_storage", "remote", "ambiguous_argv", "all_targets"]
+action = "unmodeled"
 
 # CLI: effect/cli literals are exact lowercase, so `--debug TRUE` leaves TRUE as the operand.
 # The grammar still flags it, which is the safe direction.
 [[case]]
 argv = ["supabase", "functions", "deploy", "--debug", "TRUE"]
-action = "functions_deploy"
-fields = { debug = true, function_name = ["TRUE"] }
-effects = ["remote", "deploy_remote", "ambiguous_argv", "all_targets"]
+action = "unmodeled"
 
 # CLI: DB_URL_PATTERN is /^postgres(ql)?:\/\//i, so an uppercase or mixed-case scheme is joined too.
 [[case]]
 argv = ["supabase", "db", "query", "--remote", "POSTGRESQL://u@prod.example.com/postgres", "-f", "x.sql"]
-action = "db_query"
-fields = { remote = "", sql = "POSTGRESQL://u@prod.example.com/postgres", file = "x.sql" }
-effects = ["remote", "run_sql", "write_remote_db", "clear_network_bans", "ambiguous_argv"]
+action = "unmodeled"
 
 [[case]]
 argv = ["supabase", "test", "db", "--remote", "pOsTgReS://u@prod.example.com/postgres"]
-action = "test_db"
-fields = { remote = "", path = ["pOsTgReS://u@prod.example.com/postgres"] }
-effects = ["remote", "run_sql", "write_remote_db", "clear_network_bans", "ambiguous_argv"]
+action = "unmodeled"
 
 [[case]]
 argv = ["supabase", "db", "pull", "--remote", "postgres://u@prod.example.com/postgres"]
-action = "db_pull"
-fields = { remote = "", migration_name = "postgres://u@prod.example.com/postgres" }
-effects = ["write_files", "remote", "write_remote_db", "clear_network_bans", "ambiguous_argv"]
+action = "unmodeled"
 
 [[case]]
 argv = ["supabase", "gen", "types", "--remote", "Postgresql://u@prod.example.com/postgres"]
-action = "gen_types"
-fields = { remote = "", language = "Postgresql://u@prod.example.com/postgres" }
-effects = ["remote", "clear_network_bans", "ambiguous_argv"]
+action = "unmodeled"
 
 # CLI: a URL with no --remote is plain SQL for the local database. The grammar over-reports
 # hosted effects, which is the safe direction.
 [[case]]
 argv = ["supabase", "db", "query", "postgres://x"]
-action = "db_query"
-fields = { sql = "postgres://x" }
-effects = ["run_sql", "write_local_db", "remote", "write_remote_db", "clear_network_bans", "ambiguous_argv"]
+action = "unmodeled"
 
 # CLI: a ref-shaped word after a bare --remote fails before any request (rejectRefShapedRemote).
 # A branch-shaped word that is not a branch keeps the operand reading, the same as the grammar.

@@ -85,7 +85,6 @@ Global options on every action, before or after the command: `--registry`, `--us
 | `git_commit` | `npm version <v>` commits and tags. `--no-git-tag-version` removes it. |
 | `force` | `-f`/`--force`. |
 | `delete_cache` | `npm cache clean`. |
-| `ambiguous_argv` | A word that npm reads differently from this grammar (see Known limits). Forbid it. |
 
 ## Example policy rules
 
@@ -111,11 +110,6 @@ when { context.input.effects.contains(Tool::npm::Effect::"run_lifecycle_scripts"
 forbid (principal, action in Tool::npm::Action::"*", resource)
 when { context.input.effects.contains(Tool::npm::Effect::"global_install") ||
        context.input.effects.contains(Tool::npm::Effect::"override_registry") };
-
-// Refuse every line that npm would read differently from the grammar.
-@id("no_ambiguous_argv")
-forbid (principal, action in Tool::npm::Action::"*", resource)
-when { context.input.effects.contains(Tool::npm::Effect::"ambiguous_argv") };
 ```
 
 ## Exclusions
@@ -152,11 +146,11 @@ These are `unmodeled`, so a policy refuses them unless it permits `unmodeled`:
   settable in `.npmrc`) as code. The grammar does not see it.
 - **`npx` is a different program** and is not bound by this grammar.
 - **`true`/`false` after a boolean flag.** npm takes `--ignore-scripts false` as "ignore-scripts is
-  false". The grammar reads `false` as an operand, so each operand that could hold it adds
-  `ambiguous_argv` when it is exactly `true` or `false`.
+  false". The grammar reads `false` as an operand, so each operand that could hold it makes the
+  line `unmodeled` when it is exactly `true` or `false`.
 - **A value that starts with `-`.** npm gives a string option the empty value when the next word
   looks like a flag, and reads that word as a flag (`--tag --access=public` publishes publicly).
-  Each value option adds `ambiguous_argv` when its value starts with `-`.
+  Each value option makes the line `unmodeled` when its value starts with `-`.
 - **Over-statement.** `pack <spec>` adds `network` also for a local folder; `init <initializer>`
   adds `modify_package_json` though the initializer, not npm, writes it; `init --workspace` and
   `version --workspace` add the reify effects (`network`, `modify_node_modules`, and for init

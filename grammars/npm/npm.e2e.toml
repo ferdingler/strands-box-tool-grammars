@@ -1,8 +1,8 @@
 # End-to-end cases for npm.grammar.toml. The harness runs each argv through the Shell of a real box,
 # where `npm` is a stub that prints its arguments and exits 0.
 #
-# The policy permits the modeled npm actions, refuses publishing and lifecycle scripts, and
-# refuses any line that npm would read differently from the grammar.
+# The policy permits the modeled npm actions, and refuses publishing and lifecycle scripts. A line
+# that npm would read differently from the grammar is `unmodeled`, and nothing permits it.
 
 policy = '''
 @id("npm_actions")
@@ -17,11 +17,6 @@ when { context.input.effects.contains(Tool::npm::Effect::"publish") };
 @description("Installs must use --ignore-scripts.")
 forbid (principal, action == Tool::npm::Action::"install", resource)
 when { context.input.effects.contains(Tool::npm::Effect::"run_lifecycle_scripts") };
-
-@id("no_ambiguous_argv")
-@description("This npm command line is ambiguous.")
-forbid (principal, action in Tool::npm::Action::"*", resource)
-when { context.input.effects.contains(Tool::npm::Effect::"ambiguous_argv") };
 '''
 
 # A permitted read runs the program
@@ -54,11 +49,17 @@ argv = ["npm", "i", "--ignore-scripts", "lodash"]
 exit = 0
 stdout = "stub-argv: [i] [--ignore-scripts] [lodash]"
 
-# `--ignore-scripts false` means "run scripts" to npm; the grammar flags it as ambiguous
+# `--ignore-scripts false` means "run scripts" to npm, so the line is `unmodeled`
 [[case]]
 argv = ["npm", "install", "--ignore-scripts", "false"]
 exit = 126
-stderr = "[policy: no_ambiguous_argv]"
+stderr = "[default-deny]"
+
+# `--dry-run false` is a real publish to npm, so the line is `unmodeled`
+[[case]]
+argv = ["npm", "publish", "--dry-run", "false"]
+exit = 126
+stderr = "[default-deny]"
 
 # An undeclared command is `unmodeled`, and nothing permits it
 [[case]]
