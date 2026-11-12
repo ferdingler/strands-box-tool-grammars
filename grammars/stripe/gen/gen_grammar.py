@@ -19,8 +19,7 @@ head = open(sys.argv[2]).read()
 
 W, D, M = "write_data", "delete_data", "move_money"
 
-# (spec var, command words, extra action effects); a resource with `_` in its name cannot be a
-# Box command word, so payment_intents, webhook_endpoints, payment_methods, ... are left out.
+# (spec var, command words, extra action effects).
 OPS = [
     ("V1BalanceRetrieve", "balance retrieve", []),
     ("V1CustomersCreate", "customers create", [W]),
@@ -74,6 +73,27 @@ OPS = [
     ("V1CheckoutSessionsUpdate", "checkout sessions update", [W]),
     ("V1EventsList", "events list", []),
     ("V1EventsRetrieve", "events retrieve", []),
+    ("V1PaymentIntentsApplyCustomerBalance", "payment_intents apply_customer_balance", [W, M]),
+    ("V1PaymentIntentsCancel", "payment_intents cancel", [D]),
+    ("V1PaymentIntentsCapture", "payment_intents capture", [W, M]),
+    ("V1PaymentIntentsConfirm", "payment_intents confirm", [W, M]),
+    ("V1PaymentIntentsCreate", "payment_intents create", [W, M]),
+    ("V1PaymentIntentsIncrementAuthorization", "payment_intents increment_authorization", [W, M]),
+    ("V1PaymentIntentsList", "payment_intents list", []),
+    ("V1PaymentIntentsRetrieve", "payment_intents retrieve", []),
+    ("V1PaymentIntentsSearch", "payment_intents search", []),
+    ("V1PaymentIntentsUpdate", "payment_intents update", [W]),
+    ("V1PaymentIntentsVerifyMicrodeposits", "payment_intents verify_microdeposits", [W]),
+    ("V1WebhookEndpointsCreate", "webhook_endpoints create", [W, "forward_events"]),
+    ("V1WebhookEndpointsDelete", "webhook_endpoints delete", [D]),
+    ("V1WebhookEndpointsList", "webhook_endpoints list", []),
+    ("V1WebhookEndpointsRetrieve", "webhook_endpoints retrieve", []),
+    ("V1WebhookEndpointsUpdate", "webhook_endpoints update", [W, "forward_events"]),
+    ("V1TestHelpersTestClocksAdvance", "test_helpers test_clocks advance", [W]),
+    ("V1TestHelpersTestClocksCreate", "test_helpers test_clocks create", [W]),
+    ("V1TestHelpersTestClocksDelete", "test_helpers test_clocks delete", [D]),
+    ("V1TestHelpersTestClocksList", "test_helpers test_clocks list", []),
+    ("V1TestHelpersTestClocksRetrieve", "test_helpers test_clocks retrieve", []),
     # events resend is hand-defined in resource/events_resend.go
     ("EventsResend", "events resend", [W]),
 ]
@@ -97,6 +117,12 @@ NOTES = {
     "V1SubscriptionsPause": "`invoicing_behavior=invoice` bills the open debits at once.",
     "V1SubscriptionsCancel": "An HTTP DELETE; `invoice_now` can bill a final invoice.",
     "V1RefundsCancel": "Stops a pending refund, so the money stays in the account: no `move_money`.",
+    "V1PaymentIntentsCreate": "`confirm` (a flag or `-d`) confirms the intent and charges the payment method.",
+    "V1PaymentIntentsCancel": "Releases the funds that the intent holds, so no money moves: no `move_money`.",
+    "V1PaymentIntentsUpdate": "An update does not confirm or capture the intent: no `move_money`.",
+    "V1WebhookEndpointsCreate": "Stripe sends the account's events to the `--url` endpoint.",
+    "V1WebhookEndpointsUpdate": "`--url` changes where Stripe sends the account's events.",
+    "V1TestHelpersTestClocksAdvance": "Moves a test clock forward, so its test-mode subscriptions bill.",
     "EventsResend": "Sends the event again, to the CLI or to the endpoint `--webhook-endpoint` names.",
 }
 

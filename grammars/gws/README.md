@@ -60,7 +60,7 @@ request body also takes `--json <JSON>`. A method that supports media upload als
 |---|---|---|
 | `drive files` | `list`, `get`, `export`, `download` | `read_data` |
 | | `copy`, `create`, `update` | `write_data`, plus `share_external` when the body names `parents` or `inherit` (or update's `--params` names `parents`, as in `addParents`), and `change_sharing_rules` when the body names `writers`, `requires`, or `download` |
-| | `delete` | `delete_data` |
+| | `delete`, `emptyTrash` | `delete_data` |
 | `drive permissions` | `list`, `get` | `read_data` |
 | | `create` | `share_external`, `send_email`, plus `make_public` when the body may name `anyone` |
 | | `update` | `share_external`, `make_public`, plus `send_email` when `--params` names `transfer` (`transferOwnership`) |
@@ -71,27 +71,30 @@ request body also takes `--json <JSON>`. A method that supports media upload als
 | `drive about get`, `drive changes list` | | `read_data` |
 | `gmail users messages` | `list`, `get`, `attachments get` | `read_data` |
 | | `send` | `send_email` |
-| | `modify`, `import`, `insert`, `untrash` | `write_data`; `modify` also `trash_data` when the body names `trash` |
+| | `modify`, `batchModify`, `import`, `insert`, `untrash` | `write_data`; `modify` and `batchModify` also `trash_data` when the body names `trash` |
 | | `trash` | `trash_data` |
-| | `delete` | `delete_data` |
+| | `delete`, `batchDelete` | `delete_data` |
 | `gmail users drafts` | `list`, `get` / `create`, `update` / `send` / `delete` | `read_data` / `write_data` / `send_email` / `delete_data` |
 | `gmail users threads` | `list`, `get` / `modify`, `untrash` / `trash` / `delete` | `read_data` / `write_data` (`modify` as for messages) / `trash_data` / `delete_data` |
 | `gmail users labels` | `list`, `get` / `create`, `patch`, `update` / `delete` | `read_data` / `write_data` / `delete_data` |
-| `gmail users history list`, `gmail users settings filters list`, `get` | | `read_data` |
+| `gmail users history list`, `gmail users settings filters list`, `get`, `gmail users getProfile` | | `read_data` |
+| `gmail +send` | `--to`, `--subject`, `--body`, `--from`, `--cc`, `--bcc`, `-a`/`--attach`, `--html`, `--draft`, `--format`, `--dry-run` | `send_email`; `-a` also `upload_file`; `--draft` gives `write_data` in place of `send_email` |
 | `calendar events` | `list`, `get`, `instances` | `read_data` |
 | | `insert`, `patch`, `update`, `move`, `import` | `write_data`, plus `send_email` (not on `import`) when `--params` names `sendUpdates` or `sendNotifications`; `move` always adds `share_external` |
 | | `delete` | `delete_data`, plus `send_email` as above |
 | `calendar calendars` | `get` / `insert`, `patch`, `update` / `clear`, `delete` | `read_data` / `write_data` / `delete_data` |
 | `calendar acl` | `list`, `get` / `insert`, `patch`, `update` / `delete` | `read_data` / `share_external`, `make_public`, `send_email` / `delete_data` |
-| `calendar freebusy query`, `colors get`, `settings list`, `get` | | `read_data` |
-| `sheets spreadsheets` | `get` / `create` | `read_data` / `write_data` |
-| `sheets spreadsheets values` | `get` / `append`, `update` / `clear` | `read_data` / `write_data` / `delete_data` |
-| `docs documents` | `get` / `create` | `read_data` / `write_data` |
+| `calendar freebusy query`, `colors get`, `settings list`, `get`, `calendarList list`, `calendarList get` | | `read_data` |
+| `sheets spreadsheets` | `get` / `create`, `batchUpdate` | `read_data` / `write_data` |
+| `sheets spreadsheets values` | `get`, `batchGet` / `append`, `update` / `clear` | `read_data` / `write_data` / `delete_data` |
+| `docs documents` | `get` / `create`, `batchUpdate` | `read_data` / `write_data` |
 | `gws auth status` | | `read_credentials` |
 | `gws schema <service.resource.method>` | `--resolve-refs` | none |
 
-Each action is the command words joined with `_`, such as `drive_permissions_create` or
-`gmail_users_messages_send`.
+Each action is the command words joined with `_`, with a camelCase word in snake case, such as
+`drive_permissions_create`, `gmail_users_messages_send`, or `drive_files_empty_trash`. The helper
+`gmail +send` is `gmail_helper_send`. A command word is case-sensitive, as gws is, so
+`drive files emptytrash` is unmodeled.
 
 ## Effects
 
@@ -151,14 +154,10 @@ when {
 
 These lines are unmodeled, so a policy refuses them unless it permits `unmodeled`:
 
-- **Helper commands** such as `gmail +send`, `+reply`, `+forward`, `drive +upload`,
-  `sheets +append`, `docs +write`, `calendar +agenda`, and every `workflow` helper. A command word
-  cannot start with `+`. The generic method each helper wraps is modeled.
-- **camelCase methods and resources**, such as `drive files emptyTrash`, `gmail users getProfile`,
-  `gmail users messages batchDelete`, `calendar calendarList`, `calendar events quickAdd`,
-  `sheets spreadsheets batchUpdate`, `sheets spreadsheets values batchGet`, and
-  `docs documents batchUpdate`. A command word is lowercase, and gws does not accept a lowercase
-  spelling of these names.
+- **Helper commands other than `gmail +send`**, such as `+reply`, `+forward`, `drive +upload`,
+  `sheets +append`, `docs +write`, `calendar +agenda`, and every `workflow` helper. The generic
+  method each helper wraps is modeled.
+- **Other camelCase methods**, such as `calendar events quickAdd`.
 - **`--api-version` and `<service>:<version>`.** They switch the API version, which changes what a
   method name means.
 - **`--sanitize`**, which sends responses through a Model Armor template.

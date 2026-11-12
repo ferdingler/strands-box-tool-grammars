@@ -39,10 +39,12 @@
 #     the credentials and in the --params JSON.
 #   - Child processes: `gws auth setup` runs gcloud. It is unmodeled.
 #
-# Deliberately unmodeled (no action, or an undeclared option): helper commands such as
-# `gmail +send` (`+` cannot start a command word), every camelCase method or resource such as
-# `files emptyTrash`, `documents batchUpdate`, `spreadsheets batchUpdate`, `calendarList` (a command
-# word is lowercase), `--api-version` and the `<service>:<version>` form (they change which API
+# A command word is case-sensitive, like the gws command tree. So `drive files emptyTrash` is
+# modeled, and `drive files emptytrash` is unmodeled (gws refuses it too).
+#
+# Deliberately unmodeled (no action, or an undeclared option): every helper command other than
+# `gmail +send`, such as `gmail +reply` and `drive +upload`, `--api-version` and the
+# `<service>:<version>` form (they change which API
 # the method names mean), `--sanitize`, `watch` methods (they register a push channel to a URL),
 # `gws auth login|logout|setup|export`, `gws generate-skills`, and every service not listed here.
 
@@ -60,7 +62,7 @@ send_email       = "Sends email: a message, a draft, a Drive share or calendar A
 share_external   = "Grants or changes access for another user, group, domain, or anyone, or gives a file or event the audience of a folder or calendar"
 make_public      = "Can grant access to anyone: a Drive permission or revision publish, a Drive permission update, or any calendar ACL write"
 change_sharing_rules = "Changes who may reshare, copy, or download a file, or a shared drive's sharing limits; grants no access itself"
-upload_file      = "Sends the content of a local file (--upload) to Google"
+upload_file      = "Sends the content of a local file (--upload, or a `+send` attachment) to Google"
 write_local_file = "Writes the response to a local file (-o, --output)"
 read_credentials = "Reads the stored Google credentials and asks Google which account they belong to"
 
@@ -78,3 +80,25 @@ adds  = ["read_credentials"]
 [shell.schema]
 usage = "gws schema [options] <method_path>"
 options.resolve_refs = { flag = ["--resolve-refs"] }
+
+# --------------------------------------------------------------------------------------------------
+# Helper commands (hand-written in gws, not from Discovery)
+# --------------------------------------------------------------------------------------------------
+
+# `gws gmail +send` builds one message and sends it (helpers/gmail/mod.rs, send.rs). `--draft`
+# saves it as a draft and sends nothing. `-a` reads a local file and attaches it. `--dry-run`
+# prints the request, and gets no token. The other helpers are unmodeled.
+[shell.gmail_helper_send]
+usage = "gws gmail +send [options]"
+adds  = ["send_email"]
+options.to      = { flag = ["--to"], value = "required" }
+options.subject = { flag = ["--subject"], value = "required" }
+options.body    = { flag = ["--body"], value = "required" }
+options.from    = { flag = ["--from"], value = "required" }
+options.cc      = { flag = ["--cc"], value = "required" }
+options.bcc     = { flag = ["--bcc"], value = "required" }
+options.attach  = { flag = ["-a", "--attach"], value = "required", repeated = true, adds = ["upload_file"] }
+options.html    = { flag = ["--html"] }
+options.draft   = { flag = ["--draft"], adds = ["write_data"], removes = ["send_email"] }
+options.format  = { flag = ["--format"], value = "required" }
+options.dry_run = { flag = ["--dry-run"], removes = ["send_email", "upload_file", "write_data"] }

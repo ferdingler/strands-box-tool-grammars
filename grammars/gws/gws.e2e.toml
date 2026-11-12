@@ -55,9 +55,33 @@ argv = ["gws", "drive", "permissions", "create", "--params", '{"fileId":"f1"}', 
 exit = 126
 stderr = "[policy: no_public_share]: The agent may not make a file public."
 
-# A helper command is unmodeled, and nothing permits it.
+# The `+send` helper sends mail, so the send rule refuses it.
 [[case]]
 argv = ["gws", "gmail", "+send", "--to", "alex@example.com", "--subject", "hi", "--body", "hello"]
+exit = 126
+stderr = "[policy: no_send_email]: The agent may not send email."
+
+# `+send --draft` saves a draft and sends nothing, so it runs.
+[[case]]
+argv = ["gws", "gmail", "+send", "--to", "alex@example.com", "--subject", "hi", "--body", "hello", "--draft"]
+exit = 0
+stdout = "stub-argv: [gmail] [+send] [--to] [alex@example.com]"
+
+# `files emptyTrash` deletes permanently, so the delete rule refuses it.
+[[case]]
+argv = ["gws", "drive", "files", "emptyTrash"]
+exit = 126
+stderr = "[policy: no_delete]"
+
+# A camelCase method that edits a document runs.
+[[case]]
+argv = ["gws", "docs", "documents", "batchUpdate", "--params", '{"documentId":"d1"}', "--json", '{"requests":[]}']
+exit = 0
+stdout = "stub-argv: [docs] [documents] [batchUpdate]"
+
+# A helper command that the grammar does not model is unmodeled, and nothing permits it.
+[[case]]
+argv = ["gws", "gmail", "+reply", "--message-id", "m1", "--body", "ok"]
 exit = 126
 stderr = "[default-deny]: No permit policy matched this request."
 

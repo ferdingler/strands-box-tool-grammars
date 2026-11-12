@@ -524,14 +524,121 @@ action = "unmodeled"
 argv = ["stripe", "customers"]
 action = "unmodeled"
 
-# Resource and operation names with `_` cannot be Box command words, so they are unmodeled
+# An operation that the grammar does not model is unmodeled, with or without `_` in its name
 [[case]]
 argv = ["stripe", "customers", "list_payment_methods", "cus_1"]
 action = "unmodeled"
 
+# payment_intents: a resource name with `_`
 [[case]]
 argv = ["stripe", "payment_intents", "create", "--amount", "100", "--currency", "usd"]
+action = "payment_intents_create"
+fields = { amount = "100", currency = "usd" }
+effects = ["move_money", "network", "write_data"]
+
+[[case]]
+argv = ["stripe", "payment_intents", "create", "--amount", "100", "--currency", "usd", "--dry-run"]
+action = "payment_intents_create"
+fields = { amount = "100", currency = "usd", dry_run = true }
+effects = ["network"]
+
+[[case]]
+argv = ["stripe", "payment_intents", "list", "--limit", "3"]
+action = "payment_intents_list"
+fields = { limit = "3" }
+effects = ["network"]
+
+[[case]]
+argv = ["stripe", "payment_intents", "retrieve", "pi_1"]
+action = "payment_intents_retrieve"
+fields = { intent = "pi_1" }
+effects = ["network"]
+
+[[case]]
+argv = ["stripe", "payment_intents", "capture", "pi_1", "--amount-to-capture", "500"]
+action = "payment_intents_capture"
+fields = { amount_to_capture = "500", intent = "pi_1" }
+effects = ["move_money", "network", "write_data"]
+
+[[case]]
+argv = ["stripe", "payment_intents", "cancel", "pi_1"]
+action = "payment_intents_cancel"
+fields = { intent = "pi_1" }
+effects = ["delete_data", "network"]
+
+[[case]]
+argv = ["stripe", "payment_intents", "update", "pi_1", "--description", "x"]
+action = "payment_intents_update"
+fields = { description = "x", intent = "pi_1" }
+effects = ["network", "write_data"]
+
+# An operation name with `_`
+[[case]]
+argv = ["stripe", "payment_intents", "increment_authorization", "pi_1", "--amount", "700"]
+action = "payment_intents_increment_authorization"
+fields = { amount = "700", intent = "pi_1" }
+effects = ["move_money", "network", "write_data"]
+
+# A command word is literal: `-` is not `_`, and case matters
+[[case]]
+argv = ["stripe", "payment-intents", "list"]
 action = "unmodeled"
+
+[[case]]
+argv = ["stripe", "Payment_Intents", "list"]
+action = "unmodeled"
+
+[[case]]
+argv = ["stripe", "payment_intents", "increment-authorization", "pi_1", "--amount", "700"]
+action = "unmodeled"
+
+# webhook_endpoints: a new endpoint receives the account's events
+[[case]]
+argv = ["stripe", "webhook_endpoints", "create", "--url", "https://example.com/hook", "--enabled-events", "charge.succeeded"]
+action = "webhook_endpoints_create"
+fields = { enabled_events = ["charge.succeeded"], url = "https://example.com/hook" }
+effects = ["forward_events", "network", "write_data"]
+
+[[case]]
+argv = ["stripe", "webhook_endpoints", "update", "we_1", "--url", "https://example.com/other"]
+action = "webhook_endpoints_update"
+fields = { url = "https://example.com/other", webhook_endpoint = "we_1" }
+effects = ["forward_events", "network", "write_data"]
+
+[[case]]
+argv = ["stripe", "webhook_endpoints", "list"]
+action = "webhook_endpoints_list"
+effects = ["network"]
+
+[[case]]
+argv = ["stripe", "webhook_endpoints", "delete", "we_1", "--confirm"]
+action = "webhook_endpoints_delete"
+fields = { confirm = true, webhook_endpoint = "we_1" }
+effects = ["delete_data", "network", "skip_prompt"]
+
+# test_helpers: two command words with `_`
+[[case]]
+argv = ["stripe", "test_helpers", "test_clocks", "create", "--frozen-time", "1700000000"]
+action = "test_helpers_test_clocks_create"
+fields = { frozen_time = "1700000000" }
+effects = ["network", "write_data"]
+
+[[case]]
+argv = ["stripe", "test_helpers", "test_clocks", "advance", "clock_1", "--frozen-time", "1800000000"]
+action = "test_helpers_test_clocks_advance"
+fields = { frozen_time = "1800000000", test_clock = "clock_1" }
+effects = ["network", "write_data"]
+
+[[case]]
+argv = ["stripe", "test_helpers", "test_clocks", "list"]
+action = "test_helpers_test_clocks_list"
+effects = ["network"]
+
+[[case]]
+argv = ["stripe", "test_helpers", "test_clocks", "delete", "clock_1"]
+action = "test_helpers_test_clocks_delete"
+fields = { test_clock = "clock_1" }
+effects = ["delete_data", "network"]
 
 # charges
 [[case]]
@@ -1355,11 +1462,14 @@ action = "checkout_sessions_create"
 fields = { mode = "payment", success_url = "https://example.com/ok" }
 effects = ["network", "write_data"]
 
-# Unmodeled money paths stay unmodeled (underscore names).
+# A money path that the grammar does not model stays unmodeled.
 [[case]]
 argv = ["stripe", "invoices", "finalize_invoice", "in_1"]
 action = "unmodeled"
 
+# Confirming a payment intent charges its payment method.
 [[case]]
 argv = ["stripe", "payment_intents", "confirm", "pi_1"]
-action = "unmodeled"
+action = "payment_intents_confirm"
+fields = { intent = "pi_1" }
+effects = ["move_money", "network", "write_data"]

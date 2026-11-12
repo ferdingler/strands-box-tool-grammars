@@ -62,10 +62,11 @@ Every action also takes the root flags `--api-key`, `--color`, `--config`, `--de
 | Raw API | `get <id or path>` | `network`, `raw_request` |
 | | `post <path>` | `network`, `raw_request`, `write_data`, `move_money` |
 | | `delete <path>` | `network`, `raw_request`, `delete_data`, `move_money` |
-| Reads | `list`, `retrieve`, `search` on `customers`, `charges`, `refunds`, `subscriptions`, `invoices`, `products`, `prices`, `checkout sessions`, `events`; `balance retrieve` | `network` |
-| Writes | `create`, `update` on `customers`, `products`, `prices`, `checkout sessions`; `charges update`, `refunds update`, `refunds cancel`, `subscriptions migrate`, `checkout sessions expire`, `events resend` | `network`, `write_data` |
-| Money | `charges create`, `charges capture`, `refunds create`, `invoices create`, `invoices update`, `invoices pay`, `subscriptions create`, `subscriptions update`, `subscriptions pause`, `subscriptions resume` | `network`, `write_data`, `move_money` |
-| Deletes | `customers delete`, `products delete`, `invoices delete`; `subscriptions cancel` (also `move_money`: it can bill a final invoice) | `network`, `delete_data` |
+| Reads | `list`, `retrieve`, `search` on `customers`, `charges`, `refunds`, `subscriptions`, `invoices`, `products`, `prices`, `checkout sessions`, `events`, `payment_intents`; `list`, `retrieve` on `webhook_endpoints` and `test_helpers test_clocks`; `balance retrieve` | `network` |
+| Writes | `create`, `update` on `customers`, `products`, `prices`, `checkout sessions`; `charges update`, `refunds update`, `refunds cancel`, `subscriptions migrate`, `checkout sessions expire`, `events resend`, `payment_intents update`, `payment_intents verify_microdeposits`, `test_helpers test_clocks create`, `test_helpers test_clocks advance` | `network`, `write_data` |
+| | `webhook_endpoints create`, `webhook_endpoints update` | `network`, `write_data`, `forward_events` |
+| Money | `charges create`, `charges capture`, `refunds create`, `invoices create`, `invoices update`, `invoices pay`, `subscriptions create`, `subscriptions update`, `subscriptions pause`, `subscriptions resume`, `payment_intents create`, `confirm`, `capture`, `increment_authorization`, `apply_customer_balance` | `network`, `write_data`, `move_money` |
+| Deletes | `customers delete`, `products delete`, `invoices delete`, `payment_intents cancel`, `webhook_endpoints delete`, `test_helpers test_clocks delete`; `subscriptions cancel` (also `move_money`: it can bill a final invoice) | `network`, `delete_data` |
 | Local | `config`, `version`, `whoami` | see effects |
 
 An action name is the command words joined with `_`: `checkout sessions create` is
@@ -149,11 +150,11 @@ get wrong. A rule that forbids `forward_events` outright is safer.
 
 ## Known limits
 
-- **Names with `_` cannot be modeled.** Box command words allow lowercase letters, digits, and `-`
-  only. The CLI keeps the API's `_`, so `payment_intents`, `payment_methods`, `setup_intents`,
-  `webhook_endpoints`, `payment_links`, the `test_helpers` groups, and operations such as
-  `invoices finalize_invoice` or `customers list_payment_methods` are `unmodeled`. The raw
-  `get`/`post`/`delete` commands reach the same endpoints.
+- **Only some resources are modeled.** `payment_methods`, `setup_intents`, `payment_links`, the
+  `test_helpers` groups other than `test_clocks`, and operations such as
+  `invoices finalize_invoice` or `customers list_payment_methods` are `unmodeled`. Add one to
+  `gen/gen_grammar.py` with its effects to model it. The raw `get`/`post`/`delete` commands reach
+  the same endpoints.
 - **The bracket spelling of a nested parameter** (`--address[city]=Paris`), which the CLI maps to
   `--address.city`, is `unmodeled`. Use the dotted spelling, or `-d "address[city]=Paris"`.
 - **A boolean request parameter with a separate value** (`--validate true`) is `unmodeled`. The CLI
