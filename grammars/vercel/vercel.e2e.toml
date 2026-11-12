@@ -80,9 +80,15 @@ argv = ["vercel", "whoami", "-t", "tok_123"]
 exit = 126
 stderr = "[policy: vercel_no_token_argument]"
 
-# A bare path deploys in the CLI, but the grammar cannot read it, and nothing permits it.
+# A bare path deploys, and a deploy with no explicit target can go to production.
 [[case]]
 argv = ["vercel", "./site"]
+exit = 126
+stderr = "[policy: vercel_no_production]"
+
+# A first operand that does not read as a path is unmodeled, and nothing permits it.
+[[case]]
+argv = ["vercel", "lss"]
 exit = 126
 stderr = "[default-deny]: No permit policy matched this request."
 

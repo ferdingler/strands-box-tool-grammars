@@ -97,7 +97,11 @@ pip --version
 ```
 
 Every action needs at least one command word. **Workaround:** these lines are `unmodeled`. A vercel
-deploy must be spelled `vercel deploy`. Real-CLI execution on Linux showed `pip --version` refused
+deploy must be spelled `vercel deploy`.
+
+**Box change:** strands-agents/box#436 lets a usage have no command word. The vercel `deploy`
+usage now has none, with the alias `deploy`, so `vercel` and `vercel ./site` deploy. A first operand
+that does not read as a path stays `unmodeled`. Real-CLI execution on Linux showed `pip --version` refused
 with `[default-deny]`.
 
 ### No prefix or abbreviation matching
