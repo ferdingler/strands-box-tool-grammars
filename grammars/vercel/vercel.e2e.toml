@@ -86,7 +86,7 @@ argv = ["vercel", "./site"]
 exit = 126
 stderr = "[policy: vercel_no_production]"
 
-# A first operand that looks like a subcommand is unmodeled, and nothing permits it.
+# A first operand that does not read as a path is unmodeled, and nothing permits it.
 [[case]]
 argv = ["vercel", "lss"]
 exit = 126

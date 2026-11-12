@@ -80,7 +80,7 @@ options.token           = { flag = ["-t", "--token"], value = "required", anywhe
 # `change_traffic` unless `--environment preview` names the preview target, which wins over `--prod`.
 #
 # `vercel` alone and `vercel <path>` deploy too, so the usage has no command word and `deploy` is an
-# alias. A first operand that looks like a command word (`vercel site`, a typo such as `vercel lss`)
+# alias. A first operand that does not read as a path (`vercel site`, a typo such as `vercel lss`)
 # is `unmodeled`, so a subcommand this grammar does not model is never a deploy; write `./site`.
 [shell.deploy]
 usage   = "vercel [global options] [options] [<project_path>]"
