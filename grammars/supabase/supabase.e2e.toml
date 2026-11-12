@@ -55,20 +55,15 @@ argv = ["supabase", "db", "push", "--linked"]
 exit = 126
 stderr = "[default-deny]: No permit policy matched this request."
 
-# `--debug false` makes the CLI deploy every function; the literal operand adds ambiguous_argv,
-# which the README tells operators to forbid
+# `--debug false` makes the CLI deploy every function, so the literal operand makes the line
+# `unmodeled`, and a permit over every modeled action does not reach it
 [[case]]
 argv = ["supabase", "functions", "deploy", "--debug", "false"]
 exit = 126
-stderr = "[policy: no_ambiguous_argv]"
+stderr = "[default-deny]"
 policy = '''
 @id("supabase_actions")
 permit (principal, action in Tool::supabase::Action::"*", resource);
-
-@id("no_ambiguous_argv")
-@description("The CLI may read an operand of this line as a flag value or a target.")
-forbid (principal, action in Tool::supabase::Action::"*", resource)
-when { context.input.effects.contains(Tool::supabase::Effect::"ambiguous_argv") };
 '''
 
 # The README's example rules load together, and `gen types --remote` is refused by one of them
@@ -103,12 +98,6 @@ when {
 @id("no_yes")
 forbid (principal, action in Tool::supabase::Action::"*", resource)
 when { context.input.effects.contains(Tool::supabase::Effect::"skip_confirmation") };
-
-// Refuse lines the grammar may misread.
-@id("no_ambiguous_argv")
-@description("The CLI may read an operand of this line as a flag value or a target.")
-forbid (principal, action in Tool::supabase::Action::"*", resource)
-when { context.input.effects.contains(Tool::supabase::Effect::"ambiguous_argv") };
 
 // Never let a remote database command clear the project's network bans.
 // SUPABASE_YES in the environment also allows it, so keep it out of the box's environment.

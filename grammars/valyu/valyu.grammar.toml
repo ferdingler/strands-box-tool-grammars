@@ -18,8 +18,8 @@
 # - The top level reads its own options even where a subcommand option expects a value, and the
 #   subcommand's words then shift: in `valyu batch create --name -p prod q1`, valyu uses profile
 #   `prod`, and in `batch create --name --json --metadata -m max` it sends mode max. The grammar
-#   cannot model this. When a value starts with `--`, `-p`, `-q`, or `-v`, it adds
-#   `option_like_value`, `other_account`, and every effect that an option of that action can add.
+#   cannot model this. When a value starts with `--`, `-p`, `-q`, or `-v`, the line is
+#   `unmodeled`.
 # - After `--`, every word is an operand, also for the subcommand. An operand that starts with `-`
 #   still adds `option_like_value`, as a warning only.
 #
@@ -63,7 +63,7 @@ expose_mcp        = "Gives the Valyu research agent the MCP servers, and their t
 notify_external   = "Asks Valyu to send the result to a webhook URL or an email address"
 skip_prompt       = "Skips the confirmation prompt"
 other_account     = "Uses an API key or a profile that the line names, not the default credentials"
-option_like_value = "A word can mean something else to valyu: a value or operand that looks like an option, or a bare --summary"
+option_like_value = "A word can mean something else to valyu: an operand that looks like an option, or a bare --summary"
 
 [global]
 options.api_key = { flag = "--api-key", value = "required", anywhere = true, adds = ["other_account"] }
@@ -76,18 +76,18 @@ options.quiet   = { flag = ["-q", "--quiet"], anywhere = true }
 [shell.search]
 usage = "valyu [global options] search [options] [<type_or_query>] [<query>]"
 adds  = ["network", "spend_credits"]
-options.limit               = { flag = ["-n", "--limit"], value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account"] }] }
-options.max_price           = { flag = "--max-price", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account"] }] }
-options.relevance_threshold = { flag = "--relevance-threshold", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account"] }] }
-options.search_type         = { flag = "--search-type", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account"] }] }
-options.include_source      = { flag = "--include-source", value = "required", repeated = true, when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account"] }] }
-options.exclude_source      = { flag = "--exclude-source", value = "required", repeated = true, when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account"] }] }
-options.source_bias         = { flag = "--source-bias", value = "required", repeated = true, when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account"] }] }
-options.instructions        = { flag = "--instructions", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account"] }] }
-options.response_length     = { flag = ["-l", "--response-length"], value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account"] }] }
-options.start_date          = { flag = "--start-date", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account"] }] }
-options.end_date            = { flag = "--end-date", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account"] }] }
-options.country             = { flag = "--country", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account"] }] }
+options.limit               = { flag = ["-n", "--limit"], value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], unmodeled = true }] }
+options.max_price           = { flag = "--max-price", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], unmodeled = true }] }
+options.relevance_threshold = { flag = "--relevance-threshold", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], unmodeled = true }] }
+options.search_type         = { flag = "--search-type", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], unmodeled = true }] }
+options.include_source      = { flag = "--include-source", value = "required", repeated = true, when = [{ like = ["--*", "-p*", "-q*", "-v*"], unmodeled = true }] }
+options.exclude_source      = { flag = "--exclude-source", value = "required", repeated = true, when = [{ like = ["--*", "-p*", "-q*", "-v*"], unmodeled = true }] }
+options.source_bias         = { flag = "--source-bias", value = "required", repeated = true, when = [{ like = ["--*", "-p*", "-q*", "-v*"], unmodeled = true }] }
+options.instructions        = { flag = "--instructions", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], unmodeled = true }] }
+options.response_length     = { flag = ["-l", "--response-length"], value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], unmodeled = true }] }
+options.start_date          = { flag = "--start-date", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], unmodeled = true }] }
+options.end_date            = { flag = "--end-date", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], unmodeled = true }] }
+options.country             = { flag = "--country", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], unmodeled = true }] }
 options.fast_mode           = { flag = "--fast-mode" }
 options.url_only            = { flag = "--url-only" }
 options.no_tool_call        = { flag = "--no-tool-call" }
@@ -100,17 +100,17 @@ operands.query              = { like = "-*", adds = ["option_like_value"] }
 usage = "valyu [global options] answer [options] [<query>]"
 adds  = ["network", "spend_credits"]
 options.fast                = { flag = "--fast" }
-options.system_instructions = { flag = "--system-instructions", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "upload_file"] }] }
-options.structured          = { flag = "--structured", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "upload_file"] }] }
-options.structured_file     = { flag = "--structured-file", value = "required", adds = ["upload_file"], when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "upload_file"] }] }
-options.search_type         = { flag = "--search-type", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "upload_file"] }] }
-options.include_source      = { flag = "--include-source", value = "required", repeated = true, when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "upload_file"] }] }
-options.exclude_source      = { flag = "--exclude-source", value = "required", repeated = true, when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "upload_file"] }] }
-options.source_bias         = { flag = "--source-bias", value = "required", repeated = true, when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "upload_file"] }] }
-options.country             = { flag = "--country", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "upload_file"] }] }
-options.start_date          = { flag = "--start-date", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "upload_file"] }] }
-options.end_date            = { flag = "--end-date", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "upload_file"] }] }
-options.data_max_price      = { flag = "--data-max-price", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "upload_file"] }] }
+options.system_instructions = { flag = "--system-instructions", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], unmodeled = true }] }
+options.structured          = { flag = "--structured", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], unmodeled = true }] }
+options.structured_file     = { flag = "--structured-file", value = "required", adds = ["upload_file"], when = [{ like = ["--*", "-p*", "-q*", "-v*"], unmodeled = true }] }
+options.search_type         = { flag = "--search-type", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], unmodeled = true }] }
+options.include_source      = { flag = "--include-source", value = "required", repeated = true, when = [{ like = ["--*", "-p*", "-q*", "-v*"], unmodeled = true }] }
+options.exclude_source      = { flag = "--exclude-source", value = "required", repeated = true, when = [{ like = ["--*", "-p*", "-q*", "-v*"], unmodeled = true }] }
+options.source_bias         = { flag = "--source-bias", value = "required", repeated = true, when = [{ like = ["--*", "-p*", "-q*", "-v*"], unmodeled = true }] }
+options.country             = { flag = "--country", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], unmodeled = true }] }
+options.start_date          = { flag = "--start-date", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], unmodeled = true }] }
+options.end_date            = { flag = "--end-date", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], unmodeled = true }] }
+options.data_max_price      = { flag = "--data-max-price", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], unmodeled = true }] }
 operands.query              = { like = "-*", adds = ["option_like_value"] }
 
 # ─── contents ──────────────────────────────────────────────────────────────────
@@ -122,14 +122,14 @@ operands.query              = { like = "-*", adds = ["option_like_value"] }
 usage = "valyu [global options] contents [options] [<urls>...]"
 adds  = ["network", "spend_credits"]
 options.summary           = { flag = ["-s", "--summary"], value = "optional", when = [{ like = "", adds = ["option_like_value"] }] }
-options.length            = { flag = ["-l", "--length"], value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "upload_file", "notify_external"] }] }
-options.structured        = { flag = "--structured", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "upload_file", "notify_external"] }] }
-options.structured_file   = { flag = "--structured-file", value = "required", adds = ["upload_file"], when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "upload_file", "notify_external"] }] }
-options.extract_effort    = { flag = "--extract-effort", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "upload_file", "notify_external"] }] }
+options.length            = { flag = ["-l", "--length"], value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], unmodeled = true }] }
+options.structured        = { flag = "--structured", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], unmodeled = true }] }
+options.structured_file   = { flag = "--structured-file", value = "required", adds = ["upload_file"], when = [{ like = ["--*", "-p*", "-q*", "-v*"], unmodeled = true }] }
+options.extract_effort    = { flag = "--extract-effort", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], unmodeled = true }] }
 options.screenshot        = { flag = "--screenshot" }
 options.async             = { flag = "--async" }
-options.webhook_url       = { flag = "--webhook-url", value = "required", adds = ["notify_external"], when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "upload_file", "notify_external"] }] }
-options.max_price_dollars = { flag = "--max-price-dollars", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "upload_file", "notify_external"] }] }
+options.webhook_url       = { flag = "--webhook-url", value = "required", adds = ["notify_external"], when = [{ like = ["--*", "-p*", "-q*", "-v*"], unmodeled = true }] }
+options.max_price_dollars = { flag = "--max-price-dollars", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], unmodeled = true }] }
 options.watch             = { flag = ["-w", "--watch"] }
 operands.urls             = { like = "-*", adds = ["option_like_value"] }
 
@@ -144,42 +144,42 @@ operands.job_id = { like = "-*", adds = ["option_like_value"] }
 [shell.deepresearch_create]
 usage = "valyu [global options] deepresearch create [options] <query>"
 adds  = ["network", "spend_credits"]
-options.mode              = { flag = ["-m", "--mode"], value = "required", when = [{ like = ["heavy", "max"], adds = ["high_cost"] }, { like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "high_cost", "upload_file", "expose_mcp", "notify_external"] }] }
+options.mode              = { flag = ["-m", "--mode"], value = "required", when = [{ like = ["heavy", "max"], adds = ["high_cost"] }, { like = ["--*", "-p*", "-q*", "-v*"], unmodeled = true }] }
 options.watch             = { flag = ["-w", "--watch"] }
-options.research_strategy = { flag = "--research-strategy", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "high_cost", "upload_file", "expose_mcp", "notify_external"] }] }
-options.report_format     = { flag = "--report-format", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "high_cost", "upload_file", "expose_mcp", "notify_external"] }] }
+options.research_strategy = { flag = "--research-strategy", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], unmodeled = true }] }
+options.report_format     = { flag = "--report-format", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], unmodeled = true }] }
 options.no_pdf            = { flag = "--no-pdf" }
-options.output_format     = { flag = "--output-format", value = "required", repeated = true, when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "high_cost", "upload_file", "expose_mcp", "notify_external"] }] }
-options.structured        = { flag = "--structured", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "high_cost", "upload_file", "expose_mcp", "notify_external"] }] }
-options.structured_file   = { flag = "--structured-file", value = "required", adds = ["upload_file"], when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "high_cost", "upload_file", "expose_mcp", "notify_external"] }] }
-options.url               = { flag = "--url", value = "required", repeated = true, when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "high_cost", "upload_file", "expose_mcp", "notify_external"] }] }
-options.file              = { flag = "--file", value = "required", repeated = true, adds = ["upload_file"], when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "high_cost", "upload_file", "expose_mcp", "notify_external"] }] }
-options.file_context      = { flag = "--file-context", value = "required", repeated = true, when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "high_cost", "upload_file", "expose_mcp", "notify_external"] }] }
-options.previous_report   = { flag = "--previous-report", value = "required", repeated = true, when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "high_cost", "upload_file", "expose_mcp", "notify_external"] }] }
-options.search_type       = { flag = "--search-type", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "high_cost", "upload_file", "expose_mcp", "notify_external"] }] }
-options.include_source    = { flag = "--include-source", value = "required", repeated = true, when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "high_cost", "upload_file", "expose_mcp", "notify_external"] }] }
-options.exclude_source    = { flag = "--exclude-source", value = "required", repeated = true, when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "high_cost", "upload_file", "expose_mcp", "notify_external"] }] }
-options.source_bias       = { flag = "--source-bias", value = "required", repeated = true, when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "high_cost", "upload_file", "expose_mcp", "notify_external"] }] }
-options.country           = { flag = "--country", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "high_cost", "upload_file", "expose_mcp", "notify_external"] }] }
-options.start_date        = { flag = "--start-date", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "high_cost", "upload_file", "expose_mcp", "notify_external"] }] }
-options.end_date          = { flag = "--end-date", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "high_cost", "upload_file", "expose_mcp", "notify_external"] }] }
+options.output_format     = { flag = "--output-format", value = "required", repeated = true, when = [{ like = ["--*", "-p*", "-q*", "-v*"], unmodeled = true }] }
+options.structured        = { flag = "--structured", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], unmodeled = true }] }
+options.structured_file   = { flag = "--structured-file", value = "required", adds = ["upload_file"], when = [{ like = ["--*", "-p*", "-q*", "-v*"], unmodeled = true }] }
+options.url               = { flag = "--url", value = "required", repeated = true, when = [{ like = ["--*", "-p*", "-q*", "-v*"], unmodeled = true }] }
+options.file              = { flag = "--file", value = "required", repeated = true, adds = ["upload_file"], when = [{ like = ["--*", "-p*", "-q*", "-v*"], unmodeled = true }] }
+options.file_context      = { flag = "--file-context", value = "required", repeated = true, when = [{ like = ["--*", "-p*", "-q*", "-v*"], unmodeled = true }] }
+options.previous_report   = { flag = "--previous-report", value = "required", repeated = true, when = [{ like = ["--*", "-p*", "-q*", "-v*"], unmodeled = true }] }
+options.search_type       = { flag = "--search-type", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], unmodeled = true }] }
+options.include_source    = { flag = "--include-source", value = "required", repeated = true, when = [{ like = ["--*", "-p*", "-q*", "-v*"], unmodeled = true }] }
+options.exclude_source    = { flag = "--exclude-source", value = "required", repeated = true, when = [{ like = ["--*", "-p*", "-q*", "-v*"], unmodeled = true }] }
+options.source_bias       = { flag = "--source-bias", value = "required", repeated = true, when = [{ like = ["--*", "-p*", "-q*", "-v*"], unmodeled = true }] }
+options.country           = { flag = "--country", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], unmodeled = true }] }
+options.start_date        = { flag = "--start-date", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], unmodeled = true }] }
+options.end_date          = { flag = "--end-date", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], unmodeled = true }] }
 options.code_execution    = { flag = "--code-execution" }
 options.screenshots       = { flag = "--screenshots" }
 options.browser_use       = { flag = "--browser-use" }
-options.mcp_config        = { flag = "--mcp-config", value = "required", adds = ["upload_file", "expose_mcp"], when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "high_cost", "upload_file", "expose_mcp", "notify_external"] }] }
-options.deliverable       = { flag = "--deliverable", value = "required", repeated = true, when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "high_cost", "upload_file", "expose_mcp", "notify_external"] }] }
-options.deliverables_file = { flag = "--deliverables-file", value = "required", adds = ["upload_file"], when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "high_cost", "upload_file", "expose_mcp", "notify_external"] }] }
-options.webhook_url       = { flag = "--webhook-url", value = "required", adds = ["notify_external"], when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "high_cost", "upload_file", "expose_mcp", "notify_external"] }] }
-options.alert_email       = { flag = "--alert-email", value = "required", adds = ["notify_external"], when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "high_cost", "upload_file", "expose_mcp", "notify_external"] }] }
-options.alert_email_url   = { flag = "--alert-email-url", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "high_cost", "upload_file", "expose_mcp", "notify_external"] }] }
-options.metadata          = { flag = "--metadata", value = "required", repeated = true, when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "high_cost", "upload_file", "expose_mcp", "notify_external"] }] }
-options.hitl              = { flag = "--hitl", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "high_cost", "upload_file", "expose_mcp", "notify_external"] }] }
+options.mcp_config        = { flag = "--mcp-config", value = "required", adds = ["upload_file", "expose_mcp"], when = [{ like = ["--*", "-p*", "-q*", "-v*"], unmodeled = true }] }
+options.deliverable       = { flag = "--deliverable", value = "required", repeated = true, when = [{ like = ["--*", "-p*", "-q*", "-v*"], unmodeled = true }] }
+options.deliverables_file = { flag = "--deliverables-file", value = "required", adds = ["upload_file"], when = [{ like = ["--*", "-p*", "-q*", "-v*"], unmodeled = true }] }
+options.webhook_url       = { flag = "--webhook-url", value = "required", adds = ["notify_external"], when = [{ like = ["--*", "-p*", "-q*", "-v*"], unmodeled = true }] }
+options.alert_email       = { flag = "--alert-email", value = "required", adds = ["notify_external"], when = [{ like = ["--*", "-p*", "-q*", "-v*"], unmodeled = true }] }
+options.alert_email_url   = { flag = "--alert-email-url", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], unmodeled = true }] }
+options.metadata          = { flag = "--metadata", value = "required", repeated = true, when = [{ like = ["--*", "-p*", "-q*", "-v*"], unmodeled = true }] }
+options.hitl              = { flag = "--hitl", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], unmodeled = true }] }
 operands.query            = { like = "-*", adds = ["option_like_value"] }
 
 [shell.deepresearch_list]
 usage = "valyu [global options] deepresearch list [options]"
 adds  = ["network"]
-options.limit = { flag = ["-n", "--limit"], value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account"] }] }
+options.limit = { flag = ["-n", "--limit"], value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], unmodeled = true }] }
 
 [shell.deepresearch_status]
 usage = "valyu [global options] deepresearch status <id>"
@@ -205,12 +205,12 @@ operands.id = { like = "-*", adds = ["option_like_value"] }
 [shell.deepresearch_respond]
 usage = "valyu [global options] deepresearch respond [options] <id>"
 adds  = ["network", "steer_task"]
-options.interaction_id = { flag = "--interaction-id", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "upload_file"] }] }
-options.response       = { flag = "--response", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "upload_file"] }] }
-options.response_file  = { flag = "--response-file", value = "required", adds = ["upload_file"], when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "upload_file"] }] }
+options.interaction_id = { flag = "--interaction-id", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], unmodeled = true }] }
+options.response       = { flag = "--response", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], unmodeled = true }] }
+options.response_file  = { flag = "--response-file", value = "required", adds = ["upload_file"], when = [{ like = ["--*", "-p*", "-q*", "-v*"], unmodeled = true }] }
 options.approve        = { flag = "--approve" }
 options.reject         = { flag = "--reject" }
-options.modifications  = { flag = "--modifications", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "upload_file"] }] }
+options.modifications  = { flag = "--modifications", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], unmodeled = true }] }
 operands.id            = { like = "-*", adds = ["option_like_value"] }
 
 [shell.deepresearch_delete]
@@ -231,28 +231,28 @@ operands.id = { like = "-*", adds = ["option_like_value"] }
 [shell.batch_create]
 usage = "valyu [global options] batch create [options] [<queries>...]"
 adds  = ["network", "spend_credits"]
-options.name            = { flag = "--name", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "high_cost", "upload_file", "expose_mcp", "notify_external"] }] }
-options.mode            = { flag = ["-m", "--mode"], value = "required", when = [{ like = ["heavy", "max"], adds = ["high_cost"] }, { like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "high_cost", "upload_file", "expose_mcp", "notify_external"] }] }
+options.name            = { flag = "--name", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], unmodeled = true }] }
+options.mode            = { flag = ["-m", "--mode"], value = "required", when = [{ like = ["heavy", "max"], adds = ["high_cost"] }, { like = ["--*", "-p*", "-q*", "-v*"], unmodeled = true }] }
 options.no_pdf          = { flag = "--no-pdf" }
-options.output_format   = { flag = "--output-format", value = "required", repeated = true, when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "high_cost", "upload_file", "expose_mcp", "notify_external"] }] }
-options.search_type     = { flag = "--search-type", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "high_cost", "upload_file", "expose_mcp", "notify_external"] }] }
-options.include_source  = { flag = "--include-source", value = "required", repeated = true, when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "high_cost", "upload_file", "expose_mcp", "notify_external"] }] }
-options.exclude_source  = { flag = "--exclude-source", value = "required", repeated = true, when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "high_cost", "upload_file", "expose_mcp", "notify_external"] }] }
-options.source_bias     = { flag = "--source-bias", value = "required", repeated = true, when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "high_cost", "upload_file", "expose_mcp", "notify_external"] }] }
-options.country         = { flag = "--country", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "high_cost", "upload_file", "expose_mcp", "notify_external"] }] }
-options.start_date      = { flag = "--start-date", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "high_cost", "upload_file", "expose_mcp", "notify_external"] }] }
-options.end_date        = { flag = "--end-date", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "high_cost", "upload_file", "expose_mcp", "notify_external"] }] }
-options.webhook_url     = { flag = "--webhook-url", value = "required", adds = ["notify_external"], when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "high_cost", "upload_file", "expose_mcp", "notify_external"] }] }
-options.alert_email     = { flag = "--alert-email", value = "required", adds = ["notify_external"], when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "high_cost", "upload_file", "expose_mcp", "notify_external"] }] }
-options.alert_email_url = { flag = "--alert-email-url", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "high_cost", "upload_file", "expose_mcp", "notify_external"] }] }
-options.mcp_config      = { flag = "--mcp-config", value = "required", adds = ["upload_file", "expose_mcp"], when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "high_cost", "upload_file", "expose_mcp", "notify_external"] }] }
-options.metadata        = { flag = "--metadata", value = "required", repeated = true, when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "high_cost", "upload_file", "expose_mcp", "notify_external"] }] }
+options.output_format   = { flag = "--output-format", value = "required", repeated = true, when = [{ like = ["--*", "-p*", "-q*", "-v*"], unmodeled = true }] }
+options.search_type     = { flag = "--search-type", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], unmodeled = true }] }
+options.include_source  = { flag = "--include-source", value = "required", repeated = true, when = [{ like = ["--*", "-p*", "-q*", "-v*"], unmodeled = true }] }
+options.exclude_source  = { flag = "--exclude-source", value = "required", repeated = true, when = [{ like = ["--*", "-p*", "-q*", "-v*"], unmodeled = true }] }
+options.source_bias     = { flag = "--source-bias", value = "required", repeated = true, when = [{ like = ["--*", "-p*", "-q*", "-v*"], unmodeled = true }] }
+options.country         = { flag = "--country", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], unmodeled = true }] }
+options.start_date      = { flag = "--start-date", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], unmodeled = true }] }
+options.end_date        = { flag = "--end-date", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], unmodeled = true }] }
+options.webhook_url     = { flag = "--webhook-url", value = "required", adds = ["notify_external"], when = [{ like = ["--*", "-p*", "-q*", "-v*"], unmodeled = true }] }
+options.alert_email     = { flag = "--alert-email", value = "required", adds = ["notify_external"], when = [{ like = ["--*", "-p*", "-q*", "-v*"], unmodeled = true }] }
+options.alert_email_url = { flag = "--alert-email-url", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], unmodeled = true }] }
+options.mcp_config      = { flag = "--mcp-config", value = "required", adds = ["upload_file", "expose_mcp"], when = [{ like = ["--*", "-p*", "-q*", "-v*"], unmodeled = true }] }
+options.metadata        = { flag = "--metadata", value = "required", repeated = true, when = [{ like = ["--*", "-p*", "-q*", "-v*"], unmodeled = true }] }
 operands.queries        = { like = "-*", adds = ["option_like_value"] }
 
 [shell.batch_list]
 usage = "valyu [global options] batch list [options]"
 adds  = ["network"]
-options.limit = { flag = ["-n", "--limit"], value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account"] }] }
+options.limit = { flag = ["-n", "--limit"], value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], unmodeled = true }] }
 
 [shell.batch_status]
 usage = "valyu [global options] batch status <id>"
@@ -262,16 +262,16 @@ operands.id = { like = "-*", adds = ["option_like_value"] }
 [shell.batch_tasks]
 usage = "valyu [global options] batch tasks [options] <id>"
 adds  = ["network"]
-options.status         = { flag = "--status", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account"] }] }
-options.limit          = { flag = ["-n", "--limit"], value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account"] }] }
-options.last_key       = { flag = "--last-key", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account"] }] }
+options.status         = { flag = "--status", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], unmodeled = true }] }
+options.limit          = { flag = ["-n", "--limit"], value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], unmodeled = true }] }
+options.last_key       = { flag = "--last-key", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], unmodeled = true }] }
 options.include_output = { flag = "--include-output" }
 operands.id            = { like = "-*", adds = ["option_like_value"] }
 
 [shell.batch_add]
 usage = "valyu [global options] batch add [options] <id> [<queries>...]"
 adds  = ["network", "spend_credits"]
-options.tasks_file = { flag = "--tasks-file", value = "required", adds = ["upload_file"], when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "upload_file"] }] }
+options.tasks_file = { flag = "--tasks-file", value = "required", adds = ["upload_file"], when = [{ like = ["--*", "-p*", "-q*", "-v*"], unmodeled = true }] }
 operands.id        = { like = "-*", adds = ["option_like_value"] }
 operands.queries   = { like = "-*", adds = ["option_like_value"] }
 
@@ -290,11 +290,11 @@ operands.id = { like = "-*", adds = ["option_like_value"] }
 [shell.workflows_list]
 usage = "valyu [global options] workflows list [options]"
 adds  = ["network"]
-options.vertical = { flag = "--vertical", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account"] }] }
-options.scope    = { flag = "--scope", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account"] }] }
-options.search   = { flag = "--search", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account"] }] }
-options.tag      = { flag = "--tag", value = "required", repeated = true, when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account"] }] }
-options.limit    = { flag = ["-n", "--limit"], value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account"] }] }
+options.vertical = { flag = "--vertical", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], unmodeled = true }] }
+options.scope    = { flag = "--scope", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], unmodeled = true }] }
+options.search   = { flag = "--search", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], unmodeled = true }] }
+options.tag      = { flag = "--tag", value = "required", repeated = true, when = [{ like = ["--*", "-p*", "-q*", "-v*"], unmodeled = true }] }
+options.limit    = { flag = ["-n", "--limit"], value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], unmodeled = true }] }
 options.expand   = { flag = "--expand" }
 
 [shell.workflows_get]
@@ -311,8 +311,8 @@ operands.slug = { like = "-*", adds = ["option_like_value"] }
 [shell.workflows_preview]
 usage = "valyu [global options] workflows preview [options] <slug>"
 adds  = ["network"]
-options.param       = { flag = ["-P", "--param"], value = "required", repeated = true, when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "upload_file"] }] }
-options.params_file = { flag = "--params-file", value = "required", adds = ["upload_file"], when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "upload_file"] }] }
+options.param       = { flag = ["-P", "--param"], value = "required", repeated = true, when = [{ like = ["--*", "-p*", "-q*", "-v*"], unmodeled = true }] }
+options.params_file = { flag = "--params-file", value = "required", adds = ["upload_file"], when = [{ like = ["--*", "-p*", "-q*", "-v*"], unmodeled = true }] }
 operands.slug       = { like = "-*", adds = ["option_like_value"] }
 
 # Without `-m`, valyu sends no mode and the template's recommended mode runs, which can be heavy or
@@ -321,24 +321,24 @@ operands.slug       = { like = "-*", adds = ["option_like_value"] }
 [shell.workflows_run]
 usage = "valyu [global options] workflows run [options] <slug>"
 adds  = ["network", "spend_credits", "high_cost"]
-options.param           = { flag = ["-P", "--param"], value = "required", repeated = true, when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "high_cost", "upload_file", "notify_external"] }] }
-options.params_file     = { flag = "--params-file", value = "required", adds = ["upload_file"], when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "high_cost", "upload_file", "notify_external"] }] }
-options.mode            = { flag = ["-m", "--mode"], value = "required", when = [{ like = ["heavy", "max"], adds = ["high_cost"] }, { like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "high_cost", "upload_file", "notify_external"] }] }
+options.param           = { flag = ["-P", "--param"], value = "required", repeated = true, when = [{ like = ["--*", "-p*", "-q*", "-v*"], unmodeled = true }] }
+options.params_file     = { flag = "--params-file", value = "required", adds = ["upload_file"], when = [{ like = ["--*", "-p*", "-q*", "-v*"], unmodeled = true }] }
+options.mode            = { flag = ["-m", "--mode"], value = "required", when = [{ like = ["heavy", "max"], adds = ["high_cost"] }, { like = ["--*", "-p*", "-q*", "-v*"], unmodeled = true }] }
 options.watch           = { flag = ["-w", "--watch"] }
-options.webhook_url     = { flag = "--webhook-url", value = "required", adds = ["notify_external"], when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "high_cost", "upload_file", "notify_external"] }] }
-options.alert_email     = { flag = "--alert-email", value = "required", adds = ["notify_external"], when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "high_cost", "upload_file", "notify_external"] }] }
-options.alert_email_url = { flag = "--alert-email-url", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "high_cost", "upload_file", "notify_external"] }] }
+options.webhook_url     = { flag = "--webhook-url", value = "required", adds = ["notify_external"], when = [{ like = ["--*", "-p*", "-q*", "-v*"], unmodeled = true }] }
+options.alert_email     = { flag = "--alert-email", value = "required", adds = ["notify_external"], when = [{ like = ["--*", "-p*", "-q*", "-v*"], unmodeled = true }] }
+options.alert_email_url = { flag = "--alert-email-url", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], unmodeled = true }] }
 operands.slug           = { like = "-*", adds = ["option_like_value"] }
 
 [shell.workflows_create]
 usage = "valyu [global options] workflows create [options]"
 adds  = ["network", "change_workflow"]
-options.file = { flag = "--file", value = "required", adds = ["upload_file"], when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "upload_file"] }] }
+options.file = { flag = "--file", value = "required", adds = ["upload_file"], when = [{ like = ["--*", "-p*", "-q*", "-v*"], unmodeled = true }] }
 
 [shell.workflows_update]
 usage = "valyu [global options] workflows update [options] <slug>"
 adds  = ["network", "change_workflow"]
-options.file  = { flag = "--file", value = "required", adds = ["upload_file"], when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "upload_file"] }] }
+options.file  = { flag = "--file", value = "required", adds = ["upload_file"], when = [{ like = ["--*", "-p*", "-q*", "-v*"], unmodeled = true }] }
 operands.slug = { like = "-*", adds = ["option_like_value"] }
 
 [shell.workflows_delete]
@@ -354,7 +354,7 @@ operands.slug = { like = "-*", adds = ["option_like_value"] }
 usage   = "valyu [global options] sources list [options]"
 aliases = ["sources"]
 adds    = ["network"]
-options.category = { flag = ["-c", "--category"], value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account"] }] }
+options.category = { flag = ["-c", "--category"], value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], unmodeled = true }] }
 
 [shell.sources_categories]
 usage = "valyu [global options] sources categories"
@@ -383,13 +383,13 @@ adds    = ["network"]
 [shell.account_keys_create]
 usage = "valyu [global options] account keys create [options]"
 adds  = ["network", "manage_keys"]
-options.name       = { flag = "--name", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account"] }] }
-options.cap        = { flag = "--cap", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account"] }] }
-options.window     = { flag = "--window", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account"] }] }
-options.scopes     = { flag = "--scopes", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account"] }] }
-options.type       = { flag = "--type", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account"] }] }
-options.rate_limit = { flag = "--rate-limit", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account"] }] }
-options.expires    = { flag = "--expires", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account"] }] }
+options.name       = { flag = "--name", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], unmodeled = true }] }
+options.cap        = { flag = "--cap", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], unmodeled = true }] }
+options.window     = { flag = "--window", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], unmodeled = true }] }
+options.scopes     = { flag = "--scopes", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], unmodeled = true }] }
+options.type       = { flag = "--type", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], unmodeled = true }] }
+options.rate_limit = { flag = "--rate-limit", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], unmodeled = true }] }
+options.expires    = { flag = "--expires", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], unmodeled = true }] }
 
 [shell.account_keys_revoke]
 usage = "valyu [global options] account keys revoke <id>"

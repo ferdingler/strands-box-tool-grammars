@@ -81,7 +81,7 @@ Every action has `network`. The top-level options `--api-key`, `-p/--profile`, `
 | `expose_mcp` | Gives the Valyu research agent MCP servers and their tokens | `--mcp-config` |
 | `notify_external` | Valyu sends the result to a webhook or an email | `--webhook-url`, `--alert-email` |
 | `skip_prompt` | Skips a confirmation prompt | `-y/--yes` on `deepresearch delete`, `workflows delete`, `account topup` |
-| `other_account` | Uses a key or profile that the line names | `--api-key`, `-p/--profile`, and a value that looks like a top-level option |
+| `other_account` | Uses a key or profile that the line names | `--api-key` and `-p/--profile` |
 | `option_like_value` | A word that valyu can read differently from the fields | see Known limits |
 
 The cost knobs are fields, so a rule can read them: `max_price` (`search --max-price`, CPM),
@@ -145,9 +145,8 @@ These are `unmodeled`, so only a rule that permits `unmodeled` lets them run.
   `-v` wherever they appear, even as the value of another option, and the words after it shift. In
   `valyu batch create --name -p prod q1`, valyu uses profile `prod`; in
   `valyu batch create --name --json --metadata -m max`, it sends mode `max`. When a value starts
-  with `--`, `-p`, `-q`, or `-v`, the grammar adds `option_like_value`, `other_account`, and every
-  effect that an option of that action can add (for `batch create`: `high_cost`, `upload_file`,
-  `expose_mcp`, `notify_external`). This over-states, so a rule on one named effect still holds.
+  with `--`, `-p`, `-q`, or `-v`, the line is `unmodeled`, so no permit over
+  `Tool::valyu::Action::"*"` reaches it.
 - **Words after `--`.** valyu reads them as operands, as the grammar does. An operand that starts
   with `-` still adds `option_like_value`, as a warning.
 - **`contents --summary <word>`.** valyu takes the next word as the summary instructions when it does

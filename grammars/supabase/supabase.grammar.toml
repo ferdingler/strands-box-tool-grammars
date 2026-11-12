@@ -28,9 +28,8 @@
 #   value, and a bare `--remote` takes a following database URL or true-literal (any case) as its
 #   target. The grammar reads those words as operands. Every operand therefore carries a `when`
 #   over the same 36 literals (each case spelling of true, yes, on, y, plus 1, false, no, off, 0,
-#   n), and the database commands a `when` over `p*://*` and `P*://*`. A match adds
-#   `ambiguous_argv`, and `all_targets` where an empty operand means "all", plus the hosted
-#   effects for a URL. Operators should forbid `ambiguous_argv`.
+#   n), and the database commands a `when` over `p*://*` and `P*://*`. A match makes the line
+#   `unmodeled`.
 # - A repeated single-value flag keeps its first value, and `-s a,b` is one value that the CLI
 #   splits on commas. The grammar records every repeat and does not split, so a set field such as
 #   `schema` can hold more than the CLI uses.
@@ -66,8 +65,6 @@ reveal_secrets     = "Prints secret keys or database passwords"
 dump_data          = "Dumps table data, not only the schema"
 skip_confirmation  = "Answers yes to every prompt, including the prompts before hosted changes; with clear_network_bans it lets the CLI clear every network ban of the project"
 clear_network_bans = "Connects to a hosted database; with --yes (or SUPABASE_YES in the environment) the CLI may delete every network ban of the project to get through"
-ambiguous_argv     = "An operand is a word the CLI may read another way: a boolean literal that a boolean flag takes as its value, or a database URL that a bare --remote takes as its target"
-all_targets        = "The line may act on every object of its kind (every function, secret, bucket, migration, or test), because an operand the grammar saw may be a flag value to the CLI"
 
 # Persistent flags. effect/cli reads them before, between, and after the command words.
 [global]
@@ -116,7 +113,7 @@ usage = "supabase [global options] link [options] [<ref_or_branch>]"
 adds  = ["remote", "write_link_config"]
 options.project_ref = { flag = ["--project-ref"], value = "required" }
 options.skip_pooler = { flag = ["--skip-pooler"] }
-operands.ref_or_branch = { when = [{ like = ["TRUE", "TRUe", "TRuE", "TRue", "TrUE", "TrUe", "TruE", "True", "tRUE", "tRUe", "tRuE", "tRue", "trUE", "trUe", "truE", "true", "YES", "YEs", "YeS", "Yes", "yES", "yEs", "yeS", "yes", "ON", "On", "oN", "on", "Y", "y", "1", "false", "no", "off", "0", "n"], adds = ["ambiguous_argv"] }] }
+operands.ref_or_branch = { when = [{ like = ["TRUE", "TRUe", "TRuE", "TRue", "TrUE", "TrUe", "TruE", "True", "tRUE", "tRUe", "tRuE", "tRue", "trUE", "trUe", "truE", "true", "YES", "YEs", "YeS", "Yes", "yES", "yEs", "yeS", "yes", "ON", "On", "oN", "on", "Y", "y", "1", "false", "no", "off", "0", "n"], unmodeled = true }] }
 
 [shell.unlink]
 usage = "supabase [global options] unlink"
@@ -170,7 +167,7 @@ options.strict_coverage = { flag = ["--strict-coverage"] }
 options.schema          = { flag = ["-s", "--schema"], value = "required", repeated = true }
 options.remote          = { flag = ["--remote"], value = "optional", adds = ["remote", "clear_network_bans", "write_remote_db"], removes = ["write_local_db"] }
 options.password        = { flag = ["-p", "--password"], value = "required" }
-operands.migration_name = { when = [{ like = ["TRUE", "TRUe", "TRuE", "TRue", "TrUE", "TrUe", "TruE", "True", "tRUE", "tRUe", "tRuE", "tRue", "trUE", "trUe", "truE", "true", "YES", "YEs", "YeS", "Yes", "yES", "yEs", "yeS", "yes", "ON", "On", "oN", "on", "Y", "y", "1", "false", "no", "off", "0", "n"], adds = ["ambiguous_argv"] }, { like = ["p*://*", "P*://*"], adds = ["ambiguous_argv", "remote", "write_remote_db", "clear_network_bans"] }] }
+operands.migration_name = { when = [{ like = ["TRUE", "TRUe", "TRuE", "TRue", "TrUE", "TrUe", "TruE", "True", "tRUE", "tRUe", "tRuE", "tRue", "trUE", "trUe", "truE", "true", "YES", "YEs", "YeS", "Yes", "yES", "yEs", "yeS", "yes", "ON", "On", "oN", "on", "Y", "y", "1", "false", "no", "off", "0", "n"], unmodeled = true }, { like = ["p*://*", "P*://*"], unmodeled = true }] }
 
 [shell.db_push]
 usage = "supabase [global options] db push [options]"
@@ -199,7 +196,7 @@ adds  = ["run_sql", "write_local_db"]
 options.remote    = { flag = ["--remote"], value = "optional", adds = ["remote", "clear_network_bans", "write_remote_db"], removes = ["write_local_db"] }
 options.file      = { flag = ["-f", "--file"], value = "required" }
 options.read_only = { flag = ["--read-only"] }
-operands.sql = { when = [{ like = ["TRUE", "TRUe", "TRuE", "TRue", "TrUE", "TrUe", "TruE", "True", "tRUE", "tRUe", "tRuE", "tRue", "trUE", "trUe", "truE", "true", "YES", "YEs", "YeS", "Yes", "yES", "yEs", "yeS", "yes", "ON", "On", "oN", "on", "Y", "y", "1", "false", "no", "off", "0", "n"], adds = ["ambiguous_argv"] }, { like = ["p*://*", "P*://*"], adds = ["ambiguous_argv", "remote", "write_remote_db", "clear_network_bans"] }] }
+operands.sql = { when = [{ like = ["TRUE", "TRUe", "TRuE", "TRue", "TrUE", "TrUe", "TruE", "True", "tRUE", "tRUe", "tRuE", "tRue", "trUE", "trUe", "truE", "true", "YES", "YEs", "YeS", "Yes", "yES", "yEs", "yeS", "yes", "ON", "On", "oN", "on", "Y", "y", "1", "false", "no", "off", "0", "n"], unmodeled = true }, { like = ["p*://*", "P*://*"], unmodeled = true }] }
 
 [shell.db_start]
 usage = "supabase [global options] db start [options]"
@@ -212,7 +209,7 @@ options.from_backup = { flag = ["--from-backup"], value = "required", adds = ["w
 usage   = "supabase [global options] migration new <migration_name>"
 aliases = ["migrations new"]
 adds    = ["write_files"]
-operands.migration_name = { when = [{ like = ["TRUE", "TRUe", "TRuE", "TRue", "TrUE", "TrUe", "TruE", "True", "tRUE", "tRUe", "tRuE", "tRue", "trUE", "trUe", "truE", "true", "YES", "YEs", "YeS", "Yes", "yES", "yEs", "yeS", "yes", "ON", "On", "oN", "on", "Y", "y", "1", "false", "no", "off", "0", "n"], adds = ["ambiguous_argv"] }] }
+operands.migration_name = { when = [{ like = ["TRUE", "TRUe", "TRuE", "TRue", "TrUE", "TrUe", "TruE", "True", "tRUE", "tRUe", "tRuE", "tRue", "trUE", "trUe", "truE", "true", "YES", "YEs", "YeS", "Yes", "yES", "yEs", "yeS", "yes", "ON", "On", "oN", "on", "Y", "y", "1", "false", "no", "off", "0", "n"], unmodeled = true }] }
 
 [shell.migration_list]
 usage   = "supabase [global options] migration list [options]"
@@ -245,7 +242,7 @@ options.password = { flag = ["-p", "--password"], value = "required" }
 
 # Rewrites and deletes local migration files; on a hosted target it also rewrites the hosted
 # migration history.
-operands.version = { when = [{ like = ["TRUE", "TRUe", "TRuE", "TRue", "TrUE", "TrUe", "TruE", "True", "tRUE", "tRUe", "tRuE", "tRue", "trUE", "trUe", "truE", "true", "YES", "YEs", "YeS", "Yes", "yES", "yEs", "yeS", "yes", "ON", "On", "oN", "on", "Y", "y", "1", "false", "no", "off", "0", "n"], adds = ["ambiguous_argv", "all_targets"] }, { like = ["p*://*", "P*://*"], adds = ["ambiguous_argv", "remote", "write_remote_db", "clear_network_bans"] }] }
+operands.version = { when = [{ like = ["TRUE", "TRUe", "TRuE", "TRue", "TrUE", "TrUe", "TruE", "True", "tRUE", "tRUe", "tRuE", "tRue", "trUE", "trUe", "truE", "true", "YES", "YEs", "YeS", "Yes", "yES", "yEs", "yeS", "yes", "ON", "On", "oN", "on", "Y", "y", "1", "false", "no", "off", "0", "n"], unmodeled = true }, { like = ["p*://*", "P*://*"], unmodeled = true }] }
 [shell.migration_squash]
 usage   = "supabase [global options] migration squash [options]"
 aliases = ["migrations squash"]
@@ -272,13 +269,13 @@ options.query_timeout        = { flag = ["--query-timeout"], value = "required" 
 options.swift_access_control = { flag = ["--swift-access-control"], value = "required" }
 
 # ---------------------------------------------------------------- functions
-operands.language = { when = [{ like = ["TRUE", "TRUe", "TRuE", "TRue", "TrUE", "TrUe", "TruE", "True", "tRUE", "tRUe", "tRuE", "tRue", "trUE", "trUe", "truE", "true", "YES", "YEs", "YeS", "Yes", "yES", "yEs", "yeS", "yes", "ON", "On", "oN", "on", "Y", "y", "1", "false", "no", "off", "0", "n"], adds = ["ambiguous_argv"] }, { like = ["p*://*", "P*://*"], adds = ["ambiguous_argv", "remote", "clear_network_bans"] }] }
+operands.language = { when = [{ like = ["TRUE", "TRUe", "TRuE", "TRue", "TrUE", "TrUe", "TruE", "True", "tRUE", "tRUe", "tRuE", "tRue", "trUE", "trUe", "truE", "true", "YES", "YEs", "YeS", "Yes", "yES", "yEs", "yeS", "yes", "ON", "On", "oN", "on", "Y", "y", "1", "false", "no", "off", "0", "n"], unmodeled = true }, { like = ["p*://*", "P*://*"], unmodeled = true }] }
 
 [shell.functions_new]
 usage = "supabase [global options] functions new [options] <function_name>"
 adds  = ["write_files"]
 options.auth = { flag = ["--auth"], value = "required" }
-operands.function_name = { when = [{ like = ["TRUE", "TRUe", "TRuE", "TRue", "TrUE", "TrUe", "TruE", "True", "tRUE", "tRUe", "tRuE", "tRue", "trUE", "trUe", "truE", "true", "YES", "YEs", "YeS", "Yes", "yES", "yEs", "yeS", "yes", "ON", "On", "oN", "on", "Y", "y", "1", "false", "no", "off", "0", "n"], adds = ["ambiguous_argv"] }] }
+operands.function_name = { when = [{ like = ["TRUE", "TRUe", "TRuE", "TRue", "TrUE", "TrUe", "TruE", "True", "tRUE", "tRUe", "tRuE", "tRue", "trUE", "trUe", "truE", "true", "YES", "YEs", "YeS", "Yes", "yES", "yEs", "yeS", "yes", "ON", "On", "oN", "on", "Y", "y", "1", "false", "no", "off", "0", "n"], unmodeled = true }] }
 
 [shell.functions_serve]
 usage = "supabase [global options] functions serve [options] [<function_name>...]"
@@ -289,7 +286,7 @@ options.import_map    = { flag = ["--import-map"], value = "required" }
 options.inspect       = { flag = ["--inspect"] }
 options.inspect_mode  = { flag = ["--inspect-mode"], value = "required" }
 options.inspect_main  = { flag = ["--inspect-main"] }
-operands.function_name = { when = [{ like = ["TRUE", "TRUe", "TRuE", "TRue", "TrUE", "TrUe", "TruE", "True", "tRUE", "tRUe", "tRuE", "tRue", "trUE", "trUe", "truE", "true", "YES", "YEs", "YeS", "Yes", "yES", "yEs", "yeS", "yes", "ON", "On", "oN", "on", "Y", "y", "1", "false", "no", "off", "0", "n"], adds = ["ambiguous_argv"] }] }
+operands.function_name = { when = [{ like = ["TRUE", "TRUe", "TRuE", "TRue", "TrUE", "TrUe", "TruE", "True", "tRUE", "tRUe", "tRuE", "tRue", "trUE", "trUe", "truE", "true", "YES", "YEs", "YeS", "Yes", "yES", "yEs", "yeS", "yes", "ON", "On", "oN", "on", "Y", "y", "1", "false", "no", "off", "0", "n"], unmodeled = true }] }
 
 [shell.functions_deploy]
 usage = "supabase [global options] functions deploy [options] [<function_name>...]"
@@ -300,13 +297,13 @@ options.use_api       = { flag = ["--use-api"] }
 options.import_map    = { flag = ["--import-map"], value = "required" }
 options.prune         = { flag = ["--prune"], adds = ["delete_remote_data"] }
 options.jobs          = { flag = ["-j", "--jobs"], value = "required" }
-operands.function_name = { when = [{ like = ["TRUE", "TRUe", "TRuE", "TRue", "TrUE", "TrUe", "TruE", "True", "tRUE", "tRUe", "tRuE", "tRue", "trUE", "trUe", "truE", "true", "YES", "YEs", "YeS", "Yes", "yES", "yEs", "yeS", "yes", "ON", "On", "oN", "on", "Y", "y", "1", "false", "no", "off", "0", "n"], adds = ["ambiguous_argv", "all_targets"] }] }
+operands.function_name = { when = [{ like = ["TRUE", "TRUe", "TRuE", "TRue", "TrUE", "TrUe", "TruE", "True", "tRUE", "tRUe", "tRuE", "tRue", "trUE", "trUe", "truE", "true", "YES", "YEs", "YeS", "Yes", "yES", "yEs", "yeS", "yes", "ON", "On", "oN", "on", "Y", "y", "1", "false", "no", "off", "0", "n"], unmodeled = true }] }
 
 [shell.functions_delete]
 usage = "supabase [global options] functions delete [options] <function_name>"
 adds  = ["remote", "delete_remote_data"]
 options.remote = { flag = ["--remote"], value = "optional" }
-operands.function_name = { when = [{ like = ["TRUE", "TRUe", "TRuE", "TRue", "TrUE", "TrUe", "TruE", "True", "tRUE", "tRUe", "tRuE", "tRue", "trUE", "trUe", "truE", "true", "YES", "YEs", "YeS", "Yes", "yES", "yEs", "yeS", "yes", "ON", "On", "oN", "on", "Y", "y", "1", "false", "no", "off", "0", "n"], adds = ["ambiguous_argv"] }] }
+operands.function_name = { when = [{ like = ["TRUE", "TRUe", "TRuE", "TRue", "TrUE", "TrUe", "TruE", "True", "tRUE", "tRUe", "tRuE", "tRue", "trUE", "trUe", "truE", "true", "YES", "YEs", "YeS", "Yes", "yES", "yEs", "yeS", "yes", "ON", "On", "oN", "on", "Y", "y", "1", "false", "no", "off", "0", "n"], unmodeled = true }] }
 
 [shell.functions_list]
 usage = "supabase [global options] functions list [options]"
@@ -320,7 +317,7 @@ options.remote  = { flag = ["--remote"], value = "optional" }
 options.use_api = { flag = ["--use-api"] }
 
 # ---------------------------------------------------------------- secrets
-operands.function_name = { when = [{ like = ["TRUE", "TRUe", "TRuE", "TRue", "TrUE", "TrUe", "TruE", "True", "tRUE", "tRUe", "tRuE", "tRue", "trUE", "trUe", "truE", "true", "YES", "YEs", "YeS", "Yes", "yES", "yEs", "yeS", "yes", "ON", "On", "oN", "on", "Y", "y", "1", "false", "no", "off", "0", "n"], adds = ["ambiguous_argv", "all_targets"] }] }
+operands.function_name = { when = [{ like = ["TRUE", "TRUe", "TRuE", "TRue", "TrUE", "TrUe", "TruE", "True", "tRUE", "tRUe", "tRuE", "tRue", "trUE", "trUe", "truE", "true", "YES", "YEs", "YeS", "Yes", "yES", "yEs", "yeS", "yes", "ON", "On", "oN", "on", "Y", "y", "1", "false", "no", "off", "0", "n"], unmodeled = true }] }
 
 [shell.secrets_list]
 usage = "supabase [global options] secrets list [options]"
@@ -334,7 +331,7 @@ options.remote   = { flag = ["--remote"], value = "optional" }
 options.env_file = { flag = ["--env-file"], value = "required" }
 
 # `--dry-run` removes no effect, for the same reason as `db pull --declarative`.
-operands.secrets = { when = [{ like = ["TRUE", "TRUe", "TRuE", "TRue", "TrUE", "TrUe", "TruE", "True", "tRUE", "tRUe", "tRuE", "tRue", "trUE", "trUe", "truE", "true", "YES", "YEs", "YeS", "Yes", "yES", "yEs", "yeS", "yes", "ON", "On", "oN", "on", "Y", "y", "1", "false", "no", "off", "0", "n"], adds = ["ambiguous_argv"] }] }
+operands.secrets = { when = [{ like = ["TRUE", "TRUe", "TRuE", "TRue", "TrUE", "TrUe", "TruE", "True", "tRUE", "tRUe", "tRuE", "tRue", "trUE", "trUe", "truE", "true", "YES", "YEs", "YeS", "Yes", "yES", "yEs", "yeS", "yes", "ON", "On", "oN", "on", "Y", "y", "1", "false", "no", "off", "0", "n"], unmodeled = true }] }
 [shell.secrets_unset]
 usage = "supabase [global options] secrets unset [options] [<names>...]"
 adds  = ["remote", "write_secret"]
@@ -343,7 +340,7 @@ options.all     = { flag = ["--all"] }
 options.dry_run = { flag = ["--dry-run"] }
 
 # ---------------------------------------------------------------- projects, orgs, branches
-operands.names = { when = [{ like = ["TRUE", "TRUe", "TRuE", "TRue", "TrUE", "TrUe", "TruE", "True", "tRUE", "tRUe", "tRuE", "tRue", "trUE", "trUe", "truE", "true", "YES", "YEs", "YeS", "Yes", "yES", "yEs", "yeS", "yes", "ON", "On", "oN", "on", "Y", "y", "1", "false", "no", "off", "0", "n"], adds = ["ambiguous_argv", "all_targets"] }] }
+operands.names = { when = [{ like = ["TRUE", "TRUe", "TRuE", "TRue", "TrUE", "TrUe", "TruE", "True", "tRUE", "tRUe", "tRuE", "tRue", "trUE", "trUe", "truE", "true", "YES", "YEs", "YeS", "Yes", "yES", "yEs", "yeS", "yes", "ON", "On", "oN", "on", "Y", "y", "1", "false", "no", "off", "0", "n"], unmodeled = true }] }
 
 [shell.projects_list]
 usage = "supabase [global options] projects list"
@@ -357,12 +354,12 @@ options.db_password       = { flag = ["--db-password"], value = "required" }
 options.region            = { flag = ["--region"], value = "required" }
 options.size              = { flag = ["--size"], value = "required" }
 options.high_availability = { flag = ["--high-availability"] }
-operands.name = { when = [{ like = ["TRUE", "TRUe", "TRuE", "TRue", "TrUE", "TrUe", "TruE", "True", "tRUE", "tRUe", "tRuE", "tRue", "trUE", "trUe", "truE", "true", "YES", "YEs", "YeS", "Yes", "yES", "yEs", "yeS", "yes", "ON", "On", "oN", "on", "Y", "y", "1", "false", "no", "off", "0", "n"], adds = ["ambiguous_argv"] }] }
+operands.name = { when = [{ like = ["TRUE", "TRUe", "TRuE", "TRue", "TrUE", "TrUe", "TruE", "True", "tRUE", "tRUe", "tRuE", "tRue", "trUE", "trUe", "truE", "true", "YES", "YEs", "YeS", "Yes", "yES", "yEs", "yeS", "yes", "ON", "On", "oN", "on", "Y", "y", "1", "false", "no", "off", "0", "n"], unmodeled = true }] }
 
 [shell.projects_delete]
 usage = "supabase [global options] projects delete [<ref>]"
 adds  = ["remote", "delete_remote_data"]
-operands.ref = { when = [{ like = ["TRUE", "TRUe", "TRuE", "TRue", "TrUE", "TrUe", "TruE", "True", "tRUE", "tRUe", "tRuE", "tRue", "trUE", "trUe", "truE", "true", "YES", "YEs", "YeS", "Yes", "yES", "yEs", "yeS", "yes", "ON", "On", "oN", "on", "Y", "y", "1", "false", "no", "off", "0", "n"], adds = ["ambiguous_argv"] }] }
+operands.ref = { when = [{ like = ["TRUE", "TRUe", "TRuE", "TRue", "TrUE", "TrUe", "TruE", "True", "tRUE", "tRUe", "tRuE", "tRue", "trUE", "trUe", "truE", "true", "YES", "YEs", "YeS", "Yes", "yES", "yEs", "yeS", "yes", "ON", "On", "oN", "on", "Y", "y", "1", "false", "no", "off", "0", "n"], unmodeled = true }] }
 
 [shell.projects_api_keys]
 usage = "supabase [global options] projects api-keys [options]"
@@ -384,7 +381,7 @@ options.remote = { flag = ["--remote"], value = "optional" }
 usage = "supabase [global options] branches get [options] [<name>]"
 adds  = ["remote", "reveal_secrets"]
 options.remote = { flag = ["--remote"], value = "optional" }
-operands.name = { when = [{ like = ["TRUE", "TRUe", "TRuE", "TRue", "TrUE", "TrUe", "TruE", "True", "tRUE", "tRUe", "tRuE", "tRue", "trUE", "trUe", "truE", "true", "YES", "YEs", "YeS", "Yes", "yES", "yEs", "yeS", "yes", "ON", "On", "oN", "on", "Y", "y", "1", "false", "no", "off", "0", "n"], adds = ["ambiguous_argv"] }] }
+operands.name = { when = [{ like = ["TRUE", "TRUe", "TRuE", "TRue", "TrUE", "TrUe", "TruE", "True", "tRUE", "tRUe", "tRuE", "tRue", "trUE", "trUe", "truE", "true", "YES", "YEs", "YeS", "Yes", "yES", "yEs", "yeS", "yes", "ON", "On", "oN", "on", "Y", "y", "1", "false", "no", "off", "0", "n"], unmodeled = true }] }
 
 [shell.branches_create]
 usage = "supabase [global options] branches create [options] [<name>]"
@@ -396,7 +393,7 @@ options.persistent = { flag = ["--persistent"] }
 options.with_data  = { flag = ["--with-data"] }
 options.notify_url = { flag = ["--notify-url"], value = "required" }
 options.git_branch = { flag = ["--git-branch"], value = "required" }
-operands.name = { when = [{ like = ["TRUE", "TRUe", "TRuE", "TRue", "TrUE", "TrUe", "TruE", "True", "tRUE", "tRUe", "tRuE", "tRue", "trUE", "trUe", "truE", "true", "YES", "YEs", "YeS", "Yes", "yES", "yEs", "yeS", "yes", "ON", "On", "oN", "on", "Y", "y", "1", "false", "no", "off", "0", "n"], adds = ["ambiguous_argv"] }] }
+operands.name = { when = [{ like = ["TRUE", "TRUe", "TRuE", "TRue", "TrUE", "TrUe", "TruE", "True", "tRUE", "tRUe", "tRuE", "tRue", "trUE", "trUe", "truE", "true", "YES", "YEs", "YeS", "Yes", "yES", "yEs", "yeS", "yes", "ON", "On", "oN", "on", "Y", "y", "1", "false", "no", "off", "0", "n"], unmodeled = true }] }
 
 [shell.branches_delete]
 usage = "supabase [global options] branches delete [options] [<name>]"
@@ -404,7 +401,7 @@ adds  = ["remote", "delete_remote_data"]
 options.remote = { flag = ["--remote"], value = "optional" }
 
 # ---------------------------------------------------------------- storage
-operands.name = { when = [{ like = ["TRUE", "TRUe", "TRuE", "TRue", "TrUE", "TrUe", "TruE", "True", "tRUE", "tRUe", "tRuE", "tRue", "trUE", "trUe", "truE", "true", "YES", "YEs", "YeS", "Yes", "yES", "yEs", "yeS", "yes", "ON", "On", "oN", "on", "Y", "y", "1", "false", "no", "off", "0", "n"], adds = ["ambiguous_argv"] }] }
+operands.name = { when = [{ like = ["TRUE", "TRUe", "TRuE", "TRue", "TrUE", "TrUe", "TruE", "True", "tRUE", "tRUe", "tRuE", "tRue", "trUE", "trUe", "truE", "true", "YES", "YEs", "YeS", "Yes", "yES", "yEs", "yeS", "yes", "ON", "On", "oN", "on", "Y", "y", "1", "false", "no", "off", "0", "n"], unmodeled = true }] }
 
 [shell.storage_ls]
 usage = "supabase [global options] storage ls [options] [<path>]"
@@ -413,7 +410,7 @@ options.remote    = { flag = ["--remote"], value = "optional", adds = ["remote"]
 
 # The scheme picks the direction: a `ss://` destination uploads, a `ss://` source downloads to a
 # local path.
-operands.path = { when = [{ like = ["TRUE", "TRUe", "TRuE", "TRue", "TrUE", "TrUe", "TruE", "True", "tRUE", "tRUe", "tRuE", "tRue", "trUE", "trUe", "truE", "true", "YES", "YEs", "YeS", "Yes", "yES", "yEs", "yeS", "yes", "ON", "On", "oN", "on", "Y", "y", "1", "false", "no", "off", "0", "n"], adds = ["ambiguous_argv"] }] }
+operands.path = { when = [{ like = ["TRUE", "TRUe", "TRuE", "TRue", "TrUE", "TrUe", "TruE", "True", "tRUE", "tRUe", "tRuE", "tRue", "trUE", "trUe", "truE", "true", "YES", "YEs", "YeS", "Yes", "yES", "yEs", "yeS", "yes", "ON", "On", "oN", "on", "Y", "y", "1", "false", "no", "off", "0", "n"], unmodeled = true }] }
 [shell.storage_cp]
 usage = "supabase [global options] storage cp [options] <src> <dst>"
 options.recursive     = { flag = ["-r", "--recursive"] }
@@ -421,16 +418,16 @@ options.cache_control = { flag = ["--cache-control"], value = "required" }
 options.content_type  = { flag = ["--content-type"], value = "required" }
 options.jobs          = { flag = ["-j", "--jobs"], value = "required" }
 options.remote        = { flag = ["--remote"], value = "optional", adds = ["remote"] }
-operands.src = { like = "ss://*", adds = ["write_files"], when = [{ like = ["TRUE", "TRUe", "TRuE", "TRue", "TrUE", "TrUe", "TruE", "True", "tRUE", "tRUe", "tRuE", "tRue", "trUE", "trUe", "truE", "true", "YES", "YEs", "YeS", "Yes", "yES", "yEs", "yeS", "yes", "ON", "On", "oN", "on", "Y", "y", "1", "false", "no", "off", "0", "n"], adds = ["ambiguous_argv"] }] }
-operands.dst = { like = "ss://*", adds = ["write_storage"], when = [{ like = ["TRUE", "TRUe", "TRuE", "TRue", "TrUE", "TrUe", "TruE", "True", "tRUE", "tRUe", "tRuE", "tRue", "trUE", "trUe", "truE", "true", "YES", "YEs", "YeS", "Yes", "yES", "yEs", "yeS", "yes", "ON", "On", "oN", "on", "Y", "y", "1", "false", "no", "off", "0", "n"], adds = ["ambiguous_argv"] }] }
+operands.src = { like = "ss://*", adds = ["write_files"], when = [{ like = ["TRUE", "TRUe", "TRuE", "TRue", "TrUE", "TrUe", "TruE", "True", "tRUE", "tRUe", "tRuE", "tRue", "trUE", "trUe", "truE", "true", "YES", "YEs", "YeS", "Yes", "yES", "yEs", "yeS", "yes", "ON", "On", "oN", "on", "Y", "y", "1", "false", "no", "off", "0", "n"], unmodeled = true }] }
+operands.dst = { like = "ss://*", adds = ["write_storage"], when = [{ like = ["TRUE", "TRUe", "TRuE", "TRue", "TrUE", "TrUe", "TruE", "True", "tRUE", "tRUe", "tRuE", "tRue", "trUE", "trUe", "truE", "true", "YES", "YEs", "YeS", "Yes", "yES", "yEs", "yeS", "yes", "ON", "On", "oN", "on", "Y", "y", "1", "false", "no", "off", "0", "n"], unmodeled = true }] }
 
 [shell.storage_mv]
 usage = "supabase [global options] storage mv [options] <src> <dst>"
 adds  = ["write_storage"]
 options.recursive = { flag = ["-r", "--recursive"] }
 options.remote    = { flag = ["--remote"], value = "optional", adds = ["remote"] }
-operands.src = { when = [{ like = ["TRUE", "TRUe", "TRuE", "TRue", "TrUE", "TrUe", "TruE", "True", "tRUE", "tRUe", "tRuE", "tRue", "trUE", "trUe", "truE", "true", "YES", "YEs", "YeS", "Yes", "yES", "yEs", "yeS", "yes", "ON", "On", "oN", "on", "Y", "y", "1", "false", "no", "off", "0", "n"], adds = ["ambiguous_argv"] }] }
-operands.dst = { when = [{ like = ["TRUE", "TRUe", "TRuE", "TRue", "TrUE", "TrUe", "TruE", "True", "tRUE", "tRUe", "tRuE", "tRue", "trUE", "trUe", "truE", "true", "YES", "YEs", "YeS", "Yes", "yES", "yEs", "yeS", "yes", "ON", "On", "oN", "on", "Y", "y", "1", "false", "no", "off", "0", "n"], adds = ["ambiguous_argv"] }] }
+operands.src = { when = [{ like = ["TRUE", "TRUe", "TRuE", "TRue", "TrUE", "TrUe", "TruE", "True", "tRUE", "tRUe", "tRuE", "tRue", "trUE", "trUe", "truE", "true", "YES", "YEs", "YeS", "Yes", "yES", "yEs", "yeS", "yes", "ON", "On", "oN", "on", "Y", "y", "1", "false", "no", "off", "0", "n"], unmodeled = true }] }
+operands.dst = { when = [{ like = ["TRUE", "TRUe", "TRuE", "TRue", "TrUE", "TrUe", "TruE", "True", "tRUE", "tRUe", "tRuE", "tRue", "trUE", "trUe", "truE", "true", "YES", "YEs", "YeS", "Yes", "yES", "yEs", "yeS", "yes", "ON", "On", "oN", "on", "Y", "y", "1", "false", "no", "off", "0", "n"], unmodeled = true }] }
 
 [shell.storage_rm]
 usage = "supabase [global options] storage rm [options] [<file>...]"
@@ -439,7 +436,7 @@ options.recursive = { flag = ["-r", "--recursive"] }
 options.remote    = { flag = ["--remote"], value = "optional", adds = ["remote"] }
 
 # ---------------------------------------------------------------- inspect (read-only queries)
-operands.file = { when = [{ like = ["TRUE", "TRUe", "TRuE", "TRue", "TrUE", "TrUe", "TruE", "True", "tRUE", "tRUe", "tRuE", "tRue", "trUE", "trUe", "truE", "true", "YES", "YEs", "YeS", "Yes", "yES", "yEs", "yeS", "yes", "ON", "On", "oN", "on", "Y", "y", "1", "false", "no", "off", "0", "n"], adds = ["ambiguous_argv", "all_targets"] }] }
+operands.file = { when = [{ like = ["TRUE", "TRUe", "TRuE", "TRue", "TrUE", "TrUe", "TruE", "True", "tRUE", "tRUe", "tRuE", "tRue", "trUE", "trUe", "truE", "true", "YES", "YEs", "YeS", "Yes", "yES", "yEs", "yeS", "yes", "ON", "On", "oN", "on", "Y", "y", "1", "false", "no", "off", "0", "n"], unmodeled = true }] }
 
 [shell.inspect_report]
 usage = "supabase [global options] inspect report [options]"
@@ -554,10 +551,10 @@ options.remote = { flag = ["--remote"], value = "optional", adds = ["remote", "c
 usage = "supabase [global options] test db [options] [<path>...]"
 adds  = ["run_sql", "write_local_db"]
 options.remote = { flag = ["--remote"], value = "optional", adds = ["remote", "clear_network_bans", "write_remote_db"], removes = ["write_local_db"] }
-operands.path = { when = [{ like = ["TRUE", "TRUe", "TRuE", "TRue", "TrUE", "TrUe", "TruE", "True", "tRUE", "tRUe", "tRuE", "tRue", "trUE", "trUe", "truE", "true", "YES", "YEs", "YeS", "Yes", "yES", "yEs", "yeS", "yes", "ON", "On", "oN", "on", "Y", "y", "1", "false", "no", "off", "0", "n"], adds = ["ambiguous_argv", "all_targets"] }, { like = ["p*://*", "P*://*"], adds = ["ambiguous_argv", "remote", "write_remote_db", "clear_network_bans"] }] }
+operands.path = { when = [{ like = ["TRUE", "TRUe", "TRuE", "TRue", "TrUE", "TrUe", "TruE", "True", "tRUE", "tRUe", "tRuE", "tRue", "trUE", "trUe", "truE", "true", "YES", "YEs", "YeS", "Yes", "yES", "yEs", "yeS", "yes", "ON", "On", "oN", "on", "Y", "y", "1", "false", "no", "off", "0", "n"], unmodeled = true }, { like = ["p*://*", "P*://*"], unmodeled = true }] }
 
 [shell.test_new]
 usage = "supabase [global options] test new [options] <name>"
 adds  = ["write_files"]
 options.template = { flag = ["-t", "--template"], value = "required" }
-operands.name = { when = [{ like = ["TRUE", "TRUe", "TRuE", "TRue", "TrUE", "TrUe", "TruE", "True", "tRUE", "tRUe", "tRuE", "tRue", "trUE", "trUe", "truE", "true", "YES", "YEs", "YeS", "Yes", "yES", "yEs", "yeS", "yes", "ON", "On", "oN", "on", "Y", "y", "1", "false", "no", "off", "0", "n"], adds = ["ambiguous_argv"] }] }
+operands.name = { when = [{ like = ["TRUE", "TRUe", "TRuE", "TRue", "TrUE", "TrUe", "TruE", "True", "tRUE", "tRUe", "tRuE", "tRue", "trUE", "trUe", "truE", "true", "YES", "YEs", "YeS", "Yes", "yES", "yEs", "yeS", "yes", "ON", "On", "oN", "on", "Y", "y", "1", "false", "no", "off", "0", "n"], unmodeled = true }] }

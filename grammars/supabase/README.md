@@ -78,18 +78,17 @@ is the linked project; `--remote=<ref|branch|url>` names another one. Either for
 A remote-only command (`functions`, `secrets`, `projects`, `orgs`, `branches`, `link`) always has
 `remote`. There, `--remote=<ref>` only picks another project.
 
-**`remote == ""` is not proof of the linked project.** Before it parses, the CLI rewrites a bare
+**A bare `--remote` before a URL or a true-literal is `unmodeled`.** Before it parses, the CLI rewrites a bare
 `--remote <word>` to `--remote=<word>` when the word is a database URL or a true-literal. On a
-command with an operand, the grammar reads that word as the operand instead. It flags the line
-with `ambiguous_argv` (see below), so forbid that effect before you trust the `remote` field.
+command with an operand, the grammar reads that word as the operand instead, so that operand
+makes the line `unmodeled` (see below).
 
-**Forbid `ambiguous_argv`.** It is how the grammar marks a line it may misread. A boolean flag in
-this CLI takes a following `true`, `false`, `yes`, `no`, `on`, `off`, `1`, `0`, `y`, or `n` as
-its value, so `functions deploy --debug false` deploys *every* function, while the grammar sees a
-function named `false`. Any operand that is one of those words (or, on a database command, looks
-like `postgres://...`) adds `ambiguous_argv`. Where an empty operand means "all" (`functions
-deploy`, `functions download`, `secrets unset`, `storage rm`, `migration repair`, `test db`), it
-also adds `all_targets`, and a database URL adds the hosted effects.
+**A line the grammar may misread is `unmodeled`.** A boolean flag in this CLI takes a following
+`true`, `false`, `yes`, `no`, `on`, `off`, `1`, `0`, `y`, or `n` as its value, so `functions
+deploy --debug false` deploys *every* function, while the grammar sees a function named `false`.
+Any operand that is one of those words (or, on a database command, looks like `postgres://...`)
+makes the line `unmodeled`, so no permit over `Tool::supabase::Action::"*"` reaches it. You don't
+need a rule for it.
 
 ## Effects
 
@@ -114,8 +113,6 @@ also adds `all_targets`, and a database URL adds the hosted effects.
 | `dump_data` | Dumps table data (`db dump --data-only`) |
 | `skip_confirmation` | `--yes`: answers every prompt, including the prompts before hosted changes. On a line with `clear_network_bans` it also lets the CLI clear the project's network bans |
 | `clear_network_bans` | A `--remote` database connection. With `--yes` (or `SUPABASE_YES` in the environment), when the connection fails, the CLI may delete every network ban of the project. Each such connection without `--password` also creates a temporary login role through the Management API |
-| `ambiguous_argv` | An operand the CLI may read as a flag value or as the `--remote` target; the grammar's reading may be wrong |
-| `all_targets` | The CLI may act on every object of its kind (all functions, secrets, buckets, migrations, or tests) |
 
 Besides `--remote` (which swaps a local effect for its hosted pair), only `db push --dry-run` removes an effect: it removes the database write. See Known limits for why the other dry-run style flags do not.
 
@@ -148,12 +145,6 @@ when {
 @id("no_yes")
 forbid (principal, action in Tool::supabase::Action::"*", resource)
 when { context.input.effects.contains(Tool::supabase::Effect::"skip_confirmation") };
-
-// Refuse lines the grammar may misread.
-@id("no_ambiguous_argv")
-@description("The CLI may read an operand of this line as a flag value or a target.")
-forbid (principal, action in Tool::supabase::Action::"*", resource)
-when { context.input.effects.contains(Tool::supabase::Effect::"ambiguous_argv") };
 
 // Never let a remote database command clear the project's network bans.
 // SUPABASE_YES in the environment also allows it, so keep it out of the box's environment.
@@ -196,14 +187,13 @@ These lines are `unmodeled`, so a policy must permit `unmodeled` by name to run 
 - **A boolean literal after a boolean flag.** The CLI reads `--dry-run false` (and `true`, `yes`,
   `no`, `on`, `off`, `1`, `0`, `y`, `n`) as the flag's value. The grammar reads the word as an
   operand. On a command with no operand slot the line is `unmodeled`. On one with an operand
-  slot, the word lands in that field and adds `ambiguous_argv` (plus `all_targets` where an empty
-  operand means "all"). This is also why `secrets unset --dry-run`, `db query --read-only`, and
+  slot, the word lands in that field and makes the line `unmodeled` too. This is also why `secrets unset --dry-run`, `db query --read-only`, and
   `db pull --declarative` remove no effect. The grammar cannot tell which flag took the literal,
-  so a real operand named `true` or `n` is also flagged.
+  so a real operand named `true` or `n` is also `unmodeled`.
 - **`--remote <word>` on a command with operands.** The CLI joins a database URL or a
-  true-literal (in any case) to `--remote`. The grammar puts the word in the operand field, sets
-  `remote = ""`, and adds `ambiguous_argv`; a URL also adds the hosted effects. The URL check is
-  the pattern `p*://*` or `P*://*`, so an operand such as `select 'p://x'` is also flagged. A
+  true-literal (in any case) to `--remote`. The grammar puts the word in the operand field, and
+  that makes the line `unmodeled`. The URL check is the pattern `p*://*` or `P*://*`, so an
+  operand such as `select 'p://x'` is also `unmodeled`. A
   branch-shaped word is joined only when there is one operand too many, which the grammar sees as
   `unmodeled`.
 - **Network bans and login roles.** A `--remote` database connection without `--password` creates

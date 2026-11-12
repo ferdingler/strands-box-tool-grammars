@@ -113,8 +113,9 @@ What to know when you write the policy:
 - An effect is something a reviewer cares about, such as `network`, `delete_data`, or `publish`.
   Options such as `--dry-run` remove effects, so `git push -fn origin main` has no `force_push`.
 - **Forbid the parser-mismatch effects.** Some grammars declare an effect for a line that the CLI
-  can read differently from the grammar: `ambiguous_argv` in cargo, npm, and supabase, and
-  `option_like_value` in valyu. The fields of such a line can be wrong. Add a forbid for that effect
+  can read differently from the grammar: `ambiguous_argv` in cargo, and `option_like_value` in
+  valyu, for an operand after `--` and a bare `--summary`. npm and supabase make such a line
+  `unmodeled` instead, and valyu does so for an option value. The fields of such a line can be wrong. Add a forbid for that effect
   to every policy that uses one of these grammars. The grammar README explains when it applies.
 - A denial reads `policy denied this operation on '<program file>' [policy: <@id>]: <@description>`
   and exits 126. The program does not start.
@@ -201,7 +202,8 @@ The full list, with an example from a real CLI for each, is in [FINDINGS.md](FIN
 - `removes` always wins and cannot be conditional. Some grammars therefore keep an effect even with
   `--dry-run`, or leave out a `--no-` flag.
 - Some CLI parsers read a word differently from the grammar (`--flag false`, an optional value that
-  takes the next word). Where this applies, forbid `ambiguous_argv` or `option_like_value`.
+  takes the next word). Where a grammar can name the value, a `when` entry with `unmodeled = true`
+  makes the line `unmodeled`. Elsewhere, forbid `ambiguous_argv` or `option_like_value`.
 - On Linux at this Box revision, Node and V8 programs (npm, vercel, valyu) abort in a tool box, and
   uv cannot take its cache lock. On macOS, a CLI installed outside the operator home can fail.
   See [Box defects and runtime limits](FINDINGS.md#box-defects-and-runtime-limits).

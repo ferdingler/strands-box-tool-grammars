@@ -252,19 +252,15 @@ fields = { silent = true, loglevel = "warn" }
 effects = ["modify_lockfile", "modify_node_modules", "network", "run_lifecycle_scripts"]
 
 # nopt: a boolean flag takes a following `true`/`false` as its value. `--ignore-scripts false`
-# means "run scripts", so the operand `false` adds ambiguous_argv.
+# means "run scripts", so the operand `false` makes the line unmodeled.
 [[case]]
 argv = ["npm", "install", "--ignore-scripts", "false"]
-action = "install"
-fields = { ignore_scripts = true, package_spec = ["false"] }
-effects = ["ambiguous_argv", "modify_lockfile", "modify_node_modules", "modify_package_json", "network"]
+action = "unmodeled"
 
 # nopt: a string option followed by a flag-like word gets "" and the word is read as a flag.
 [[case]]
 argv = ["npm", "install", "--registry", "--global"]
-action = "install"
-fields = { registry = "--global" }
-effects = ["ambiguous_argv", "modify_lockfile", "modify_node_modules", "network", "override_registry", "run_lifecycle_scripts"]
+action = "unmodeled"
 
 # `--` ends options: a word after it is a package spec.
 [[case]]
@@ -942,20 +938,16 @@ action = "publish"
 fields = { package_spec = "./pkg.tgz", provenance = true, ignore_scripts = true }
 effects = ["network", "publish"]
 
-# nopt: `--tag --access=public` gives tag "" and reads --access=public, so the value adds
-# ambiguous_argv.
+# nopt: `--tag --access=public` gives tag "" and reads --access=public, so the value makes
+# the line unmodeled.
 [[case]]
 argv = ["npm", "publish", "--tag", "--access=public"]
-action = "publish"
-fields = { tag = "--access=public" }
-effects = ["ambiguous_argv", "network", "publish", "run_lifecycle_scripts"]
+action = "unmodeled"
 
-# nopt: `--dry-run false` is dry-run=false, a real publish; the operand `false` flags it.
+# nopt: `--dry-run false` is dry-run=false, a real publish; the operand `false` makes the line unmodeled.
 [[case]]
 argv = ["npm", "publish", "--dry-run", "false"]
-action = "publish"
-fields = { dry_run = true, package_spec = "false" }
-effects = ["ambiguous_argv", "network", "run_lifecycle_scripts"]
+action = "unmodeled"
 
 [[case]]
 argv = ["npm", "--registry", "https://npm.example.com/", "publish"]
@@ -1204,16 +1196,12 @@ action = "unmodeled"
 # nopt reads `false` after a boolean flag as its value: scripts run. The grammar must flag it.
 [[case]]
 argv = ["npm", "install", "--ignore-scripts", "false"]
-action = "install"
-fields = { ignore_scripts = true, package_spec = ["false"] }
-effects = ["network", "modify_node_modules", "modify_lockfile", "modify_package_json", "ambiguous_argv"]
+action = "unmodeled"
 
 # nopt: dry-run=false, so this publishes. The grammar must flag it.
 [[case]]
 argv = ["npm", "publish", "--dry-run", "false"]
-action = "publish"
-fields = { dry_run = true, package_spec = "false" }
-effects = ["network", "run_lifecycle_scripts", "ambiguous_argv"]
+action = "unmodeled"
 
 [[case]]
 argv = ["npm", "publish", "--dry-run", "false", "."]
@@ -1226,16 +1214,12 @@ action = "unmodeled"
 # nopt: --tag is String, so a next word that looks like a flag gives tag="" and --access=public is read.
 [[case]]
 argv = ["npm", "publish", "--tag", "--access=public"]
-action = "publish"
-fields = { tag = "--access=public" }
-effects = ["network", "publish", "run_lifecycle_scripts", "ambiguous_argv"]
+action = "unmodeled"
 
 # nopt splices `--tag=-x` into `--tag -x`, then the String rule re-reads `-x` as a flag.
 [[case]]
 argv = ["npm", "publish", "--tag=-x"]
-action = "publish"
-fields = { tag = "-x" }
-effects = ["network", "publish", "run_lifecycle_scripts", "ambiguous_argv"]
+action = "unmodeled"
 
 [[case]]
 argv = ["npm", "publish", "--access=public", "--dry-run"]
@@ -1353,9 +1337,7 @@ action = "unmodeled"
 
 [[case]]
 argv = ["npm", "uninstall", "foo", "-g", "false"]
-action = "uninstall"
-fields = { pkg = ["foo", "false"], global = true }
-effects = ["network", "modify_node_modules", "run_lifecycle_scripts", "global_install", "ambiguous_argv"]
+action = "unmodeled"
 
 # link.js refuses --global.
 [[case]]
@@ -1377,9 +1359,7 @@ effects = ["run_lifecycle_scripts"]
 
 [[case]]
 argv = ["npm", "pack", "--ignore-scripts", "false"]
-action = "pack"
-fields = { ignore_scripts = true, package_spec = ["false"] }
-effects = ["network", "ambiguous_argv"]
+action = "unmodeled"
 
 # init.js `update()` -> updateWorkspaces reifies the tree after creating a workspace.
 [[case]]
@@ -1396,9 +1376,7 @@ effects = ["network", "modify_node_modules", "modify_lockfile", "bypass_script_p
 
 [[case]]
 argv = ["npm", "update", "--dry-run", "false"]
-action = "update"
-fields = { dry_run = true, pkg = ["false"] }
-effects = ["network", "ambiguous_argv"]
+action = "unmodeled"
 
 [[case]]
 argv = ["npm", "test", "unit"]
@@ -1430,9 +1408,7 @@ action = "unmodeled"
 # `publish` is the command). The grammar takes `--` as the value and flags it.
 [[case]]
 argv = ["npm", "--registry", "--", "publish"]
-action = "publish"
-fields = { registry = "--" }
-effects = ["network", "publish", "run_lifecycle_scripts", "override_registry", "ambiguous_argv"]
+action = "unmodeled"
 
 [[case]]
 argv = ["npm", "isntall", "foo", "--omit", "dev", "--omit=optional"]
@@ -1478,12 +1454,10 @@ argv = ["npm", "init", "--workspace", "pkgs/a", "--no-workspaces-update", "--wor
 action = "unmodeled"
 
 # nopt: `--no-workspaces-update false` sets workspaces-update=true, so npm reifies and may run scripts.
-# The word lands in package_spec; it must carry ambiguous_argv.
+# The word lands in package_spec, which makes the line unmodeled.
 [[case]]
 argv = ["npm", "init", "--workspace", "pkgs/a", "--no-workspaces-update", "false"]
-action = "init"
-fields = { workspace = ["pkgs/a"], no_workspaces_update = true, package_spec = "false" }
-effects = ["modify_package_json", "network", "run_program", "ambiguous_argv"]
+action = "unmodeled"
 
 [[case]]
 argv = ["npm", "version", "patch", "--workspaces"]
@@ -1504,24 +1478,18 @@ action = "unmodeled"
 # --- author cases after verification round 2 (R2-1) ---
 
 # nopt reads `--no-workspaces-update false` as workspaces-update=true, so the reify runs; the
-# operand `false` adds ambiguous_argv. The same rule covers init's initializer args and version.
+# operand `false` makes the line unmodeled. The same rule covers init's initializer args and version.
 [[case]]
 argv = ["npm", "init", "--no-workspaces-update", "true"]
-action = "init"
-fields = { no_workspaces_update = true, package_spec = "true" }
-effects = ["ambiguous_argv", "modify_package_json", "network", "run_program"]
+action = "unmodeled"
 
 [[case]]
 argv = ["npm", "init", "vite", "--no-workspaces-update", "false"]
-action = "init"
-fields = { no_workspaces_update = true, package_spec = "vite", initializer_args = ["false"] }
-effects = ["ambiguous_argv", "modify_package_json", "network", "run_program"]
+action = "unmodeled"
 
 [[case]]
 argv = ["npm", "version", "--ignore-scripts", "false"]
-action = "version"
-fields = { ignore_scripts = true, newversion = "false" }
-effects = ["ambiguous_argv", "git_commit", "modify_lockfile", "modify_package_json"]
+action = "unmodeled"
 
 # --- independent verifier cases, round 3 (9612d26) ---
 # Actions with no operand: a trailing true/false is a left-over word.
@@ -1535,12 +1503,8 @@ action = "unmodeled"
 
 [[case]]
 argv = ["npm", "version", "--ignore-scripts", "false"]
-action = "version"
-fields = { ignore_scripts = true, newversion = "false" }
-effects = ["modify_package_json", "modify_lockfile", "git_commit", "ambiguous_argv"]
+action = "unmodeled"
 
 [[case]]
 argv = ["npm", "init", "vite", "--no-workspaces-update", "true"]
-action = "init"
-fields = { package_spec = "vite", no_workspaces_update = true, initializer_args = ["true"] }
-effects = ["modify_package_json", "network", "run_program", "ambiguous_argv"]
+action = "unmodeled"
