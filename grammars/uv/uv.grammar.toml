@@ -415,15 +415,13 @@ options.refresh            = { flag = ["--refresh"] }
 options.refresh_package    = { flag = ["--refresh-package"], value = "required", repeated = true }
 options.python             = { flag = ["-p", "--python"], value = "required", adds = ["run_program"], removes = ["read_only"] }
 
-# `uv publish` has no `[global options]`: it declares a hidden `--offline` of its own that shadows the
-# global one (uv 0.13.7, crates/uv-cli/src/lib.rs `PublishArgs::offline`), so a global `--offline` could not
-# truthfully remove `network` here. A global option before or after `publish` is `unmodeled`.
+# `uv publish` declares a hidden `--offline` of its own that shadows the global one (uv 0.13.7,
+# crates/uv-cli/src/lib.rs `PublishArgs::offline`), so a global `--offline` could not truthfully remove
+# `network` here. Its own `offline` option takes the place of the global one (`overrides`), and removes nothing.
 [shell.publish]
-usage   = "uv publish [options] [<files>...]"
+usage   = "uv [global options] publish [options] [<files>...]"
 adds    = ["publish", "network"]
-options.quiet              = { flag = ["-q", "--quiet"] }
-options.verbose            = { flag = ["-v", "--verbose"] }
-options.no_progress        = { flag = ["--no-progress"] }
+options.offline            = { flag = ["--offline"], overrides = true }
 options.index              = { flag = ["--index"], value = "required", adds = ["override_index"] }
 options.username           = { flag = ["-u", "--username"], value = "required" }
 options.password           = { flag = ["-p", "--password"], value = "required", adds = ["credentials"] }

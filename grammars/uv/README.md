@@ -49,7 +49,7 @@ grammar whose program file changed until the box restarts.
 | Family | Actions | Notes |
 |---|---|---|
 | Project | `run`, `init`, `add`, `remove`, `sync`, `lock`, `tree`, `export`, `version` | `run` takes the program and its arguments as one `command` operand. |
-| Environments and builds | `venv` (aliases `virtualenv`, `v`), `build`, `publish` | `publish` accepts only `-q`, `-v`, and `--no-progress` from the global options. |
+| Environments and builds | `venv` (aliases `virtualenv`, `v`), `build`, `publish` | `publish` takes the global options, and its own `--offline` overrides the global one, so it does not remove `network`. |
 | Tools | `tool_run`, `tool_install`, `tool_uninstall`, `tool_upgrade` (alias `tool update`), `tool_list` (alias `tool ls`), `tool_dir`, `tool_update_shell` (alias `tool ensurepath`) | |
 | Python | `python_list` (alias `python ls`), `python_install`, `python_upgrade`, `python_find`, `python_pin`, `python_uninstall`, `python_dir`, `python_update_shell` | |
 | pip interface | `pip_install`, `pip_sync`, `pip_compile`, `pip_uninstall`, `pip_list` (alias `pip ls`), `pip_show`, `pip_freeze`, `pip_check`, `pip_tree` | |
