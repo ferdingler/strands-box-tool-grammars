@@ -340,24 +340,24 @@ action = "test"
 fields = { doc = true, lib = true, no_fail_fast = true, quiet = true, test = ["integration"] }
 effects = ["execute_built_code", "network", "run_build_scripts", "update_lockfile"]
 
-# `-p` with a word that starts with `-`: the grammar reads it as the value, and adds
-# ambiguous_argv. cargo reads a bare `-p`, prints the packages, and exits with an error
-# (`check_optional_opts`), so no test runs.
+# `-p` with a word that starts with `-`: `-p` is optional-next, so `--lib` is an option, as in
+# cargo. cargo then prints the packages and exits with an error (`check_optional_opts`), so no
+# test runs; the grammar over-states.
 [[case]]
 argv = ["cargo", "test", "-p", "--lib"]
 action = "test"
-fields = { package = ["--lib"] }
-effects = ["ambiguous_argv", "execute_built_code", "network", "run_build_scripts", "update_lockfile"]
+fields = { lib = true, package = [""] }
+effects = ["execute_built_code", "network", "run_build_scripts", "update_lockfile"]
 
 # publish does not reject a bare `-p` (`packages_from_flags` takes no value as the default
-# package), and `--workspace` is then cargo's: the field is wrong, so ambiguous_argv
+# package), and `--workspace` is then cargo's, as in the grammar
 [[case]]
 argv = ["cargo", "publish", "-p", "--workspace"]
 action = "publish"
-fields = { package = ["--workspace"] }
-effects = ["ambiguous_argv", "network", "publish_crate", "run_build_scripts", "update_lockfile"]
+fields = { package = [""], workspace = true }
+effects = ["network", "publish_crate", "run_build_scripts", "update_lockfile"]
 
-# A `-` inside a value is fine; only a leading `-` is ambiguous
+# A `-` inside a value is a value
 [[case]]
 argv = ["cargo", "publish", "-p", "crate-a", "--target", "x86_64-unknown-linux-gnu"]
 action = "publish"
@@ -368,8 +368,7 @@ effects = ["network", "publish_crate", "run_build_scripts", "update_lockfile"]
 [[case]]
 argv = ["cargo", "tree", "-p", "foo", "-i", "--frozen"]
 action = "tree"
-fields = { invert = ["--frozen"], package = ["foo"] }
-effects = ["ambiguous_argv", "network", "update_lockfile"]
+fields = { frozen = true, invert = [""], package = ["foo"] }
 
 # A lone `--` with no test arguments: clap accepts an empty ARGS
 [[case]]
@@ -377,10 +376,12 @@ argv = ["cargo", "test", "--"]
 action = "test"
 effects = ["execute_built_code", "network", "run_build_scripts", "update_lockfile"]
 
-# A bare `--bin` at the end needs a value here; cargo would only list the binaries
+# A bare `--bin` at the end has an empty value; cargo only lists the binaries, so the grammar over-states
 [[case]]
 argv = ["cargo", "test", "--bin"]
-action = "unmodeled"
+action = "test"
+fields = { bin = [""] }
+effects = ["execute_built_code", "network", "run_build_scripts", "update_lockfile"]
 
 # Two TESTNAME words: clap refuses the second
 [[case]]
@@ -1000,11 +1001,13 @@ action = "install"
 fields = { bins = true, debug = true, offline = true, path = "." }
 effects = ["install_binary", "override_config", "run_build_scripts"]
 
-# install `--bin` and `--example` are not modeled: with a crate named, cargo skips
-# `check_optional_opts`, so a bare `--bin` would hide the option after it (verifier case below)
+# install `--bin` and `--example` are optional-next, so a bare `--bin` takes no option after it
+# (verifier cases below)
 [[case]]
 argv = ["cargo", "install", "ripgrep", "--bin", "rg"]
-action = "unmodeled"
+action = "install"
+fields = { crate = ["ripgrep"], bin = ["rg"] }
+effects = ["install_binary", "network", "run_build_scripts"]
 
 [[case]]
 argv = ["cargo", "install", "--git", "https://github.com/example/tool", "--tag", "v1.2.0", "--no-track"]
@@ -1348,25 +1351,30 @@ effects = []
 argv = ["cargo", "install", "--vers", "1.0.0", "foo"]
 action = "unmodeled"
 
-# Was EXPECTED-FAIL (F1): install --bin is no longer modeled.
 # install --bin is optional_multi_opt (num_args 0..=1), so clap does not take
 # `--root` as its value. With crate operands, install.rs passes workspace None to compile_options,
 # so check_optional_opts does not run and the install goes on into /r. Verified with cargo 1.98.1
-# (same helper): `cargo install --bin --root R --list` lists R. The grammar reads root as absent
-# and `/r` as a crate.
+# (same helper): `cargo install --bin --root R --list` lists R. `--bin` is optional-next, so the
+# grammar reads `--root /r` as the install root, as cargo does.
 [[case]]
 argv = ["cargo", "install", "--bin", "--root", "/r", "foo"]
-action = "unmodeled"
+action = "install"
+fields = { bin = [""], root = "/r", crate = ["foo"] }
+effects = ["install_binary", "network", "run_build_scripts"]
 
-# Was EXPECTED-FAIL (F1): install --example is no longer modeled. Bare --example hides --config.
+# A bare --example does not hide --config, which then adds override_config.
 [[case]]
 argv = ["cargo", "install", "--example", "--config", "build.rustc-wrapper=\"/x\"", "foo"]
-action = "unmodeled"
+action = "install"
+fields = { example = [""], config = ["build.rustc-wrapper=\"/x\""], crate = ["foo"] }
+effects = ["install_binary", "network", "override_config", "run_build_scripts"]
 
-# Was EXPECTED-FAIL (F1): install --bin is no longer modeled. Bare --bin hides --git.
+# A bare --bin does not hide --git.
 [[case]]
 argv = ["cargo", "install", "--bin", "--git", "https://example.invalid/x.git", "foo"]
-action = "unmodeled"
+action = "install"
+fields = { bin = [""], git = "https://example.invalid/x.git", crate = ["foo"] }
+effects = ["install_binary", "network", "run_build_scripts"]
 
 # clippy --fix (exact word, before `--`) switches cargo-clippy to `cargo fix`.
 [[case]]
@@ -1375,12 +1383,12 @@ action = "clippy"
 fields = { fix = true, allow_dirty = true }
 effects = ["network", "run_build_scripts", "update_lockfile", "write_source"]
 
-# clippy scans raw args, so `--fix` after -p still selects fix mode.
+# clippy scans raw args, so `--fix` after -p still selects fix mode, as in the grammar.
 [[case]]
 argv = ["cargo", "clippy", "-p", "--fix"]
 action = "clippy"
-fields = { package = ["--fix"] }
-effects = ["ambiguous_argv", "network", "run_build_scripts", "update_lockfile", "write_source"]
+fields = { fix = true, package = [""] }
+effects = ["network", "run_build_scripts", "update_lockfile", "write_source"]
 
 # clippy stops its scan at `--`: a later --fix goes to clippy-driver and is not fix mode.
 [[case]]
@@ -1496,46 +1504,50 @@ effects = ["network", "override_config", "update_lockfile", "write_files"]
 # Sources as in round 1, plus command_prelude.rs `packages_from_flags` (no zero-value check),
 # commands/{publish,package,tree,fetch}.rs.
 
-# publish: a bare -p proceeds with the default package; the swallowed --dry-run is cargo's, so the
-# real line is a dry run. The grammar keeps publish_crate (safe side) and adds ambiguous_argv.
+# publish: a bare -p proceeds with the default package; --dry-run is cargo's, so the real line
+# is a dry run, and the grammar reads it the same way.
 [[case]]
 argv = ["cargo", "publish", "-p", "--dry-run"]
 action = "publish"
-fields = { package = ["--dry-run"] }
-effects = ["ambiguous_argv", "network", "publish_crate", "run_build_scripts", "update_lockfile"]
+fields = { dry_run = true, package = [""] }
+effects = ["network", "run_build_scripts", "update_lockfile"]
 
-# publish: a swallowed option that takes a value leaves a word that publish does not take.
+# publish: a bare -p, then --registry: cargo publishes the default package to that registry.
 [[case]]
 argv = ["cargo", "publish", "-p", "--registry", "evil"]
-action = "unmodeled"
+action = "publish"
+fields = { package = [""], registry = "evil" }
+effects = ["network", "publish_crate", "run_build_scripts", "update_lockfile"]
 
-# publish: --package=--x is a literal value to clap; still flagged.
+# publish: --package=--x is a literal value to clap.
 [[case]]
 argv = ["cargo", "publish", "--package=--workspace"]
 action = "publish"
 fields = { package = ["--workspace"] }
-effects = ["ambiguous_argv", "network", "publish_crate", "run_build_scripts", "update_lockfile"]
+effects = ["network", "publish_crate", "run_build_scripts", "update_lockfile"]
 
 # package: an attached short value that starts with `-`.
 [[case]]
 argv = ["cargo", "package", "-p-l"]
 action = "package"
 fields = { package = ["-l"] }
-effects = ["ambiguous_argv", "network", "run_build_scripts", "update_lockfile"]
+effects = ["network", "run_build_scripts", "update_lockfile"]
 
-# test --target followed by an option: ambiguous (cargo bails in `targets()`).
+# test --target followed by an option: --release is cargo's (cargo then bails in `targets()`).
 [[case]]
 argv = ["cargo", "test", "--target", "--release"]
 action = "test"
-fields = { target = ["--release"] }
-effects = ["ambiguous_argv", "execute_built_code", "network", "run_build_scripts", "update_lockfile"]
+fields = { release = true, target = [""] }
+effects = ["execute_built_code", "network", "run_build_scripts", "update_lockfile"]
 
-# tree: a bare -i at the end has no next word; unmodeled.
+# tree: a bare -i at the end has an empty value.
 [[case]]
 argv = ["cargo", "tree", "-p", "foo", "-i"]
-action = "unmodeled"
+action = "tree"
+fields = { invert = [""], package = ["foo"] }
+effects = ["network", "update_lockfile"]
 
-# add --target is a plain opt (required), so no ambiguous_argv.
+# add --target is a plain opt (required), so it takes the next word.
 [[case]]
 argv = ["cargo", "add", "--target", "x86_64-unknown-linux-gnu", "libc"]
 action = "add"
@@ -1549,10 +1561,12 @@ action = "install"
 fields = { crate = ["foo"], bins = true, examples = true }
 effects = ["install_binary", "network", "run_build_scripts"]
 
-# install --bin=rg is also unmodeled now.
+# install --bin=rg names the binary.
 [[case]]
 argv = ["cargo", "install", "--bin=rg", "ripgrep"]
-action = "unmodeled"
+action = "install"
+fields = { bin = ["rg"], crate = ["ripgrep"] }
+effects = ["install_binary", "network", "run_build_scripts"]
 
 # Any +toolchain, on any action.
 [[case]]

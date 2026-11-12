@@ -83,11 +83,10 @@ A remote-only command (`functions`, `secrets`, `projects`, `orgs`, `branches`, `
 command with an operand, the grammar reads that word as the operand instead. It flags the line
 with `ambiguous_argv` (see below), so forbid that effect before you trust the `remote` field.
 
-**Forbid `ambiguous_argv`.** It is how the grammar marks a line it may misread. A boolean flag in
-this CLI takes a following `true`, `false`, `yes`, `no`, `on`, `off`, `1`, `0`, `y`, or `n` as
-its value, so `functions deploy --debug false` deploys *every* function, while the grammar sees a
-function named `false`. Any operand that is one of those words (or, on a database command, looks
-like `postgres://...`) adds `ambiguous_argv`. Where an empty operand means "all" (`functions
+**Forbid `ambiguous_argv`.** It is how the grammar marks a line it may misread. A bare `--remote`
+takes a following database URL or true-literal as its target. On a command with `--remote`, any
+operand that is a boolean literal (or, on a database command, looks like `postgres://...`) adds
+`ambiguous_argv`. Where an empty operand means "all" (`functions
 deploy`, `functions download`, `secrets unset`, `storage rm`, `migration repair`, `test db`), it
 also adds `all_targets`, and a database URL adds the hosted effects.
 
@@ -186,7 +185,7 @@ These lines are `unmodeled`, so a policy must permit `unmodeled` by name to run 
   flags `--help` hides. Hidden commands such as `db test`.
 - `db diff --from` and `--to`: each value can name the local database, the migrations, or a hosted
   project, and a pattern cannot tell a branch name from `local`.
-- The negated forms that the CLI adds to every boolean flag (`--no-debug`, `--dry-run=false`).
+- The negated forms that the CLI adds to every boolean flag (`--no-debug`).
 - `--wizard`, `--help`, `--version`, and a bare `supabase`.
 - `--remote <word>` with a separate word on a command that takes no operand: the CLI reads it as
   `--remote=<word>`, so the grammar leaves the word over and the line is `unmodeled`.
@@ -194,12 +193,10 @@ These lines are `unmodeled`, so a policy must permit `unmodeled` by name to run 
 ## Known limits
 
 - **A boolean literal after a boolean flag.** The CLI reads `--dry-run false` (and `true`, `yes`,
-  `no`, `on`, `off`, `1`, `0`, `y`, `n`) as the flag's value. The grammar reads the word as an
-  operand. On a command with no operand slot the line is `unmodeled`. On one with an operand
-  slot, the word lands in that field and adds `ambiguous_argv` (plus `all_targets` where an empty
-  operand means "all"). This is also why `secrets unset --dry-run`, `db query --read-only`, and
-  `db pull --declarative` remove no effect. The grammar cannot tell which flag took the literal,
-  so a real operand named `true` or `n` is also flagged.
+  `no`, `on`, `off`, `1`, `0`, `y`, `n`) as the flag's value. Each flag is `value = "boolean"`, so
+  the grammar reads a following `true` or `false` the same way, and `functions deploy --debug false`
+  deploys every function. Any other literal after a flag is `unmodeled`. `secrets unset --dry-run`,
+  `db query --read-only`, and `db pull --declarative` still remove no effect.
 - **`--remote <word>` on a command with operands.** The CLI joins a database URL or a
   true-literal (in any case) to `--remote`. The grammar puts the word in the operand field, sets
   `remote = ""`, and adds `ambiguous_argv`; a URL also adds the hosted effects. The URL check is

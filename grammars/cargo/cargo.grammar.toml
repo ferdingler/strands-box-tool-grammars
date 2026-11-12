@@ -33,12 +33,10 @@
 # - The meaning of a value: a package spec, a feature name, a target triple.
 #
 # Value spelling: an option that cargo reads as `[<VALUE>]` (`-p`, `--bin`, `--example`,
-# `--test`, `--bench`, `--target`, `tree -i`) is `value = "required"` here, so the grammar takes
-# the next word as the value even when it starts with `-`. cargo instead reads such a word as its
-# own option. Each of these options adds `ambiguous_argv` for a value like `-*`, so a policy can
-# refuse the misread line. `install --bin` and `install --example` are not modeled at all: with a
-# crate named, cargo goes on to install, and the swallowed option (`--root`, `--git`, `--config`)
-# would be hidden. See README.md, Known limits.
+# `--test`, `--bench`, `--target`, `tree -i`) is `value = "optional-next"` here. Like cargo, the
+# grammar takes the next word as the value unless that word starts with `-`, and then reads the
+# word as an option. So `cargo install --bin --root /r foo` gives `--bin` an empty value and
+# installs into `/r`, as cargo does.
 
 format  = 1
 version = 1
@@ -61,7 +59,6 @@ publish_crate      = "Uploads a package to a registry"
 install_binary     = "Installs binaries into the cargo install root"
 uninstall_binary   = "Deletes installed binaries from the cargo install root"
 open_browser       = "Opens the generated documentation with a browser program"
-ambiguous_argv     = "An option with an optional value got a word that starts with -, which cargo reads as its own option, so the fields can be wrong"
 
 # cli.rs `cli()`: each of these is `global(true)`, so it may come before or after the command.
 # `-C`, `--list`, `--explain`, and `-V` are not global and need no command, so they stay
@@ -83,19 +80,19 @@ usage = "cargo [global options] build [options]"
 adds  = ["network", "update_lockfile", "run_build_scripts"]
 options.future_incompat_report = { flag = ["--future-incompat-report"] }
 options.message_format = { flag = ["--message-format"], value = "required", repeated = true }
-options.package = { flag = ["-p", "--package"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
+options.package = { flag = ["-p", "--package"], value = "optional-next", repeated = true }
 options.workspace = { flag = ["--workspace"] }
 options.exclude = { flag = ["--exclude"], value = "required", repeated = true }
 options.all = { flag = ["--all"] }
 options.lib = { flag = ["--lib"] }
 options.bins = { flag = ["--bins"] }
-options.bin = { flag = ["--bin"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
+options.bin = { flag = ["--bin"], value = "optional-next", repeated = true }
 options.examples = { flag = ["--examples"] }
-options.example = { flag = ["--example"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
+options.example = { flag = ["--example"], value = "optional-next", repeated = true }
 options.tests = { flag = ["--tests"] }
-options.test = { flag = ["--test"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
+options.test = { flag = ["--test"], value = "optional-next", repeated = true }
 options.benches = { flag = ["--benches"] }
-options.bench = { flag = ["--bench"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
+options.bench = { flag = ["--bench"], value = "optional-next", repeated = true }
 options.all_targets = { flag = ["--all-targets"] }
 options.features = { flag = ["-F", "--features"], value = "required", repeated = true }
 options.all_features = { flag = ["--all-features"] }
@@ -104,7 +101,7 @@ options.release = { flag = ["-r", "--release"] }
 options.profile = { flag = ["--profile"], value = "required" }
 options.jobs = { flag = ["-j", "--jobs"], value = "required" }
 options.keep_going = { flag = ["--keep-going"] }
-options.target = { flag = ["--target"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
+options.target = { flag = ["--target"], value = "optional-next", repeated = true }
 options.target_dir = { flag = ["--target-dir"], value = "required" }
 options.timings = { flag = ["--timings"] }
 options.manifest_path = { flag = ["-m", "--manifest-path"], value = "required", adds = ["override_config"] }
@@ -116,19 +113,19 @@ usage = "cargo [global options] check [options]"
 adds  = ["network", "update_lockfile", "run_build_scripts"]
 options.future_incompat_report = { flag = ["--future-incompat-report"] }
 options.message_format = { flag = ["--message-format"], value = "required", repeated = true }
-options.package = { flag = ["-p", "--package"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
+options.package = { flag = ["-p", "--package"], value = "optional-next", repeated = true }
 options.workspace = { flag = ["--workspace"] }
 options.exclude = { flag = ["--exclude"], value = "required", repeated = true }
 options.all = { flag = ["--all"] }
 options.lib = { flag = ["--lib"] }
 options.bins = { flag = ["--bins"] }
-options.bin = { flag = ["--bin"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
+options.bin = { flag = ["--bin"], value = "optional-next", repeated = true }
 options.examples = { flag = ["--examples"] }
-options.example = { flag = ["--example"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
+options.example = { flag = ["--example"], value = "optional-next", repeated = true }
 options.tests = { flag = ["--tests"] }
-options.test = { flag = ["--test"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
+options.test = { flag = ["--test"], value = "optional-next", repeated = true }
 options.benches = { flag = ["--benches"] }
-options.bench = { flag = ["--bench"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
+options.bench = { flag = ["--bench"], value = "optional-next", repeated = true }
 options.all_targets = { flag = ["--all-targets"] }
 options.features = { flag = ["-F", "--features"], value = "required", repeated = true }
 options.all_features = { flag = ["--all-features"] }
@@ -137,7 +134,7 @@ options.release = { flag = ["-r", "--release"] }
 options.profile = { flag = ["--profile"], value = "required" }
 options.jobs = { flag = ["-j", "--jobs"], value = "required" }
 options.keep_going = { flag = ["--keep-going"] }
-options.target = { flag = ["--target"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
+options.target = { flag = ["--target"], value = "optional-next", repeated = true }
 options.target_dir = { flag = ["--target-dir"], value = "required" }
 options.timings = { flag = ["--timings"] }
 options.manifest_path = { flag = ["-m", "--manifest-path"], value = "required", adds = ["override_config"] }
@@ -151,19 +148,19 @@ options.no_run = { flag = ["--no-run"], removes = ["execute_built_code"] }
 options.no_fail_fast = { flag = ["--no-fail-fast"] }
 options.future_incompat_report = { flag = ["--future-incompat-report"] }
 options.message_format = { flag = ["--message-format"], value = "required", repeated = true }
-options.package = { flag = ["-p", "--package"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
+options.package = { flag = ["-p", "--package"], value = "optional-next", repeated = true }
 options.workspace = { flag = ["--workspace"] }
 options.exclude = { flag = ["--exclude"], value = "required", repeated = true }
 options.all = { flag = ["--all"] }
 options.lib = { flag = ["--lib"] }
 options.bins = { flag = ["--bins"] }
-options.bin = { flag = ["--bin"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
+options.bin = { flag = ["--bin"], value = "optional-next", repeated = true }
 options.examples = { flag = ["--examples"] }
-options.example = { flag = ["--example"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
+options.example = { flag = ["--example"], value = "optional-next", repeated = true }
 options.tests = { flag = ["--tests"] }
-options.test = { flag = ["--test"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
+options.test = { flag = ["--test"], value = "optional-next", repeated = true }
 options.benches = { flag = ["--benches"] }
-options.bench = { flag = ["--bench"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
+options.bench = { flag = ["--bench"], value = "optional-next", repeated = true }
 options.all_targets = { flag = ["--all-targets"] }
 options.doc = { flag = ["--doc"] }
 options.features = { flag = ["-F", "--features"], value = "required", repeated = true }
@@ -172,7 +169,7 @@ options.no_default_features = { flag = ["--no-default-features"] }
 options.jobs = { flag = ["-j", "--jobs"], value = "required" }
 options.release = { flag = ["-r", "--release"] }
 options.profile = { flag = ["--profile"], value = "required" }
-options.target = { flag = ["--target"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
+options.target = { flag = ["--target"], value = "optional-next", repeated = true }
 options.target_dir = { flag = ["--target-dir"], value = "required" }
 options.timings = { flag = ["--timings"] }
 options.manifest_path = { flag = ["-m", "--manifest-path"], value = "required", adds = ["override_config"] }
@@ -186,26 +183,26 @@ adds  = ["network", "update_lockfile", "run_build_scripts", "execute_built_code"
 options.no_run = { flag = ["--no-run"], removes = ["execute_built_code"] }
 options.no_fail_fast = { flag = ["--no-fail-fast"] }
 options.message_format = { flag = ["--message-format"], value = "required", repeated = true }
-options.package = { flag = ["-p", "--package"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
+options.package = { flag = ["-p", "--package"], value = "optional-next", repeated = true }
 options.workspace = { flag = ["--workspace"] }
 options.exclude = { flag = ["--exclude"], value = "required", repeated = true }
 options.all = { flag = ["--all"] }
 options.lib = { flag = ["--lib"] }
 options.bins = { flag = ["--bins"] }
-options.bin = { flag = ["--bin"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
+options.bin = { flag = ["--bin"], value = "optional-next", repeated = true }
 options.examples = { flag = ["--examples"] }
-options.example = { flag = ["--example"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
+options.example = { flag = ["--example"], value = "optional-next", repeated = true }
 options.tests = { flag = ["--tests"] }
-options.test = { flag = ["--test"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
+options.test = { flag = ["--test"], value = "optional-next", repeated = true }
 options.benches = { flag = ["--benches"] }
-options.bench = { flag = ["--bench"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
+options.bench = { flag = ["--bench"], value = "optional-next", repeated = true }
 options.all_targets = { flag = ["--all-targets"] }
 options.features = { flag = ["-F", "--features"], value = "required", repeated = true }
 options.all_features = { flag = ["--all-features"] }
 options.no_default_features = { flag = ["--no-default-features"] }
 options.jobs = { flag = ["-j", "--jobs"], value = "required" }
 options.profile = { flag = ["--profile"], value = "required" }
-options.target = { flag = ["--target"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
+options.target = { flag = ["--target"], value = "optional-next", repeated = true }
 options.target_dir = { flag = ["--target-dir"], value = "required" }
 options.timings = { flag = ["--timings"] }
 options.manifest_path = { flag = ["-m", "--manifest-path"], value = "required", adds = ["override_config"] }
@@ -217,9 +214,9 @@ operands.args_list = {}
 usage = "cargo [global options] run [options] [<args_list>...]"
 adds  = ["network", "update_lockfile", "run_build_scripts", "execute_built_code"]
 options.message_format = { flag = ["--message-format"], value = "required", repeated = true }
-options.package = { flag = ["-p", "--package"], value = "required", when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
-options.bin = { flag = ["--bin"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
-options.example = { flag = ["--example"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
+options.package = { flag = ["-p", "--package"], value = "optional-next" }
+options.bin = { flag = ["--bin"], value = "optional-next", repeated = true }
+options.example = { flag = ["--example"], value = "optional-next", repeated = true }
 options.features = { flag = ["-F", "--features"], value = "required", repeated = true }
 options.all_features = { flag = ["--all-features"] }
 options.no_default_features = { flag = ["--no-default-features"] }
@@ -227,7 +224,7 @@ options.jobs = { flag = ["-j", "--jobs"], value = "required" }
 options.keep_going = { flag = ["--keep-going"] }
 options.release = { flag = ["-r", "--release"] }
 options.profile = { flag = ["--profile"], value = "required" }
-options.target = { flag = ["--target"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
+options.target = { flag = ["--target"], value = "optional-next", repeated = true }
 options.target_dir = { flag = ["--target-dir"], value = "required" }
 options.timings = { flag = ["--timings"] }
 options.manifest_path = { flag = ["-m", "--manifest-path"], value = "required", adds = ["override_config"] }
@@ -242,7 +239,7 @@ options.open = { flag = ["--open"], adds = ["open_browser"] }
 options.no_deps = { flag = ["--no-deps"] }
 options.document_private_items = { flag = ["--document-private-items"] }
 options.message_format = { flag = ["--message-format"], value = "required", repeated = true }
-options.package = { flag = ["-p", "--package"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
+options.package = { flag = ["-p", "--package"], value = "optional-next", repeated = true }
 options.workspace = { flag = ["--workspace"] }
 options.exclude = { flag = ["--exclude"], value = "required", repeated = true }
 options.all = { flag = ["--all"] }
@@ -251,14 +248,14 @@ options.all_features = { flag = ["--all-features"] }
 options.no_default_features = { flag = ["--no-default-features"] }
 options.lib = { flag = ["--lib"] }
 options.bins = { flag = ["--bins"] }
-options.bin = { flag = ["--bin"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
+options.bin = { flag = ["--bin"], value = "optional-next", repeated = true }
 options.examples = { flag = ["--examples"] }
-options.example = { flag = ["--example"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
+options.example = { flag = ["--example"], value = "optional-next", repeated = true }
 options.jobs = { flag = ["-j", "--jobs"], value = "required" }
 options.keep_going = { flag = ["--keep-going"] }
 options.release = { flag = ["-r", "--release"] }
 options.profile = { flag = ["--profile"], value = "required" }
-options.target = { flag = ["--target"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
+options.target = { flag = ["--target"], value = "optional-next", repeated = true }
 options.target_dir = { flag = ["--target-dir"], value = "required" }
 options.timings = { flag = ["--timings"] }
 options.manifest_path = { flag = ["-m", "--manifest-path"], value = "required", adds = ["override_config"] }
@@ -275,19 +272,19 @@ options.allow_staged = { flag = ["--allow-staged"] }
 options.allow_no_vcs = { flag = ["--allow-no-vcs"] }
 options.future_incompat_report = { flag = ["--future-incompat-report"] }
 options.message_format = { flag = ["--message-format"], value = "required", repeated = true, when = [{ like = "--fix", adds = ["write_source"] }] }
-options.package = { flag = ["-p", "--package"], value = "required", repeated = true, when = [{ like = "--fix", adds = ["write_source"] }, { like = "-*", adds = ["ambiguous_argv"] }] }
+options.package = { flag = ["-p", "--package"], value = "optional-next", repeated = true }
 options.workspace = { flag = ["--workspace"] }
 options.exclude = { flag = ["--exclude"], value = "required", repeated = true, when = [{ like = "--fix", adds = ["write_source"] }] }
 options.all = { flag = ["--all"] }
 options.lib = { flag = ["--lib"] }
 options.bins = { flag = ["--bins"] }
-options.bin = { flag = ["--bin"], value = "required", repeated = true, when = [{ like = "--fix", adds = ["write_source"] }, { like = "-*", adds = ["ambiguous_argv"] }] }
+options.bin = { flag = ["--bin"], value = "optional-next", repeated = true }
 options.examples = { flag = ["--examples"] }
-options.example = { flag = ["--example"], value = "required", repeated = true, when = [{ like = "--fix", adds = ["write_source"] }, { like = "-*", adds = ["ambiguous_argv"] }] }
+options.example = { flag = ["--example"], value = "optional-next", repeated = true }
 options.tests = { flag = ["--tests"] }
-options.test = { flag = ["--test"], value = "required", repeated = true, when = [{ like = "--fix", adds = ["write_source"] }, { like = "-*", adds = ["ambiguous_argv"] }] }
+options.test = { flag = ["--test"], value = "optional-next", repeated = true }
 options.benches = { flag = ["--benches"] }
-options.bench = { flag = ["--bench"], value = "required", repeated = true, when = [{ like = "--fix", adds = ["write_source"] }, { like = "-*", adds = ["ambiguous_argv"] }] }
+options.bench = { flag = ["--bench"], value = "optional-next", repeated = true }
 options.all_targets = { flag = ["--all-targets"] }
 options.features = { flag = ["-F", "--features"], value = "required", repeated = true, when = [{ like = "--fix", adds = ["write_source"] }] }
 options.all_features = { flag = ["--all-features"] }
@@ -296,7 +293,7 @@ options.release = { flag = ["-r", "--release"] }
 options.profile = { flag = ["--profile"], value = "required", when = [{ like = "--fix", adds = ["write_source"] }] }
 options.jobs = { flag = ["-j", "--jobs"], value = "required", when = [{ like = "--fix", adds = ["write_source"] }] }
 options.keep_going = { flag = ["--keep-going"] }
-options.target = { flag = ["--target"], value = "required", repeated = true, when = [{ like = "--fix", adds = ["write_source"] }, { like = "-*", adds = ["ambiguous_argv"] }] }
+options.target = { flag = ["--target"], value = "optional-next", repeated = true }
 options.target_dir = { flag = ["--target-dir"], value = "required", when = [{ like = "--fix", adds = ["write_source"] }] }
 options.timings = { flag = ["--timings"] }
 options.manifest_path = { flag = ["-m", "--manifest-path"], value = "required", adds = ["override_config"], when = [{ like = "--fix", adds = ["write_source"] }] }
@@ -330,11 +327,11 @@ usage = "cargo [global options] clean [options]"
 adds  = ["delete_files"]
 options.doc = { flag = ["--doc"] }
 options.dry_run = { flag = ["-n", "--dry-run"], removes = ["delete_files", "update_lockfile"] }
-options.package = { flag = ["-p", "--package"], value = "required", repeated = true, adds = ["network", "update_lockfile"], when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
+options.package = { flag = ["-p", "--package"], value = "optional-next", repeated = true, adds = ["network", "update_lockfile"] }
 options.workspace = { flag = ["--workspace"], adds = ["network", "update_lockfile"] }
 options.release = { flag = ["-r", "--release"] }
 options.profile = { flag = ["--profile"], value = "required" }
-options.target = { flag = ["--target"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
+options.target = { flag = ["--target"], value = "optional-next", repeated = true }
 options.target_dir = { flag = ["--target-dir"], value = "required" }
 options.manifest_path = { flag = ["-m", "--manifest-path"], value = "required", adds = ["override_config"] }
 
@@ -351,7 +348,7 @@ options.rename = { flag = ["--rename"], value = "required" }
 options.dry_run = { flag = ["-n", "--dry-run"], removes = ["edit_manifest", "update_lockfile"] }
 options.manifest_path = { flag = ["-m", "--manifest-path"], value = "required", adds = ["override_config"] }
 options.ignore_rust_version = { flag = ["--ignore-rust-version"] }
-options.package = { flag = ["-p", "--package"], value = "required", when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
+options.package = { flag = ["-p", "--package"], value = "optional-next" }
 options.path = { flag = ["--path"], value = "required" }
 options.git = { flag = ["--git"], value = "required" }
 options.branch = { flag = ["--branch"], value = "required" }
@@ -370,7 +367,7 @@ options.dry_run = { flag = ["-n", "--dry-run"], removes = ["edit_manifest", "upd
 options.dev = { flag = ["--dev"] }
 options.build = { flag = ["--build"] }
 options.target = { flag = ["--target"], value = "required" }
-options.package = { flag = ["-p", "--package"], value = "required", when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
+options.package = { flag = ["-p", "--package"], value = "optional-next" }
 options.manifest_path = { flag = ["-m", "--manifest-path"], value = "required", adds = ["override_config"] }
 
 # cargo update --help
@@ -388,7 +385,7 @@ options.ignore_rust_version = { flag = ["--ignore-rust-version"] }
 [shell.fetch]
 usage = "cargo [global options] fetch [options]"
 adds  = ["network", "update_lockfile"]
-options.target = { flag = ["--target"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
+options.target = { flag = ["--target"], value = "optional-next", repeated = true }
 options.manifest_path = { flag = ["-m", "--manifest-path"], value = "required", adds = ["override_config"] }
 
 # cargo tree --help
@@ -396,7 +393,7 @@ options.manifest_path = { flag = ["-m", "--manifest-path"], value = "required", 
 usage = "cargo [global options] tree [options]"
 adds  = ["network", "update_lockfile"]
 options.edges = { flag = ["-e", "--edges"], value = "required", repeated = true }
-options.invert = { flag = ["-i", "--invert"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
+options.invert = { flag = ["-i", "--invert"], value = "optional-next", repeated = true }
 options.prune = { flag = ["--prune"], value = "required", repeated = true }
 options.depth = { flag = ["--depth"], value = "required" }
 options.prefix = { flag = ["--prefix"], value = "required" }
@@ -404,13 +401,13 @@ options.no_dedupe = { flag = ["--no-dedupe"] }
 options.duplicates = { flag = ["-d", "--duplicates"] }
 options.charset = { flag = ["--charset"], value = "required" }
 options.format = { flag = ["-f", "--format"], value = "required" }
-options.package = { flag = ["-p", "--package"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
+options.package = { flag = ["-p", "--package"], value = "optional-next", repeated = true }
 options.workspace = { flag = ["--workspace"] }
 options.exclude = { flag = ["--exclude"], value = "required", repeated = true }
 options.features = { flag = ["-F", "--features"], value = "required", repeated = true }
 options.all_features = { flag = ["--all-features"] }
 options.no_default_features = { flag = ["--no-default-features"] }
-options.target = { flag = ["--target"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
+options.target = { flag = ["--target"], value = "optional-next", repeated = true }
 options.manifest_path = { flag = ["-m", "--manifest-path"], value = "required", adds = ["override_config"] }
 
 # cargo metadata --help
@@ -479,7 +476,9 @@ options.list = { flag = ["--list"], removes = ["install_binary", "network", "run
 options.message_format = { flag = ["--message-format"], value = "required", repeated = true }
 options.ignore_rust_version = { flag = ["--ignore-rust-version"] }
 options.bins = { flag = ["--bins"] }
+options.bin = { flag = ["--bin"], value = "optional-next", repeated = true }
 options.examples = { flag = ["--examples"] }
+options.example = { flag = ["--example"], value = "optional-next", repeated = true }
 options.features = { flag = ["-F", "--features"], value = "required", repeated = true }
 options.all_features = { flag = ["--all-features"] }
 options.no_default_features = { flag = ["--no-default-features"] }
@@ -487,7 +486,7 @@ options.jobs = { flag = ["-j", "--jobs"], value = "required" }
 options.keep_going = { flag = ["--keep-going"] }
 options.debug = { flag = ["--debug"] }
 options.profile = { flag = ["--profile"], value = "required" }
-options.target = { flag = ["--target"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
+options.target = { flag = ["--target"], value = "optional-next", repeated = true }
 options.target_dir = { flag = ["--target-dir"], value = "required" }
 options.timings = { flag = ["--timings"] }
 
@@ -496,7 +495,7 @@ options.timings = { flag = ["--timings"] }
 usage = "cargo [global options] uninstall [options] [<spec>...]"
 adds  = ["uninstall_binary"]
 options.root = { flag = ["--root"], value = "required" }
-options.package = { flag = ["-p", "--package"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
+options.package = { flag = ["-p", "--package"], value = "optional-next", repeated = true }
 options.bin = { flag = ["--bin"], value = "required", repeated = true }
 
 # cargo search --help
@@ -516,7 +515,7 @@ options.index = { flag = ["--index"], value = "required" }
 options.registry = { flag = ["--registry"], value = "required" }
 options.no_verify = { flag = ["--no-verify"], removes = ["run_build_scripts"] }
 options.allow_dirty = { flag = ["--allow-dirty"] }
-options.package = { flag = ["-p", "--package"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
+options.package = { flag = ["-p", "--package"], value = "optional-next", repeated = true }
 options.workspace = { flag = ["--workspace"] }
 options.exclude = { flag = ["--exclude"], value = "required", repeated = true }
 options.features = { flag = ["-F", "--features"], value = "required", repeated = true }
@@ -524,7 +523,7 @@ options.all_features = { flag = ["--all-features"] }
 options.no_default_features = { flag = ["--no-default-features"] }
 options.jobs = { flag = ["-j", "--jobs"], value = "required" }
 options.keep_going = { flag = ["--keep-going"] }
-options.target = { flag = ["--target"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
+options.target = { flag = ["--target"], value = "optional-next", repeated = true }
 options.target_dir = { flag = ["--target-dir"], value = "required" }
 options.manifest_path = { flag = ["-m", "--manifest-path"], value = "required", adds = ["override_config"] }
 
@@ -539,13 +538,13 @@ options.no_verify = { flag = ["--no-verify"], removes = ["run_build_scripts"] }
 options.no_metadata = { flag = ["--no-metadata"] }
 options.allow_dirty = { flag = ["--allow-dirty"] }
 options.exclude_lockfile = { flag = ["--exclude-lockfile"] }
-options.package = { flag = ["-p", "--package"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
+options.package = { flag = ["-p", "--package"], value = "optional-next", repeated = true }
 options.workspace = { flag = ["--workspace"] }
 options.exclude = { flag = ["--exclude"], value = "required", repeated = true }
 options.features = { flag = ["-F", "--features"], value = "required", repeated = true }
 options.all_features = { flag = ["--all-features"] }
 options.no_default_features = { flag = ["--no-default-features"] }
-options.target = { flag = ["--target"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
+options.target = { flag = ["--target"], value = "optional-next", repeated = true }
 options.target_dir = { flag = ["--target-dir"], value = "required" }
 options.jobs = { flag = ["-j", "--jobs"], value = "required" }
 options.keep_going = { flag = ["--keep-going"] }

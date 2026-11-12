@@ -964,13 +964,13 @@ fields = { instructions = "-h", type_or_query = "q" }
 effects = ["network", "spend_credits"]
 
 # Optional value: valyu takes the next word as the summary and fetches only b (or stdin URLs).
-# Amended by the author: the grammar cannot give an optional value the next word, so it reads a
-# as a URL and flags the bare --summary with option_like_value (see AUTHOR_NOTES).
+# commander gives the optional value the next word, so the first URL is the summary.
+# `--summary` is optional-next, so the grammar reads it the same way.
 [[case]]
 argv = ["valyu", "contents", "--summary", "https://a.example", "https://b.example"]
 action = "contents"
-fields = { summary = "", urls = ["https://a.example", "https://b.example"] }
-effects = ["network", "spend_credits", "option_like_value"]
+fields = { summary = "https://a.example", urls = ["https://b.example"] }
+effects = ["network", "spend_credits"]
 
 # Optional value attached and with `=`
 [[case]]
