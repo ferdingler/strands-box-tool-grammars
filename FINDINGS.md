@@ -229,6 +229,9 @@ A global option's `removes` applies to every action that takes global options, s
 remove `network` from `publish` too. **Workaround:** uv `publish` takes no global options, so these
 lines are `unmodeled`.
 
+**Box change:** strands-agents/box#433 adds the option key `overrides`. uv `publish` now takes the
+global options, and its own `--offline` overrides the global one and removes nothing.
+
 ### One field name, one type, across actions
 
 In gh, the `repo` field was a String in most actions and a Set in `search`. A rule over

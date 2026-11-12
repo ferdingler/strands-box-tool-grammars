@@ -234,12 +234,10 @@ action('build', f'{G} build [options] [<src>]',
    ('clear',         flag('["--clear"]', adds=L('delete_data'))),
   ] + idx() + RES_ALL + EXN + BLD + REF + PY)
 
-action('publish', 'uv publish [options] [<files>...]',
+action('publish', 'uv [global options] publish [options] [<files>...]',
   adds=['publish', 'network'],
   opts=[
-   ('quiet',              flag('["-q", "--quiet"]')),
-   ('verbose',            flag('["-v", "--verbose"]')),
-   ('no_progress',        flag('["--no-progress"]')),
+   ('offline',            flag('["--offline"]', overrides='true')),
    ('index',              flag('["--index"]', value='"required"', adds=L('override_index'))),
    ('username',           flag('["-u", "--username"]', value='"required"')),
    ('password',           flag('["-p", "--password"]', value='"required"', adds=L('credentials'))),
@@ -250,9 +248,9 @@ action('publish', 'uv publish [options] [<files>...]',
    ('dry_run',            flag('["--dry-run"]', removes=L('publish'))),
    ('no_attestations',    flag('["--no-attestations"]')),
   ],
-  comment='''`uv publish` has no `[global options]`: it declares a hidden `--offline` of its own that shadows the
-global one (uv 0.13.7, crates/uv-cli/src/lib.rs `PublishArgs::offline`), so a global `--offline` could not
-truthfully remove `network` here. A global option before or after `publish` is `unmodeled`.''')
+  comment='''`uv publish` declares a hidden `--offline` of its own that shadows the global one (uv 0.13.7,
+crates/uv-cli/src/lib.rs `PublishArgs::offline`), so a global `--offline` could not truthfully remove
+`network` here. Its own `offline` option takes the place of the global one (`overrides`), and removes nothing.''')
 
 action('version', f'{G} version [options] [<value>]',
   adds=['read_only'],

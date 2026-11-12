@@ -421,7 +421,7 @@ effects = ["build_code"]
 argv = ["uv", "build", "--list"]
 action = "unmodeled"
 
-# ---------------------------------------------------------------- publish (no global options)
+# ---------------------------------------------------------------- publish
 [[case]]
 argv = ["uv", "publish"]
 action = "publish"
@@ -453,15 +453,34 @@ action = "publish"
 fields = { publish_url = "https://test.pypi.org/legacy/", quiet = true }
 effects = ["network", "override_index", "publish"]
 
-# `uv publish` shadows the global `--offline` with a hidden one (source `PublishArgs::offline`), so it
-# and any global option before `publish` are unmodeled.
+# FINDINGS.md: `uv publish` shadows the global `--offline` with a hidden one (source
+# `PublishArgs::offline`). Its own `offline` option overrides the global one, so it does not remove
+# network, before or after `publish`.
 [[case]]
 argv = ["uv", "publish", "--offline"]
-action = "unmodeled"
+action = "publish"
+fields = { offline = true }
+effects = ["network", "publish"]
 
 [[case]]
 argv = ["uv", "--offline", "publish"]
-action = "unmodeled"
+action = "publish"
+fields = { offline = true }
+effects = ["network", "publish"]
+
+# The other global options apply to publish now.
+[[case]]
+argv = ["uv", "--directory", "/srv/pkg", "publish", "--no-progress"]
+action = "publish"
+fields = { directory = "/srv/pkg", no_progress = true }
+effects = ["network", "other_directory", "publish"]
+
+# The global --offline still removes network on an action that does not override it.
+[[case]]
+argv = ["uv", "--offline", "lock"]
+action = "lock"
+fields = { offline = true }
+effects = ["build_code", "modify_project"]
 
 [[case]]
 argv = ["uv", "publish", "--keyring-provider", "subprocess"]
@@ -1168,14 +1187,19 @@ action = "publish"
 fields = { dry_run = true, publish_url = "https://u:p@upload.example/legacy/" }
 effects = ["credentials", "network", "override_index"]
 
-# publish: the hidden local `--offline` (PublishArgs::offline) and any global option are unmodeled.
+# publish: the hidden local `--offline` (PublishArgs::offline) overrides the global one and keeps
+# network; the other global options apply.
 [[case]]
 argv = ["uv", "publish", "--offline"]
-action = "unmodeled"
+action = "publish"
+fields = { offline = true }
+effects = ["network", "publish"]
 
 [[case]]
 argv = ["uv", "--directory", "pkg", "publish"]
-action = "unmodeled"
+action = "publish"
+fields = { directory = "pkg" }
+effects = ["network", "other_directory", "publish"]
 
 # publish: --trusted-publishing takes a value (enum).
 [[case]]
