@@ -1547,10 +1547,12 @@ action = "config_unset"
 fields = { name = "core.pager" }
 effects = ["override_config", "run_program", "skip_hooks"]
 
-# Git reads `set user.name --global` as the value "--global"; here the value is missing.
+# Git reads `set user.name --global` as the value "--global", and so does `options_first`.
 [[case]]
 argv = ["git", "config", "set", "user.name", "--global"]
-action = "unmodeled"
+action = "config_set"
+fields = { name = "user.name", value = "--global" }
+effects = ["override_config", "run_program", "skip_hooks"]
 
 # `config edit` has no action of its own, so the older form reads `edit` as a name. Git opens an
 # editor on the configuration file, which is a write, and the operand adds override_config.
@@ -1595,12 +1597,23 @@ fields = { global = true, name = "core.sshCommand", value = "ssh -i key" }
 effects = ["override_config", "run_program", "skip_hooks"]
 
 # In git, `config user.name --global` writes "--global" as the value (options stop at the first
-# operand). Any operand adds override_config, so this is never read as a read.
+# operand). `options_first` reads it the same way, and the value adds override_config.
 [[case]]
 argv = ["git", "config", "user.name", "--global"]
 action = "config"
-fields = { global = true, name = "user.name" }
+fields = { name = "user.name", value = "--global" }
 effects = ["override_config", "run_program", "skip_hooks"]
+
+# A name alone reads.
+[[case]]
+argv = ["git", "config", "user.name"]
+action = "config"
+fields = { name = "user.name" }
+
+[[case]]
+argv = ["git", "config", "--global", "user.name"]
+action = "config"
+fields = { global = true, name = "user.name" }
 
 [[case]]
 argv = ["git", "config", "--unset", "core.pager"]
@@ -1717,13 +1730,12 @@ fields = { branch = "main", merge = true }
 argv = ["git", "stash", "-p", "src"]
 action = "unmodeled"
 
-# Older `config`: `--get <name> <value-pattern>` reads in git; here the second word is an operand,
-# which adds override_config.
+# Older `config`: `--get <name> <value-pattern>` reads in git; here the second word is the
+# `<name>` operand, and a name alone reads.
 [[case]]
 argv = ["git", "config", "--get", "remote.origin.url", "github"]
 action = "config"
 fields = { get = "remote.origin.url", name = "github" }
-effects = ["override_config", "run_program", "skip_hooks"]
 
 # revision.c reads `--format` only with `=`; a bare `--format` gets the empty value here, and
 # the next word is a revision. Git refuses the line.
@@ -1997,7 +2009,7 @@ action = "unmodeled"
 [[case]]
 argv = ["git", "config", "core.hooksPath", "--global"]
 action = "config"
-fields = { name = "core.hooksPath", global = true }
+fields = { name = "core.hooksPath", value = "--global" }
 effects = ["override_config", "run_program", "skip_hooks"]
 
 # old config form: --get with a value pattern is a read; the grammar holds the pattern as <name>.
