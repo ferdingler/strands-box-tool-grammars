@@ -93,16 +93,18 @@ action = "unmodeled"
 argv = ["supabase", "status", "--no-debug"]
 action = "unmodeled"
 
-# `--yes=false` is a value on a flag the grammar reads as a plain flag, so unmodeled
+# `--yes=false` is a boolean flag set to false, so the CLI prompts
 [[case]]
 argv = ["supabase", "db", "push", "--yes=false"]
-action = "unmodeled"
+action = "db_push"
+effects = ["write_local_db"]
 
 # A boolean flag followed by a boolean literal: the CLI reads `false` as the flag's value
-# (parser.js consumeFlagValueWithTokens); with no operand slot the word is left over
+# (parser.js consumeFlagValueWithTokens), and so does the grammar
 [[case]]
 argv = ["supabase", "db", "push", "--yes", "false"]
-action = "unmodeled"
+action = "db_push"
+effects = ["write_local_db"]
 
 # ================================================================ init, start, stop, status
 
@@ -371,10 +373,11 @@ action = "unmodeled"
 argv = ["supabase", "db", "push", "--local"]
 action = "unmodeled"
 
-# `--dry-run false` makes the CLI apply the migrations; the word is left over here
+# `--dry-run false` makes the CLI apply the migrations, and the grammar reads it the same way
 [[case]]
 argv = ["supabase", "db", "push", "--dry-run", "false"]
-action = "unmodeled"
+action = "db_push"
+effects = ["write_local_db"]
 
 # `--remote true` is the linked project to the CLI; here the word `true` is left over
 [[case]]
@@ -689,13 +692,12 @@ action = "secrets_unset"
 fields = { names = ["MY_SECRET", "OTHER_SECRET"] }
 effects = ["remote", "write_secret"]
 
-# A boolean literal after a boolean flag is read here as an operand. The CLI reads it as the flag's
-# value (a real unset of every secret), so the literal operand adds ambiguous_argv and all_targets
+# A boolean literal after a boolean flag is its value: a real unset of every secret
 [[case]]
 argv = ["supabase", "secrets", "unset", "--dry-run", "false", "--all"]
 action = "secrets_unset"
-fields = { dry_run = true, names = ["false"], all = true }
-effects = ["remote", "write_secret", "ambiguous_argv", "all_targets"]
+fields = { all = true }
+effects = ["remote", "write_secret"]
 
 [[case]]
 argv = ["supabase", "secrets", "get"]
@@ -1015,19 +1017,18 @@ action = "gen_types"
 fields = { remote = "", language = "Postgres://u@db.example.com/postgres" }
 effects = ["remote", "clear_network_bans", "ambiguous_argv"]
 
-# `--debug false` on storage rm: the CLI sees no path, which with -r clears every bucket
+# `--debug false` on storage rm: the CLI sees no path, which with -r clears every bucket.
+# The grammar reads it as a bare `storage rm -r`.
 [[case]]
 argv = ["supabase", "storage", "rm", "-r", "--debug", "false"]
 action = "storage_rm"
-fields = { recursive = true, debug = true, file = ["false"] }
-effects = ["delete_storage", "ambiguous_argv", "all_targets"]
+fields = { recursive = true }
+effects = ["delete_storage"]
 
-# A literal on an action where an empty operand is not "all" adds only ambiguous_argv
+# The CLI reads `n` as false. The grammar takes only `true` and `false`, so it does not guess
 [[case]]
 argv = ["supabase", "functions", "delete", "--debug", "n"]
-action = "functions_delete"
-fields = { debug = true, function_name = "n" }
-effects = ["remote", "delete_remote_data", "ambiguous_argv"]
+action = "unmodeled"
 
 # `--remote` accepts a true-literal in any case (LINKED_LITERAL is /i)
 [[case]]
@@ -1064,11 +1065,14 @@ action = "unmodeled"
 # asBooleanLiteral). `--dry-run false` pushes for real. Must not read as a dry run.
 [[case]]
 argv = ["supabase", "db", "push", "--remote", "--dry-run", "false"]
-action = "unmodeled"
+action = "db_push"
+fields = { remote = "" }
+effects = ["clear_network_bans", "remote", "write_remote_db"]
 
 [[case]]
 argv = ["supabase", "db", "push", "--dry-run=false"]
-action = "unmodeled"
+action = "db_push"
+effects = ["write_local_db"]
 
 # CLI: the automatic negation of a boolean flag (parser.ts negatedName).
 [[case]]
@@ -1193,22 +1197,25 @@ effects = ["remote", "write_remote_db", "clear_network_bans", "ambiguous_argv"]
 # CLI: `--debug false` sets debug to false and consumes `false`; with no function name,
 # functions deploy deploys EVERY function in supabase/functions/ (deploy.command.ts
 # "Deploys all if omitted"). The grammar must not read this as a deploy of a function named "false".
-# [author] The CLI reading cannot be expressed (see AUTHOR_NOTES.md); this pins the mitigation:
-# the literal operand adds ambiguous_argv and all_targets.
+# effect/cli reads `false` as the value of `--debug` and deploys every function. `--debug` is
+# boolean, so the grammar reads it the same way: no function name, and debug is false.
 [[case]]
 argv = ["supabase", "functions", "deploy", "--debug", "false"]
 action = "functions_deploy"
-fields = { debug = true, function_name = ["false"] }
-effects = ["remote", "deploy_remote", "ambiguous_argv", "all_targets"]
+effects = ["remote", "deploy_remote"]
+
+# effect/cli reads `no` as false too. The grammar reads only `true` and `false`, so it does not guess.
+[[case]]
+argv = ["supabase", "functions", "deploy", "--debug", "no"]
+action = "unmodeled"
 
 # CLI: same, through a command boolean; deploys every function with JWT checks off.
-# [author] The CLI reading cannot be expressed (see AUTHOR_NOTES.md); this pins the mitigation:
-# the literal operand adds ambiguous_argv and all_targets.
+# The grammar reads `true` as the value of the boolean flag, as the CLI does.
 [[case]]
 argv = ["supabase", "functions", "deploy", "--no-verify-jwt", "true", "--yes"]
 action = "functions_deploy"
-fields = { no_verify_jwt = true, yes = true, function_name = ["true"] }
-effects = ["remote", "deploy_remote", "skip_confirmation", "ambiguous_argv", "all_targets"]
+fields = { no_verify_jwt = true, yes = true }
+effects = ["deploy_remote", "remote", "skip_confirmation"]
 
 # CLI: `--remote yes` is the linked project (LINKED_LITERAL, joined). With -r and no path,
 # storage rm clears and deletes EVERY bucket of the hosted project (rm SIDE_EFFECTS.md).
@@ -1349,19 +1356,18 @@ fields = { remote = "", names = ["oN"] }
 effects = ["remote", "write_secret", "ambiguous_argv", "all_targets"]
 
 # CLI: a short boolean takes a literal too. `-r true` is recursive with no paths: every bucket.
+# The grammar reads it as a bare `storage rm -r`.
 [[case]]
 argv = ["supabase", "storage", "rm", "-r", "true", "--remote"]
 action = "storage_rm"
-fields = { recursive = true, remote = "", file = ["true"] }
-effects = ["delete_storage", "remote", "ambiguous_argv", "all_targets"]
+fields = { recursive = true, remote = "" }
+effects = ["delete_storage", "remote"]
 
 # CLI: effect/cli literals are exact lowercase, so `--debug TRUE` leaves TRUE as the operand.
-# The grammar still flags it, which is the safe direction.
+# The grammar refuses to guess, which is the safe direction.
 [[case]]
 argv = ["supabase", "functions", "deploy", "--debug", "TRUE"]
-action = "functions_deploy"
-fields = { debug = true, function_name = ["TRUE"] }
-effects = ["remote", "deploy_remote", "ambiguous_argv", "all_targets"]
+action = "unmodeled"
 
 # CLI: DB_URL_PATTERN is /^postgres(ql)?:\/\//i, so an uppercase or mixed-case scheme is joined too.
 [[case]]

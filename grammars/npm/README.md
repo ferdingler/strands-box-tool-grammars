@@ -151,12 +151,14 @@ These are `unmodeled`, so a policy refuses them unless it permits `unmodeled`:
 - **`~/.npm-init.js`.** A bare `npm init` runs the `init-module` file (default `~/.npm-init.js`,
   settable in `.npmrc`) as code. The grammar does not see it.
 - **`npx` is a different program** and is not bound by this grammar.
-- **`true`/`false` after a boolean flag.** npm takes `--ignore-scripts false` as "ignore-scripts is
-  false". The grammar reads `false` as an operand, so each operand that could hold it adds
-  `ambiguous_argv` when it is exactly `true` or `false`.
-- **A value that starts with `-`.** npm gives a string option the empty value when the next word
+- **A word after a boolean flag.** npm takes `--ignore-scripts false` as "ignore-scripts is
+  false". Each flag is `value = "boolean"`, so the grammar reads `true` and `false` the same way.
+  A following `yes`, `no`, `1`, `0`, or another casing of `true` or `false` is `unmodeled`, though
+  npm reads it as an operand.
+- **A value that starts with `-`.** npm gives a String option the empty value when the next word
   looks like a flag, and reads that word as a flag (`--tag --access=public` publishes publicly).
-  Each value option adds `ambiguous_argv` when its value starts with `-`.
+  `--tag` is `value = "optional-next"`, so the grammar reads that line the same way. Each other
+  value option adds `ambiguous_argv` when its value starts with `-`.
 - **Over-statement.** `pack <spec>` adds `network` also for a local folder; `init <initializer>`
   adds `modify_package_json` though the initializer, not npm, writes it; `init --workspace` and
   `version --workspace` add the reify effects (`network`, `modify_node_modules`, and for init

@@ -28,10 +28,16 @@
 #
 # How npm's option parser (nopt) differs, and what this grammar does about it:
 # - A boolean flag followed by the word `true` or `false` takes that word as its value
-#   (`--ignore-scripts false` means "run scripts"). Each operand that could receive such a word
-#   adds `ambiguous_argv` when its value is exactly `true` or `false`.
-# - A string option whose next word starts with `-` gets the empty value, and npm reads that next
-#   word as a flag. Each option with a value adds `ambiguous_argv` when its value starts with `-`.
+#   (`--ignore-scripts false` means "run scripts"). Each flag is `value = "boolean"`, so the grammar
+#   reads the word the same way, and `--x false` neither adds nor removes the flag's effects. A
+#   following `yes`, `no`, `1`, `0`, or another casing of `true` or `false` is `unmodeled`.
+# - A String option (`--tag`) whose next word looks like a flag gets the empty value, and npm reads
+#   that next word as a flag. `--tag` is `value = "optional-next"`, which reads it the same way. nopt
+#   also splits an attached `--tag=-x` and reads `-x` as a flag, so a value like `-*` still adds
+#   `ambiguous_argv`.
+# - Other options with a value keep `value = "required"`, because nopt's rule for a next word that
+#   starts with `-` depends on the option's type. Each adds `ambiguous_argv` when its value starts
+#   with `-`.
 # - Single-letter options that take a value (`-w`, `-C`, `-c`, `-L`) are not modeled, because npm
 #   expands `-wg` into `--workspace --global` and this parser would read it as `-w g`. Use the
 #   long spelling.
@@ -58,7 +64,7 @@ make_public            = "Publishes with public access"
 git_commit             = "Creates a git commit and a git tag"
 force                  = "Overrides one of npm's safety checks (--force)"
 delete_cache           = "Deletes entries from the npm cache"
-ambiguous_argv         = "Holds a word that npm reads differently from this grammar: a value that starts with '-', or a bare true/false after a boolean flag"
+ambiguous_argv         = "Holds a word that npm reads differently from this grammar: a value that starts with '-'"
 
 # npm accepts each configuration flag before or after the command, so the global options are
 # `anywhere`.
@@ -68,8 +74,8 @@ options.userconfig   = { flag = ["--userconfig"], value = "required", anywhere =
 options.globalconfig = { flag = ["--globalconfig"], value = "required", anywhere = true, adds = ["override_config"], when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
 options.prefix       = { flag = ["--prefix"], value = "required", anywhere = true, adds = ["override_prefix"], when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
 options.loglevel     = { flag = ["--loglevel"], value = "required", anywhere = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
-options.silent       = { flag = ["-s", "--silent"], anywhere = true }
-options.quiet        = { flag = ["-q", "--quiet"], anywhere = true }
+options.silent       = { flag = ["-s", "--silent"], value = "boolean", anywhere = true }
+options.quiet        = { flag = ["-q", "--quiet"], value = "boolean", anywhere = true }
 
 # ---------------------------------------------------------------------------------------------
 # Installing and changing the dependency tree
@@ -82,44 +88,44 @@ options.quiet        = { flag = ["-q", "--quiet"], anywhere = true }
 usage   = "npm [global options] install [options] [<package_spec>...]"
 aliases = ["add", "i", "in", "ins", "inst", "insta", "instal", "isnt", "isnta", "isntal", "isntall"]
 adds    = ["network", "modify_node_modules", "modify_lockfile", "run_lifecycle_scripts"]
-options.save                          = { flag = ["-S", "--save"] }
-options.no_save                       = { flag = ["--no-save"], removes = ["modify_package_json", "modify_lockfile"] }
-options.save_prod                     = { flag = ["-P", "--save-prod"] }
-options.save_dev                      = { flag = ["-D", "--save-dev"] }
-options.save_optional                 = { flag = ["-O", "--save-optional"] }
-options.save_peer                     = { flag = ["--save-peer"] }
-options.save_bundle                   = { flag = ["-B", "--save-bundle"] }
-options.save_exact                    = { flag = ["-E", "--save-exact"] }
-options.global                        = { flag = ["-g", "--global"], adds = ["global_install"], removes = ["modify_lockfile", "modify_package_json"] }
+options.save                          = { flag = ["-S", "--save"], value = "boolean" }
+options.no_save                       = { flag = ["--no-save"], value = "boolean", removes = ["modify_package_json", "modify_lockfile"] }
+options.save_prod                     = { flag = ["-P", "--save-prod"], value = "boolean" }
+options.save_dev                      = { flag = ["-D", "--save-dev"], value = "boolean" }
+options.save_optional                 = { flag = ["-O", "--save-optional"], value = "boolean" }
+options.save_peer                     = { flag = ["--save-peer"], value = "boolean" }
+options.save_bundle                   = { flag = ["-B", "--save-bundle"], value = "boolean" }
+options.save_exact                    = { flag = ["-E", "--save-exact"], value = "boolean" }
+options.global                        = { flag = ["-g", "--global"], value = "boolean", adds = ["global_install"], removes = ["modify_lockfile", "modify_package_json"] }
 options.install_strategy              = { flag = ["--install-strategy"], value = "required", when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
-options.legacy_bundling               = { flag = ["--legacy-bundling"] }
-options.global_style                  = { flag = ["--global-style"] }
+options.legacy_bundling               = { flag = ["--legacy-bundling"], value = "boolean" }
+options.global_style                  = { flag = ["--global-style"], value = "boolean" }
 options.omit                          = { flag = ["--omit"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
 options.include                       = { flag = ["--include"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
-options.strict_peer_deps              = { flag = ["--strict-peer-deps"] }
-options.legacy_peer_deps              = { flag = ["--legacy-peer-deps"] }
-options.prefer_dedupe                 = { flag = ["--prefer-dedupe"] }
-options.no_package_lock               = { flag = ["--no-package-lock"], removes = ["modify_lockfile"] }
-options.package_lock_only             = { flag = ["--package-lock-only"], removes = ["modify_node_modules"] }
-options.foreground_scripts            = { flag = ["--foreground-scripts"] }
-options.ignore_scripts                = { flag = ["--ignore-scripts"], removes = ["run_lifecycle_scripts"] }
+options.strict_peer_deps              = { flag = ["--strict-peer-deps"], value = "boolean" }
+options.legacy_peer_deps              = { flag = ["--legacy-peer-deps"], value = "boolean" }
+options.prefer_dedupe                 = { flag = ["--prefer-dedupe"], value = "boolean" }
+options.no_package_lock               = { flag = ["--no-package-lock"], value = "boolean", removes = ["modify_lockfile"] }
+options.package_lock_only             = { flag = ["--package-lock-only"], value = "boolean", removes = ["modify_node_modules"] }
+options.foreground_scripts            = { flag = ["--foreground-scripts"], value = "boolean" }
+options.ignore_scripts                = { flag = ["--ignore-scripts"], value = "boolean", removes = ["run_lifecycle_scripts"] }
 options.allow_scripts                 = { flag = ["--allow-scripts"], value = "required", repeated = true, adds = ["bypass_script_policy"], when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
-options.strict_allow_scripts          = { flag = ["--strict-allow-scripts"] }
-options.dangerously_allow_all_scripts = { flag = ["--dangerously-allow-all-scripts"], adds = ["bypass_script_policy"] }
-options.no_audit                      = { flag = ["--no-audit"] }
-options.no_fund                       = { flag = ["--no-fund"] }
-options.no_bin_links                  = { flag = ["--no-bin-links"] }
+options.strict_allow_scripts          = { flag = ["--strict-allow-scripts"], value = "boolean" }
+options.dangerously_allow_all_scripts = { flag = ["--dangerously-allow-all-scripts"], value = "boolean", adds = ["bypass_script_policy"] }
+options.no_audit                      = { flag = ["--no-audit"], value = "boolean" }
+options.no_fund                       = { flag = ["--no-fund"], value = "boolean" }
+options.no_bin_links                  = { flag = ["--no-bin-links"], value = "boolean" }
 options.before                        = { flag = ["--before"], value = "required", when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
 options.min_release_age               = { flag = ["--min-release-age"], value = "required", when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
-options.dry_run                       = { flag = ["--dry-run"], removes = ["modify_node_modules", "modify_lockfile", "modify_package_json"] }
-options.force                         = { flag = ["-f", "--force"], adds = ["force"] }
-options.offline                       = { flag = ["--offline"], removes = ["network"] }
-options.prefer_offline                = { flag = ["--prefer-offline"] }
+options.dry_run                       = { flag = ["--dry-run"], value = "boolean", removes = ["modify_node_modules", "modify_lockfile", "modify_package_json"] }
+options.force                         = { flag = ["-f", "--force"], value = "boolean", adds = ["force"] }
+options.offline                       = { flag = ["--offline"], value = "boolean", removes = ["network"] }
+options.prefer_offline                = { flag = ["--prefer-offline"], value = "boolean" }
 options.workspace                     = { flag = ["--workspace"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
-options.workspaces                    = { flag = ["--workspaces"] }
-options.include_workspace_root        = { flag = ["--include-workspace-root"] }
-options.install_links                 = { flag = ["--install-links"] }
-operands.package_spec = { adds = ["modify_package_json"], when = [{ like = "true", adds = ["ambiguous_argv"] }, { like = "false", adds = ["ambiguous_argv"] }] }
+options.workspaces                    = { flag = ["--workspaces"], value = "boolean" }
+options.include_workspace_root        = { flag = ["--include-workspace-root"], value = "boolean" }
+options.install_links                 = { flag = ["--install-links"], value = "boolean" }
+operands.package_spec = { adds = ["modify_package_json"] }
 
 # `npm ci` never writes package.json or the lockfile (`save: false`). It runs the root lifecycle
 # scripts even with --dry-run (lib/commands/ci.js checks only ignore-scripts).
@@ -128,27 +134,27 @@ usage   = "npm [global options] ci [options]"
 aliases = ["clean-install", "ic", "install-clean", "isntall-clean"]
 adds    = ["network", "modify_node_modules", "run_lifecycle_scripts"]
 options.install_strategy              = { flag = ["--install-strategy"], value = "required", when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
-options.legacy_bundling               = { flag = ["--legacy-bundling"] }
-options.global_style                  = { flag = ["--global-style"] }
+options.legacy_bundling               = { flag = ["--legacy-bundling"], value = "boolean" }
+options.global_style                  = { flag = ["--global-style"], value = "boolean" }
 options.omit                          = { flag = ["--omit"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
 options.include                       = { flag = ["--include"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
-options.strict_peer_deps              = { flag = ["--strict-peer-deps"] }
-options.legacy_peer_deps              = { flag = ["--legacy-peer-deps"] }
-options.foreground_scripts            = { flag = ["--foreground-scripts"] }
-options.ignore_scripts                = { flag = ["--ignore-scripts"], removes = ["run_lifecycle_scripts"] }
+options.strict_peer_deps              = { flag = ["--strict-peer-deps"], value = "boolean" }
+options.legacy_peer_deps              = { flag = ["--legacy-peer-deps"], value = "boolean" }
+options.foreground_scripts            = { flag = ["--foreground-scripts"], value = "boolean" }
+options.ignore_scripts                = { flag = ["--ignore-scripts"], value = "boolean", removes = ["run_lifecycle_scripts"] }
 options.allow_scripts                 = { flag = ["--allow-scripts"], value = "required", repeated = true, adds = ["bypass_script_policy"], when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
-options.strict_allow_scripts          = { flag = ["--strict-allow-scripts"] }
-options.dangerously_allow_all_scripts = { flag = ["--dangerously-allow-all-scripts"], adds = ["bypass_script_policy"] }
-options.no_audit                      = { flag = ["--no-audit"] }
-options.no_fund                       = { flag = ["--no-fund"] }
-options.no_bin_links                  = { flag = ["--no-bin-links"] }
-options.dry_run                       = { flag = ["--dry-run"], removes = ["modify_node_modules"] }
-options.offline                       = { flag = ["--offline"], removes = ["network"] }
-options.prefer_offline                = { flag = ["--prefer-offline"] }
+options.strict_allow_scripts          = { flag = ["--strict-allow-scripts"], value = "boolean" }
+options.dangerously_allow_all_scripts = { flag = ["--dangerously-allow-all-scripts"], value = "boolean", adds = ["bypass_script_policy"] }
+options.no_audit                      = { flag = ["--no-audit"], value = "boolean" }
+options.no_fund                       = { flag = ["--no-fund"], value = "boolean" }
+options.no_bin_links                  = { flag = ["--no-bin-links"], value = "boolean" }
+options.dry_run                       = { flag = ["--dry-run"], value = "boolean", removes = ["modify_node_modules"] }
+options.offline                       = { flag = ["--offline"], value = "boolean", removes = ["network"] }
+options.prefer_offline                = { flag = ["--prefer-offline"], value = "boolean" }
 options.workspace                     = { flag = ["--workspace"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
-options.workspaces                    = { flag = ["--workspaces"] }
-options.include_workspace_root        = { flag = ["--include-workspace-root"] }
-options.install_links                 = { flag = ["--install-links"] }
+options.workspaces                    = { flag = ["--workspaces"], value = "boolean" }
+options.include_workspace_root        = { flag = ["--include-workspace-root"], value = "boolean" }
+options.install_links                 = { flag = ["--install-links"], value = "boolean" }
 
 # Uninstall saves to package.json and the lockfile by default. Arborist runs the root
 # `dependencies` script when the tree changes, and submits an audit report (network).
@@ -156,19 +162,19 @@ options.install_links                 = { flag = ["--install-links"] }
 usage   = "npm [global options] uninstall [options] <pkg>..."
 aliases = ["unlink", "remove", "rm", "r", "un"]
 adds    = ["network", "modify_node_modules", "modify_lockfile", "modify_package_json", "run_lifecycle_scripts"]
-options.save                   = { flag = ["-S", "--save"] }
-options.no_save                = { flag = ["--no-save"], removes = ["modify_package_json", "modify_lockfile"] }
-options.save_prod              = { flag = ["-P", "--save-prod"] }
-options.save_dev               = { flag = ["-D", "--save-dev"] }
-options.save_optional          = { flag = ["-O", "--save-optional"] }
-options.save_peer              = { flag = ["--save-peer"] }
-options.save_bundle            = { flag = ["-B", "--save-bundle"] }
-options.global                 = { flag = ["-g", "--global"], adds = ["global_install"], removes = ["modify_lockfile", "modify_package_json"] }
+options.save                   = { flag = ["-S", "--save"], value = "boolean" }
+options.no_save                = { flag = ["--no-save"], value = "boolean", removes = ["modify_package_json", "modify_lockfile"] }
+options.save_prod              = { flag = ["-P", "--save-prod"], value = "boolean" }
+options.save_dev               = { flag = ["-D", "--save-dev"], value = "boolean" }
+options.save_optional          = { flag = ["-O", "--save-optional"], value = "boolean" }
+options.save_peer              = { flag = ["--save-peer"], value = "boolean" }
+options.save_bundle            = { flag = ["-B", "--save-bundle"], value = "boolean" }
+options.global                 = { flag = ["-g", "--global"], value = "boolean", adds = ["global_install"], removes = ["modify_lockfile", "modify_package_json"] }
 options.workspace              = { flag = ["--workspace"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
-options.workspaces             = { flag = ["--workspaces"] }
-options.include_workspace_root = { flag = ["--include-workspace-root"] }
-options.install_links          = { flag = ["--install-links"] }
-operands.pkg = { when = [{ like = "true", adds = ["ambiguous_argv"] }, { like = "false", adds = ["ambiguous_argv"] }] }
+options.workspaces             = { flag = ["--workspaces"], value = "boolean" }
+options.include_workspace_root = { flag = ["--include-workspace-root"], value = "boolean" }
+options.install_links          = { flag = ["--install-links"], value = "boolean" }
+operands.pkg = {}
 
 # `npm update` writes the lockfile but not package.json unless --save (arborist reify.js
 # `_saveIdealTree` keeps saving for updates).
@@ -176,69 +182,69 @@ operands.pkg = { when = [{ like = "true", adds = ["ambiguous_argv"] }, { like = 
 usage   = "npm [global options] update [options] [<pkg>...]"
 aliases = ["u", "up", "upgrade", "udpate"]
 adds    = ["network", "modify_node_modules", "modify_lockfile", "run_lifecycle_scripts"]
-options.save                          = { flag = ["-S", "--save"], adds = ["modify_package_json"] }
-options.no_save                       = { flag = ["--no-save"] }
-options.global                        = { flag = ["-g", "--global"], adds = ["global_install"], removes = ["modify_lockfile", "modify_package_json"] }
+options.save                          = { flag = ["-S", "--save"], value = "boolean", adds = ["modify_package_json"] }
+options.no_save                       = { flag = ["--no-save"], value = "boolean" }
+options.global                        = { flag = ["-g", "--global"], value = "boolean", adds = ["global_install"], removes = ["modify_lockfile", "modify_package_json"] }
 options.install_strategy              = { flag = ["--install-strategy"], value = "required", when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
-options.legacy_bundling               = { flag = ["--legacy-bundling"] }
-options.global_style                  = { flag = ["--global-style"] }
+options.legacy_bundling               = { flag = ["--legacy-bundling"], value = "boolean" }
+options.global_style                  = { flag = ["--global-style"], value = "boolean" }
 options.omit                          = { flag = ["--omit"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
 options.include                       = { flag = ["--include"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
-options.strict_peer_deps              = { flag = ["--strict-peer-deps"] }
-options.legacy_peer_deps              = { flag = ["--legacy-peer-deps"] }
-options.no_package_lock               = { flag = ["--no-package-lock"], removes = ["modify_lockfile"] }
-options.foreground_scripts            = { flag = ["--foreground-scripts"] }
-options.ignore_scripts                = { flag = ["--ignore-scripts"], removes = ["run_lifecycle_scripts"] }
+options.strict_peer_deps              = { flag = ["--strict-peer-deps"], value = "boolean" }
+options.legacy_peer_deps              = { flag = ["--legacy-peer-deps"], value = "boolean" }
+options.no_package_lock               = { flag = ["--no-package-lock"], value = "boolean", removes = ["modify_lockfile"] }
+options.foreground_scripts            = { flag = ["--foreground-scripts"], value = "boolean" }
+options.ignore_scripts                = { flag = ["--ignore-scripts"], value = "boolean", removes = ["run_lifecycle_scripts"] }
 options.allow_scripts                 = { flag = ["--allow-scripts"], value = "required", repeated = true, adds = ["bypass_script_policy"], when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
-options.strict_allow_scripts          = { flag = ["--strict-allow-scripts"] }
-options.dangerously_allow_all_scripts = { flag = ["--dangerously-allow-all-scripts"], adds = ["bypass_script_policy"] }
-options.no_audit                      = { flag = ["--no-audit"] }
+options.strict_allow_scripts          = { flag = ["--strict-allow-scripts"], value = "boolean" }
+options.dangerously_allow_all_scripts = { flag = ["--dangerously-allow-all-scripts"], value = "boolean", adds = ["bypass_script_policy"] }
+options.no_audit                      = { flag = ["--no-audit"], value = "boolean" }
 options.before                        = { flag = ["--before"], value = "required", when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
 options.min_release_age               = { flag = ["--min-release-age"], value = "required", when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
-options.no_bin_links                  = { flag = ["--no-bin-links"] }
-options.no_fund                       = { flag = ["--no-fund"] }
-options.dry_run                       = { flag = ["--dry-run"], removes = ["modify_node_modules", "modify_lockfile", "modify_package_json", "run_lifecycle_scripts"] }
+options.no_bin_links                  = { flag = ["--no-bin-links"], value = "boolean" }
+options.no_fund                       = { flag = ["--no-fund"], value = "boolean" }
+options.dry_run                       = { flag = ["--dry-run"], value = "boolean", removes = ["modify_node_modules", "modify_lockfile", "modify_package_json", "run_lifecycle_scripts"] }
 options.workspace                     = { flag = ["--workspace"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
-options.workspaces                    = { flag = ["--workspaces"] }
-options.include_workspace_root        = { flag = ["--include-workspace-root"] }
-options.install_links                 = { flag = ["--install-links"] }
-operands.pkg = { when = [{ like = "true", adds = ["ambiguous_argv"] }, { like = "false", adds = ["ambiguous_argv"] }] }
+options.workspaces                    = { flag = ["--workspaces"], value = "boolean" }
+options.include_workspace_root        = { flag = ["--include-workspace-root"], value = "boolean" }
+options.install_links                 = { flag = ["--install-links"], value = "boolean" }
+operands.pkg = {}
 
 [shell.dedupe]
 usage   = "npm [global options] dedupe [options]"
 aliases = ["ddp"]
 adds    = ["network", "modify_node_modules", "modify_lockfile", "run_lifecycle_scripts"]
 options.install_strategy       = { flag = ["--install-strategy"], value = "required", when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
-options.legacy_bundling        = { flag = ["--legacy-bundling"] }
-options.global_style           = { flag = ["--global-style"] }
-options.strict_peer_deps       = { flag = ["--strict-peer-deps"] }
-options.no_package_lock        = { flag = ["--no-package-lock"], removes = ["modify_lockfile"] }
+options.legacy_bundling        = { flag = ["--legacy-bundling"], value = "boolean" }
+options.global_style           = { flag = ["--global-style"], value = "boolean" }
+options.strict_peer_deps       = { flag = ["--strict-peer-deps"], value = "boolean" }
+options.no_package_lock        = { flag = ["--no-package-lock"], value = "boolean", removes = ["modify_lockfile"] }
 options.omit                   = { flag = ["--omit"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
 options.include                = { flag = ["--include"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
-options.ignore_scripts         = { flag = ["--ignore-scripts"], removes = ["run_lifecycle_scripts"] }
-options.no_audit               = { flag = ["--no-audit"] }
-options.no_bin_links           = { flag = ["--no-bin-links"] }
-options.no_fund                = { flag = ["--no-fund"] }
-options.dry_run                = { flag = ["--dry-run"], removes = ["modify_node_modules", "modify_lockfile", "run_lifecycle_scripts"] }
+options.ignore_scripts         = { flag = ["--ignore-scripts"], value = "boolean", removes = ["run_lifecycle_scripts"] }
+options.no_audit               = { flag = ["--no-audit"], value = "boolean" }
+options.no_bin_links           = { flag = ["--no-bin-links"], value = "boolean" }
+options.no_fund                = { flag = ["--no-fund"], value = "boolean" }
+options.dry_run                = { flag = ["--dry-run"], value = "boolean", removes = ["modify_node_modules", "modify_lockfile", "run_lifecycle_scripts"] }
 options.workspace              = { flag = ["--workspace"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
-options.workspaces             = { flag = ["--workspaces"] }
-options.include_workspace_root = { flag = ["--include-workspace-root"] }
-options.install_links          = { flag = ["--install-links"] }
+options.workspaces             = { flag = ["--workspaces"], value = "boolean" }
+options.include_workspace_root = { flag = ["--include-workspace-root"], value = "boolean" }
+options.install_links          = { flag = ["--install-links"], value = "boolean" }
 
 [shell.prune]
 usage = "npm [global options] prune [options] [<pkg>...]"
 adds  = ["network", "modify_node_modules", "modify_lockfile", "run_lifecycle_scripts"]
 options.omit                   = { flag = ["--omit"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
 options.include                = { flag = ["--include"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
-options.dry_run                = { flag = ["--dry-run"], removes = ["modify_node_modules", "modify_lockfile", "run_lifecycle_scripts"] }
-options.json                   = { flag = ["--json"] }
-options.foreground_scripts     = { flag = ["--foreground-scripts"] }
-options.ignore_scripts         = { flag = ["--ignore-scripts"], removes = ["run_lifecycle_scripts"] }
+options.dry_run                = { flag = ["--dry-run"], value = "boolean", removes = ["modify_node_modules", "modify_lockfile", "run_lifecycle_scripts"] }
+options.json                   = { flag = ["--json"], value = "boolean" }
+options.foreground_scripts     = { flag = ["--foreground-scripts"], value = "boolean" }
+options.ignore_scripts         = { flag = ["--ignore-scripts"], value = "boolean", removes = ["run_lifecycle_scripts"] }
 options.workspace              = { flag = ["--workspace"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
-options.workspaces             = { flag = ["--workspaces"] }
-options.include_workspace_root = { flag = ["--include-workspace-root"] }
-options.install_links          = { flag = ["--install-links"] }
-operands.pkg = { when = [{ like = "true", adds = ["ambiguous_argv"] }, { like = "false", adds = ["ambiguous_argv"] }] }
+options.workspaces             = { flag = ["--workspaces"], value = "boolean" }
+options.include_workspace_root = { flag = ["--include-workspace-root"], value = "boolean" }
+options.install_links          = { flag = ["--install-links"], value = "boolean" }
+operands.pkg = {}
 
 # `npm link` always writes the global prefix (no argument: links this folder there; with an
 # argument: installs it there first). `-g` is an error for link, so it is not modeled. It saves
@@ -247,26 +253,26 @@ operands.pkg = { when = [{ like = "true", adds = ["ambiguous_argv"] }, { like = 
 usage   = "npm [global options] link [options] [<package_spec>...]"
 aliases = ["ln"]
 adds    = ["network", "global_install", "modify_node_modules", "run_lifecycle_scripts"]
-options.save                   = { flag = ["-S", "--save"], adds = ["modify_package_json", "modify_lockfile"] }
-options.save_prod              = { flag = ["-P", "--save-prod"], adds = ["modify_package_json", "modify_lockfile"] }
-options.save_dev               = { flag = ["-D", "--save-dev"], adds = ["modify_package_json", "modify_lockfile"] }
-options.save_optional          = { flag = ["-O", "--save-optional"], adds = ["modify_package_json", "modify_lockfile"] }
-options.save_peer              = { flag = ["--save-peer"], adds = ["modify_package_json", "modify_lockfile"] }
-options.save_exact             = { flag = ["-E", "--save-exact"] }
+options.save                   = { flag = ["-S", "--save"], value = "boolean", adds = ["modify_package_json", "modify_lockfile"] }
+options.save_prod              = { flag = ["-P", "--save-prod"], value = "boolean", adds = ["modify_package_json", "modify_lockfile"] }
+options.save_dev               = { flag = ["-D", "--save-dev"], value = "boolean", adds = ["modify_package_json", "modify_lockfile"] }
+options.save_optional          = { flag = ["-O", "--save-optional"], value = "boolean", adds = ["modify_package_json", "modify_lockfile"] }
+options.save_peer              = { flag = ["--save-peer"], value = "boolean", adds = ["modify_package_json", "modify_lockfile"] }
+options.save_exact             = { flag = ["-E", "--save-exact"], value = "boolean" }
 options.install_strategy       = { flag = ["--install-strategy"], value = "required", when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
-options.strict_peer_deps       = { flag = ["--strict-peer-deps"] }
-options.no_package_lock        = { flag = ["--no-package-lock"], removes = ["modify_lockfile"] }
+options.strict_peer_deps       = { flag = ["--strict-peer-deps"], value = "boolean" }
+options.no_package_lock        = { flag = ["--no-package-lock"], value = "boolean", removes = ["modify_lockfile"] }
 options.omit                   = { flag = ["--omit"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
 options.include                = { flag = ["--include"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
-options.ignore_scripts         = { flag = ["--ignore-scripts"], removes = ["run_lifecycle_scripts"] }
-options.no_audit               = { flag = ["--no-audit"] }
-options.no_bin_links           = { flag = ["--no-bin-links"] }
-options.no_fund                = { flag = ["--no-fund"] }
-options.dry_run                = { flag = ["--dry-run"], removes = ["modify_node_modules", "modify_lockfile", "modify_package_json", "run_lifecycle_scripts"] }
+options.ignore_scripts         = { flag = ["--ignore-scripts"], value = "boolean", removes = ["run_lifecycle_scripts"] }
+options.no_audit               = { flag = ["--no-audit"], value = "boolean" }
+options.no_bin_links           = { flag = ["--no-bin-links"], value = "boolean" }
+options.no_fund                = { flag = ["--no-fund"], value = "boolean" }
+options.dry_run                = { flag = ["--dry-run"], value = "boolean", removes = ["modify_node_modules", "modify_lockfile", "modify_package_json", "run_lifecycle_scripts"] }
 options.workspace              = { flag = ["--workspace"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
-options.workspaces             = { flag = ["--workspaces"] }
-options.include_workspace_root = { flag = ["--include-workspace-root"] }
-operands.package_spec = { when = [{ like = "true", adds = ["ambiguous_argv"] }, { like = "false", adds = ["ambiguous_argv"] }] }
+options.workspaces             = { flag = ["--workspaces"], value = "boolean" }
+options.include_workspace_root = { flag = ["--include-workspace-root"], value = "boolean" }
+operands.package_spec = {}
 
 # ---------------------------------------------------------------------------------------------
 # Running scripts and programs
@@ -279,11 +285,11 @@ operands.package_spec = { when = [{ like = "true", adds = ["ambiguous_argv"] }, 
 usage   = "npm [global options] run [options] [<command>] [-- <script_args>...]"
 aliases = ["run-script", "rum", "urn"]
 options.workspace              = { flag = ["--workspace"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
-options.workspaces             = { flag = ["--workspaces"] }
-options.include_workspace_root = { flag = ["--include-workspace-root"] }
-options.if_present             = { flag = ["--if-present"] }
-options.ignore_scripts         = { flag = ["--ignore-scripts"] }
-options.foreground_scripts     = { flag = ["--foreground-scripts"] }
+options.workspaces             = { flag = ["--workspaces"], value = "boolean" }
+options.include_workspace_root = { flag = ["--include-workspace-root"], value = "boolean" }
+options.if_present             = { flag = ["--if-present"], value = "boolean" }
+options.ignore_scripts         = { flag = ["--ignore-scripts"], value = "boolean" }
+options.foreground_scripts     = { flag = ["--foreground-scripts"], value = "boolean" }
 options.script_shell           = { flag = ["--script-shell"], value = "required", when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
 operands.command     = { adds = ["run_program"] }
 operands.script_args = { adds = ["run_program"] }
@@ -292,25 +298,25 @@ operands.script_args = { adds = ["run_program"] }
 usage   = "npm [global options] test [options] [-- <script_args>...]"
 aliases = ["tst", "t"]
 adds    = ["run_program"]
-options.ignore_scripts = { flag = ["--ignore-scripts"] }
+options.ignore_scripts = { flag = ["--ignore-scripts"], value = "boolean" }
 options.script_shell   = { flag = ["--script-shell"], value = "required", when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
 
 [shell.start]
 usage = "npm [global options] start [options] [-- <script_args>...]"
 adds  = ["run_program"]
-options.ignore_scripts = { flag = ["--ignore-scripts"] }
+options.ignore_scripts = { flag = ["--ignore-scripts"], value = "boolean" }
 options.script_shell   = { flag = ["--script-shell"], value = "required", when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
 
 [shell.stop]
 usage = "npm [global options] stop [options] [-- <script_args>...]"
 adds  = ["run_program"]
-options.ignore_scripts = { flag = ["--ignore-scripts"] }
+options.ignore_scripts = { flag = ["--ignore-scripts"], value = "boolean" }
 options.script_shell   = { flag = ["--script-shell"], value = "required", when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
 
 [shell.restart]
 usage = "npm [global options] restart [options] [-- <script_args>...]"
 adds  = ["run_program"]
-options.ignore_scripts = { flag = ["--ignore-scripts"] }
+options.ignore_scripts = { flag = ["--ignore-scripts"], value = "boolean" }
 options.script_shell   = { flag = ["--script-shell"], value = "required", when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
 
 # `npm exec` may download a package and runs its binary. Without `--`, npm reads every flag-like
@@ -322,13 +328,13 @@ aliases = ["x"]
 adds    = ["network", "run_program"]
 options.package                       = { flag = ["--package"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
 options.call                          = { flag = ["--call"], value = "required", when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
-options.yes                           = { flag = ["-y", "--yes"] }
+options.yes                           = { flag = ["-y", "--yes"], value = "boolean" }
 options.workspace                     = { flag = ["--workspace"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
-options.workspaces                    = { flag = ["--workspaces"] }
-options.include_workspace_root        = { flag = ["--include-workspace-root"] }
+options.workspaces                    = { flag = ["--workspaces"], value = "boolean" }
+options.include_workspace_root        = { flag = ["--include-workspace-root"], value = "boolean" }
 options.allow_scripts                 = { flag = ["--allow-scripts"], value = "required", repeated = true, adds = ["bypass_script_policy", "run_lifecycle_scripts"], when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
-options.strict_allow_scripts          = { flag = ["--strict-allow-scripts"] }
-options.dangerously_allow_all_scripts = { flag = ["--dangerously-allow-all-scripts"], adds = ["bypass_script_policy", "run_lifecycle_scripts"] }
+options.strict_allow_scripts          = { flag = ["--strict-allow-scripts"], value = "boolean" }
+options.dangerously_allow_all_scripts = { flag = ["--dangerously-allow-all-scripts"], value = "boolean", adds = ["bypass_script_policy", "run_lifecycle_scripts"] }
 
 # ---------------------------------------------------------------------------------------------
 # Reading
@@ -337,29 +343,29 @@ options.dangerously_allow_all_scripts = { flag = ["--dangerously-allow-all-scrip
 [shell.ls]
 usage   = "npm [global options] ls [options] [<package_spec>...]"
 aliases = ["list"]
-options.all                    = { flag = ["-a", "--all"] }
-options.json                   = { flag = ["--json"] }
-options.long                   = { flag = ["-l", "--long"] }
-options.parseable              = { flag = ["-p", "--parseable"] }
-options.global                 = { flag = ["-g", "--global"] }
+options.all                    = { flag = ["-a", "--all"], value = "boolean" }
+options.json                   = { flag = ["--json"], value = "boolean" }
+options.long                   = { flag = ["-l", "--long"], value = "boolean" }
+options.parseable              = { flag = ["-p", "--parseable"], value = "boolean" }
+options.global                 = { flag = ["-g", "--global"], value = "boolean" }
 options.depth                  = { flag = ["--depth"], value = "required", when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
 options.omit                   = { flag = ["--omit"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
 options.include                = { flag = ["--include"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
-options.link                   = { flag = ["--link"] }
-options.package_lock_only      = { flag = ["--package-lock-only"] }
-options.no_unicode             = { flag = ["--no-unicode"] }
+options.link                   = { flag = ["--link"], value = "boolean" }
+options.package_lock_only      = { flag = ["--package-lock-only"], value = "boolean" }
+options.no_unicode             = { flag = ["--no-unicode"], value = "boolean" }
 options.workspace              = { flag = ["--workspace"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
-options.workspaces             = { flag = ["--workspaces"] }
-options.include_workspace_root = { flag = ["--include-workspace-root"] }
+options.workspaces             = { flag = ["--workspaces"], value = "boolean" }
+options.include_workspace_root = { flag = ["--include-workspace-root"], value = "boolean" }
 
 [shell.outdated]
 usage = "npm [global options] outdated [options] [<package_spec>...]"
 adds  = ["network"]
-options.all             = { flag = ["-a", "--all"] }
-options.json            = { flag = ["--json"] }
-options.long            = { flag = ["-l", "--long"] }
-options.parseable       = { flag = ["-p", "--parseable"] }
-options.global          = { flag = ["-g", "--global"] }
+options.all             = { flag = ["-a", "--all"], value = "boolean" }
+options.json            = { flag = ["--json"], value = "boolean" }
+options.long            = { flag = ["-l", "--long"], value = "boolean" }
+options.parseable       = { flag = ["-p", "--parseable"], value = "boolean" }
+options.global          = { flag = ["-g", "--global"], value = "boolean" }
 options.workspace       = { flag = ["--workspace"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
 options.before          = { flag = ["--before"], value = "required", when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
 options.min_release_age = { flag = ["--min-release-age"], value = "required", when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
@@ -368,10 +374,10 @@ options.min_release_age = { flag = ["--min-release-age"], value = "required", wh
 usage   = "npm [global options] view [options] [<package_spec>] [<field>...]"
 aliases = ["info", "show", "v"]
 adds    = ["network"]
-options.json                   = { flag = ["--json"] }
+options.json                   = { flag = ["--json"], value = "boolean" }
 options.workspace              = { flag = ["--workspace"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
-options.workspaces             = { flag = ["--workspaces"] }
-options.include_workspace_root = { flag = ["--include-workspace-root"] }
+options.workspaces             = { flag = ["--workspaces"], value = "boolean" }
+options.include_workspace_root = { flag = ["--include-workspace-root"], value = "boolean" }
 
 # ---------------------------------------------------------------------------------------------
 # Audit
@@ -381,41 +387,41 @@ options.include_workspace_root = { flag = ["--include-workspace-root"] }
 usage = "npm [global options] audit [options]"
 adds  = ["network"]
 options.audit_level            = { flag = ["--audit-level"], value = "required", when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
-options.json                   = { flag = ["--json"] }
-options.package_lock_only      = { flag = ["--package-lock-only"] }
+options.json                   = { flag = ["--json"], value = "boolean" }
+options.package_lock_only      = { flag = ["--package-lock-only"], value = "boolean" }
 options.omit                   = { flag = ["--omit"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
 options.include                = { flag = ["--include"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
 options.workspace              = { flag = ["--workspace"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
-options.workspaces             = { flag = ["--workspaces"] }
-options.include_workspace_root = { flag = ["--include-workspace-root"] }
+options.workspaces             = { flag = ["--workspaces"], value = "boolean" }
+options.include_workspace_root = { flag = ["--include-workspace-root"], value = "boolean" }
 
 # `npm audit fix` reifies the tree like an install, and saves changed direct dependencies.
 [shell.audit_fix]
 usage = "npm [global options] audit fix [options]"
 adds  = ["network", "modify_node_modules", "modify_lockfile", "modify_package_json", "run_lifecycle_scripts"]
 options.audit_level            = { flag = ["--audit-level"], value = "required", when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
-options.dry_run                = { flag = ["--dry-run"], removes = ["modify_node_modules", "modify_lockfile", "modify_package_json", "run_lifecycle_scripts"] }
-options.force                  = { flag = ["-f", "--force"], adds = ["force"] }
-options.json                   = { flag = ["--json"] }
-options.package_lock_only      = { flag = ["--package-lock-only"], removes = ["modify_node_modules"] }
-options.no_package_lock        = { flag = ["--no-package-lock"], removes = ["modify_lockfile"] }
+options.dry_run                = { flag = ["--dry-run"], value = "boolean", removes = ["modify_node_modules", "modify_lockfile", "modify_package_json", "run_lifecycle_scripts"] }
+options.force                  = { flag = ["-f", "--force"], value = "boolean", adds = ["force"] }
+options.json                   = { flag = ["--json"], value = "boolean" }
+options.package_lock_only      = { flag = ["--package-lock-only"], value = "boolean", removes = ["modify_node_modules"] }
+options.no_package_lock        = { flag = ["--no-package-lock"], value = "boolean", removes = ["modify_lockfile"] }
 options.omit                   = { flag = ["--omit"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
 options.include                = { flag = ["--include"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
-options.foreground_scripts     = { flag = ["--foreground-scripts"] }
-options.ignore_scripts         = { flag = ["--ignore-scripts"], removes = ["run_lifecycle_scripts"] }
+options.foreground_scripts     = { flag = ["--foreground-scripts"], value = "boolean" }
+options.ignore_scripts         = { flag = ["--ignore-scripts"], value = "boolean", removes = ["run_lifecycle_scripts"] }
 options.workspace              = { flag = ["--workspace"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
-options.workspaces             = { flag = ["--workspaces"] }
-options.include_workspace_root = { flag = ["--include-workspace-root"] }
+options.workspaces             = { flag = ["--workspaces"], value = "boolean" }
+options.include_workspace_root = { flag = ["--include-workspace-root"], value = "boolean" }
 
 [shell.audit_signatures]
 usage = "npm [global options] audit signatures [options]"
 adds  = ["network"]
-options.json                   = { flag = ["--json"] }
-options.include_attestations   = { flag = ["--include-attestations"] }
+options.json                   = { flag = ["--json"], value = "boolean" }
+options.include_attestations   = { flag = ["--include-attestations"], value = "boolean" }
 options.omit                   = { flag = ["--omit"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
 options.include                = { flag = ["--include"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
 options.workspace              = { flag = ["--workspace"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
-options.workspaces             = { flag = ["--workspaces"] }
+options.workspaces             = { flag = ["--workspaces"], value = "boolean" }
 
 # ---------------------------------------------------------------------------------------------
 # Packing, publishing, versioning
@@ -427,14 +433,14 @@ options.workspaces             = { flag = ["--workspaces"] }
 [shell.pack]
 usage = "npm [global options] pack [options] [<package_spec>...]"
 adds  = ["run_lifecycle_scripts"]
-options.dry_run                = { flag = ["--dry-run"] }
-options.json                   = { flag = ["--json"] }
+options.dry_run                = { flag = ["--dry-run"], value = "boolean" }
+options.json                   = { flag = ["--json"], value = "boolean" }
 options.pack_destination       = { flag = ["--pack-destination"], value = "required", when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
 options.workspace              = { flag = ["--workspace"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
-options.workspaces             = { flag = ["--workspaces"] }
-options.include_workspace_root = { flag = ["--include-workspace-root"] }
-options.ignore_scripts         = { flag = ["--ignore-scripts"], removes = ["run_lifecycle_scripts"] }
-operands.package_spec = { adds = ["network"], when = [{ like = "true", adds = ["ambiguous_argv"] }, { like = "false", adds = ["ambiguous_argv"] }] }
+options.workspaces             = { flag = ["--workspaces"], value = "boolean" }
+options.include_workspace_root = { flag = ["--include-workspace-root"], value = "boolean" }
+options.ignore_scripts         = { flag = ["--ignore-scripts"], value = "boolean", removes = ["run_lifecycle_scripts"] }
+operands.package_spec = { adds = ["network"] }
 
 # `npm publish --dry-run` still contacts the registry and still runs prepublishOnly, prepack,
 # prepare, publish, and postpublish for a folder (lib/commands/publish.js); it only skips the
@@ -442,16 +448,16 @@ operands.package_spec = { adds = ["network"], when = [{ like = "true", adds = ["
 [shell.publish]
 usage = "npm [global options] publish [options] [<package_spec>]"
 adds  = ["network", "publish", "run_lifecycle_scripts"]
-options.tag                    = { flag = ["--tag"], value = "required", when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
+options.tag                    = { flag = ["--tag"], value = "optional-next", when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
 options.access                 = { flag = ["--access"], value = "required", when = [{ like = "public", adds = ["make_public"] }, { like = "-*", adds = ["ambiguous_argv"] }] }
-options.dry_run                = { flag = ["--dry-run"], removes = ["publish", "make_public"] }
-options.provenance             = { flag = ["--provenance"] }
-options.force                  = { flag = ["-f", "--force"], adds = ["force"] }
-options.ignore_scripts         = { flag = ["--ignore-scripts"], removes = ["run_lifecycle_scripts"] }
+options.dry_run                = { flag = ["--dry-run"], value = "boolean", removes = ["publish", "make_public"] }
+options.provenance             = { flag = ["--provenance"], value = "boolean" }
+options.force                  = { flag = ["-f", "--force"], value = "boolean", adds = ["force"] }
+options.ignore_scripts         = { flag = ["--ignore-scripts"], value = "boolean", removes = ["run_lifecycle_scripts"] }
 options.workspace              = { flag = ["--workspace"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
-options.workspaces             = { flag = ["--workspaces"] }
-options.include_workspace_root = { flag = ["--include-workspace-root"] }
-operands.package_spec = { when = [{ like = "true", adds = ["ambiguous_argv"] }, { like = "false", adds = ["ambiguous_argv"] }] }
+options.workspaces             = { flag = ["--workspaces"], value = "boolean" }
+options.include_workspace_root = { flag = ["--include-workspace-root"], value = "boolean" }
+operands.package_spec = {}
 
 # `npm version` with no argument prints versions. With one, it writes package.json and the
 # lockfile, runs preversion/version/postversion, and in a git work tree commits and tags
@@ -461,18 +467,18 @@ operands.package_spec = { when = [{ like = "true", adds = ["ambiguous_argv"] }, 
 [shell.version]
 usage   = "npm [global options] version [options] [<newversion>]"
 aliases = ["verison"]
-options.allow_same_version     = { flag = ["--allow-same-version"] }
-options.no_commit_hooks        = { flag = ["--no-commit-hooks"] }
-options.no_git_tag_version     = { flag = ["--no-git-tag-version"], removes = ["git_commit"] }
-options.json                   = { flag = ["--json"] }
+options.allow_same_version     = { flag = ["--allow-same-version"], value = "boolean" }
+options.no_commit_hooks        = { flag = ["--no-commit-hooks"], value = "boolean" }
+options.no_git_tag_version     = { flag = ["--no-git-tag-version"], value = "boolean", removes = ["git_commit"] }
+options.json                   = { flag = ["--json"], value = "boolean" }
 options.preid                  = { flag = ["--preid"], value = "required", when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
-options.sign_git_tag           = { flag = ["--sign-git-tag"] }
-options.ignore_scripts         = { flag = ["--ignore-scripts"], removes = ["run_lifecycle_scripts"] }
+options.sign_git_tag           = { flag = ["--sign-git-tag"], value = "boolean" }
+options.ignore_scripts         = { flag = ["--ignore-scripts"], value = "boolean", removes = ["run_lifecycle_scripts"] }
 options.workspace              = { flag = ["--workspace"], value = "required", repeated = true, adds = ["network", "modify_node_modules"], when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
-options.workspaces             = { flag = ["--workspaces"], adds = ["network", "modify_node_modules"] }
-options.no_workspaces_update   = { flag = ["--no-workspaces-update"], removes = ["modify_node_modules"] }
-options.include_workspace_root = { flag = ["--include-workspace-root"] }
-operands.newversion = { adds = ["modify_package_json", "modify_lockfile", "git_commit", "run_lifecycle_scripts"], when = [{ like = "true", adds = ["ambiguous_argv"] }, { like = "false", adds = ["ambiguous_argv"] }] }
+options.workspaces             = { flag = ["--workspaces"], value = "boolean", adds = ["network", "modify_node_modules"] }
+options.no_workspaces_update   = { flag = ["--no-workspaces-update"], value = "boolean", removes = ["modify_node_modules"] }
+options.include_workspace_root = { flag = ["--include-workspace-root"], value = "boolean" }
+operands.newversion = { adds = ["modify_package_json", "modify_lockfile", "git_commit", "run_lifecycle_scripts"] }
 
 # `npm init` writes package.json. `npm init <initializer> [args...]` runs `create-<initializer>`
 # through `npm exec`, passing the extra words to it (lib/commands/init.js). `--workspace` creates a
@@ -483,19 +489,19 @@ operands.newversion = { adds = ["modify_package_json", "modify_lockfile", "git_c
 usage   = "npm [global options] init [options] [<package_spec> [<initializer_args>...]]"
 aliases = ["create", "innit"]
 adds    = ["modify_package_json"]
-options.yes                    = { flag = ["-y", "--yes"] }
-options.force                  = { flag = ["-f", "--force"], adds = ["force"] }
+options.yes                    = { flag = ["-y", "--yes"], value = "boolean" }
+options.force                  = { flag = ["-f", "--force"], value = "boolean", adds = ["force"] }
 options.scope                  = { flag = ["--scope"], value = "required", when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
 options.init_author_name       = { flag = ["--init-author-name"], value = "required", when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
 options.init_license           = { flag = ["--init-license"], value = "required", when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
 options.init_version           = { flag = ["--init-version"], value = "required", when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
 options.init_type              = { flag = ["--init-type"], value = "required", when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
-options.init_private           = { flag = ["--init-private"] }
+options.init_private           = { flag = ["--init-private"], value = "boolean" }
 options.workspace              = { flag = ["--workspace"], value = "required", repeated = true, adds = ["network", "modify_node_modules", "modify_lockfile", "run_lifecycle_scripts"], when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
-options.no_workspaces_update   = { flag = ["--no-workspaces-update"], removes = ["modify_node_modules", "modify_lockfile", "run_lifecycle_scripts"] }
-options.include_workspace_root = { flag = ["--include-workspace-root"] }
-operands.package_spec     = { adds = ["network", "run_program"], when = [{ like = "true", adds = ["ambiguous_argv"] }, { like = "false", adds = ["ambiguous_argv"] }] }
-operands.initializer_args = { adds = ["network", "run_program"], when = [{ like = "true", adds = ["ambiguous_argv"] }, { like = "false", adds = ["ambiguous_argv"] }] }
+options.no_workspaces_update   = { flag = ["--no-workspaces-update"], value = "boolean", removes = ["modify_node_modules", "modify_lockfile", "run_lifecycle_scripts"] }
+options.include_workspace_root = { flag = ["--include-workspace-root"], value = "boolean" }
+operands.package_spec     = { adds = ["network", "run_program"] }
+operands.initializer_args = { adds = ["network", "run_program"] }
 
 # ---------------------------------------------------------------------------------------------
 # Configuration and cache
@@ -506,20 +512,20 @@ operands.initializer_args = { adds = ["network", "run_program"], when = [{ like 
 [shell.config_get]
 usage   = "npm [global options] config get [options] [<key>...]"
 aliases = ["c get"]
-options.json   = { flag = ["--json"] }
-options.global = { flag = ["-g", "--global"] }
-options.long   = { flag = ["-l", "--long"] }
+options.json   = { flag = ["--json"], value = "boolean" }
+options.global = { flag = ["-g", "--global"], value = "boolean" }
+options.long   = { flag = ["-l", "--long"], value = "boolean" }
 
 [shell.get]
 usage = "npm [global options] get [options] [<key>...]"
-options.long = { flag = ["-l", "--long"] }
+options.long = { flag = ["-l", "--long"], value = "boolean" }
 
 [shell.config_list]
 usage   = "npm [global options] config list [options]"
 aliases = ["config ls", "c list", "c ls"]
-options.json   = { flag = ["--json"] }
-options.global = { flag = ["-g", "--global"] }
-options.long   = { flag = ["-l", "--long"] }
+options.json   = { flag = ["--json"], value = "boolean" }
+options.global = { flag = ["-g", "--global"], value = "boolean" }
+options.long   = { flag = ["-l", "--long"], value = "boolean" }
 
 # `npm config set` saves to an npmrc file (user by default, global with -g). It takes
 # `key=value` pairs or `key value` pairs.
@@ -527,15 +533,15 @@ options.long   = { flag = ["-l", "--long"] }
 usage   = "npm [global options] config set [options] <entry>..."
 aliases = ["c set"]
 adds    = ["override_config"]
-options.global   = { flag = ["-g", "--global"] }
+options.global   = { flag = ["-g", "--global"], value = "boolean" }
 options.location = { flag = ["--location"], value = "required", when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
-options.json     = { flag = ["--json"] }
+options.json     = { flag = ["--json"], value = "boolean" }
 operands.entry   = { when = [{ like = "registry", adds = ["override_registry"] }, { like = "registry=*", adds = ["override_registry"] }, { like = "*:registry", adds = ["override_registry"] }, { like = "*:registry=*", adds = ["override_registry"] }] }
 
 [shell.set]
 usage = "npm [global options] set [options] <entry>..."
 adds  = ["override_config"]
-options.global   = { flag = ["-g", "--global"] }
+options.global   = { flag = ["-g", "--global"], value = "boolean" }
 options.location = { flag = ["--location"], value = "required", when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
 operands.entry   = { when = [{ like = "registry", adds = ["override_registry"] }, { like = "registry=*", adds = ["override_registry"] }, { like = "*:registry", adds = ["override_registry"] }, { like = "*:registry=*", adds = ["override_registry"] }] }
 
@@ -543,7 +549,7 @@ operands.entry   = { when = [{ like = "registry", adds = ["override_registry"] }
 usage   = "npm [global options] config delete [options] <key>..."
 aliases = ["config rm", "config del", "c delete", "c rm", "c del"]
 adds    = ["override_config"]
-options.global   = { flag = ["-g", "--global"] }
+options.global   = { flag = ["-g", "--global"], value = "boolean" }
 options.location = { flag = ["--location"], value = "required", when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
 
 # `npm cache clean` with no key needs --force and deletes the whole cache (lib/commands/cache.js).
@@ -551,7 +557,7 @@ options.location = { flag = ["--location"], value = "required", when = [{ like =
 usage   = "npm [global options] cache clean [options] [<key>...]"
 aliases = ["cache rm", "cache clear"]
 adds    = ["delete_cache"]
-options.force = { flag = ["-f", "--force"], adds = ["force"] }
+options.force = { flag = ["-f", "--force"], value = "boolean", adds = ["force"] }
 options.cache = { flag = ["--cache"], value = "required", when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
 
 [shell.cache_verify]

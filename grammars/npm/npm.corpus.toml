@@ -252,12 +252,11 @@ fields = { silent = true, loglevel = "warn" }
 effects = ["modify_lockfile", "modify_node_modules", "network", "run_lifecycle_scripts"]
 
 # nopt: a boolean flag takes a following `true`/`false` as its value. `--ignore-scripts false`
-# means "run scripts", so the operand `false` adds ambiguous_argv.
+# means "run scripts". The flag is boolean, so the grammar reads it the same way.
 [[case]]
 argv = ["npm", "install", "--ignore-scripts", "false"]
 action = "install"
-fields = { ignore_scripts = true, package_spec = ["false"] }
-effects = ["ambiguous_argv", "modify_lockfile", "modify_node_modules", "modify_package_json", "network"]
+effects = ["modify_lockfile", "modify_node_modules", "network", "run_lifecycle_scripts"]
 
 # nopt: a string option followed by a flag-like word gets "" and the word is read as a flag.
 [[case]]
@@ -286,7 +285,8 @@ action = "unmodeled"
 
 [[case]]
 argv = ["npm", "install", "--ignore-scripts=false"]
-action = "unmodeled"
+action = "install"
+effects = ["modify_lockfile", "modify_node_modules", "network", "run_lifecycle_scripts"]
 
 [[case]]
 argv = ["npm", "install", "--no-ignore-scripts"]
@@ -370,10 +370,11 @@ action = "ci"
 fields = { omit = ["dev"], prefer_offline = true, no_audit = true, no_fund = true }
 effects = ["modify_node_modules", "network", "run_lifecycle_scripts"]
 
-# ci takes no operand; `--ignore-scripts false` leaves `false` over, so unmodeled.
+# ci takes no operand; `--ignore-scripts false` means "run scripts", and the grammar reads it so.
 [[case]]
 argv = ["npm", "ci", "--ignore-scripts", "false"]
-action = "unmodeled"
+action = "ci"
+effects = ["modify_node_modules", "network", "run_lifecycle_scripts"]
 
 [[case]]
 argv = ["npm", "ci", "lodash"]
@@ -942,20 +943,20 @@ action = "publish"
 fields = { package_spec = "./pkg.tgz", provenance = true, ignore_scripts = true }
 effects = ["network", "publish"]
 
-# nopt: `--tag --access=public` gives tag "" and reads --access=public, so the value adds
-# ambiguous_argv.
+# nopt: `--tag --access=public` gives tag "" and reads --access=public. `--tag` is
+# optional-next, so the grammar reads it the same way, and the package is public.
 [[case]]
 argv = ["npm", "publish", "--tag", "--access=public"]
 action = "publish"
-fields = { tag = "--access=public" }
-effects = ["ambiguous_argv", "network", "publish", "run_lifecycle_scripts"]
+fields = { tag = "", access = "public" }
+effects = ["make_public", "network", "publish", "run_lifecycle_scripts"]
 
-# nopt: `--dry-run false` is dry-run=false, a real publish; the operand `false` flags it.
+# nopt: `--dry-run false` is dry-run=false, a real publish. `--dry-run` is boolean, so the
+# grammar reads it the same way, and `--dry-run` does not remove `publish`.
 [[case]]
 argv = ["npm", "publish", "--dry-run", "false"]
 action = "publish"
-fields = { dry_run = true, package_spec = "false" }
-effects = ["ambiguous_argv", "network", "run_lifecycle_scripts"]
+effects = ["network", "publish", "run_lifecycle_scripts"]
 
 [[case]]
 argv = ["npm", "--registry", "https://npm.example.com/", "publish"]
@@ -1201,34 +1202,40 @@ action = "unmodeled"
 # Written from the npm 12.2.2 source (nopt 10.0.1 lib/nopt-lib.js, @npmcli/config definitions,
 # lib/utils/cmd-list.js, lib/commands/*.js), not from the grammar's output.
 
-# nopt reads `false` after a boolean flag as its value: scripts run. The grammar must flag it.
+# nopt reads `false` after a boolean flag as its value: scripts run, and no package is named.
 [[case]]
 argv = ["npm", "install", "--ignore-scripts", "false"]
 action = "install"
-fields = { ignore_scripts = true, package_spec = ["false"] }
-effects = ["network", "modify_node_modules", "modify_lockfile", "modify_package_json", "ambiguous_argv"]
+effects = ["network", "modify_node_modules", "modify_lockfile", "run_lifecycle_scripts"]
 
-# nopt: dry-run=false, so this publishes. The grammar must flag it.
+# nopt: dry-run=false, so this publishes.
 [[case]]
 argv = ["npm", "publish", "--dry-run", "false"]
 action = "publish"
-fields = { dry_run = true, package_spec = "false" }
-effects = ["network", "run_lifecycle_scripts", "ambiguous_argv"]
+effects = ["network", "publish", "run_lifecycle_scripts"]
 
 [[case]]
 argv = ["npm", "publish", "--dry-run", "false", "."]
-action = "unmodeled"
+action = "publish"
+fields = { package_spec = "." }
+effects = ["network", "publish", "run_lifecycle_scripts"]
 
 [[case]]
 argv = ["npm", "publish", "--dry-run=false"]
+action = "publish"
+effects = ["network", "publish", "run_lifecycle_scripts"]
+
+# nopt reads `yes` after a boolean flag as an operand. The grammar does not guess.
+[[case]]
+argv = ["npm", "publish", "--dry-run", "yes"]
 action = "unmodeled"
 
 # nopt: --tag is String, so a next word that looks like a flag gives tag="" and --access=public is read.
 [[case]]
 argv = ["npm", "publish", "--tag", "--access=public"]
 action = "publish"
-fields = { tag = "--access=public" }
-effects = ["network", "publish", "run_lifecycle_scripts", "ambiguous_argv"]
+fields = { tag = "", access = "public" }
+effects = ["network", "publish", "run_lifecycle_scripts", "make_public"]
 
 # nopt splices `--tag=-x` into `--tag -x`, then the String rule re-reads `-x` as a flag.
 [[case]]
@@ -1245,7 +1252,8 @@ effects = ["network", "run_lifecycle_scripts"]
 
 [[case]]
 argv = ["npm", "ci", "--ignore-scripts", "false"]
-action = "unmodeled"
+action = "ci"
+effects = ["modify_node_modules", "network", "run_lifecycle_scripts"]
 
 # nopt cluster: g and E are single-char shorthands, so -gE is --global --save-exact.
 [[case]]
@@ -1304,7 +1312,9 @@ effects = ["network", "run_program"]
 # nopt: git-tag-version = !false = true, newversion = patch: commits and tags.
 [[case]]
 argv = ["npm", "version", "--no-git-tag-version", "false", "patch"]
-action = "unmodeled"
+action = "version"
+fields = { newversion = "patch" }
+effects = ["git_commit", "modify_lockfile", "modify_package_json", "run_lifecycle_scripts"]
 
 [[case]]
 argv = ["npm", "verison", "patch", "--no-git-tag-version"]
@@ -1349,13 +1359,15 @@ action = "unmodeled"
 
 [[case]]
 argv = ["npm", "install", "--global=true", "foo"]
-action = "unmodeled"
+action = "install"
+fields = { global = true, package_spec = ["foo"] }
+effects = ["global_install", "modify_node_modules", "network", "run_lifecycle_scripts"]
 
 [[case]]
 argv = ["npm", "uninstall", "foo", "-g", "false"]
 action = "uninstall"
-fields = { pkg = ["foo", "false"], global = true }
-effects = ["network", "modify_node_modules", "run_lifecycle_scripts", "global_install", "ambiguous_argv"]
+fields = { pkg = ["foo"] }
+effects = ["modify_lockfile", "modify_node_modules", "modify_package_json", "network", "run_lifecycle_scripts"]
 
 # link.js refuses --global.
 [[case]]
@@ -1378,8 +1390,7 @@ effects = ["run_lifecycle_scripts"]
 [[case]]
 argv = ["npm", "pack", "--ignore-scripts", "false"]
 action = "pack"
-fields = { ignore_scripts = true, package_spec = ["false"] }
-effects = ["network", "ambiguous_argv"]
+effects = ["run_lifecycle_scripts"]
 
 # init.js `update()` -> updateWorkspaces reifies the tree after creating a workspace.
 [[case]]
@@ -1397,8 +1408,7 @@ effects = ["network", "modify_node_modules", "modify_lockfile", "bypass_script_p
 [[case]]
 argv = ["npm", "update", "--dry-run", "false"]
 action = "update"
-fields = { dry_run = true, pkg = ["false"] }
-effects = ["network", "ambiguous_argv"]
+effects = ["modify_lockfile", "modify_node_modules", "network", "run_lifecycle_scripts"]
 
 [[case]]
 argv = ["npm", "test", "unit"]
@@ -1478,12 +1488,12 @@ argv = ["npm", "init", "--workspace", "pkgs/a", "--no-workspaces-update", "--wor
 action = "unmodeled"
 
 # nopt: `--no-workspaces-update false` sets workspaces-update=true, so npm reifies and may run scripts.
-# The word lands in package_spec; it must carry ambiguous_argv.
+# The flag is boolean and false, so it removes nothing.
 [[case]]
 argv = ["npm", "init", "--workspace", "pkgs/a", "--no-workspaces-update", "false"]
 action = "init"
-fields = { workspace = ["pkgs/a"], no_workspaces_update = true, package_spec = "false" }
-effects = ["modify_package_json", "network", "run_program", "ambiguous_argv"]
+fields = { workspace = ["pkgs/a"] }
+effects = ["modify_lockfile", "modify_node_modules", "modify_package_json", "network", "run_lifecycle_scripts"]
 
 [[case]]
 argv = ["npm", "version", "patch", "--workspaces"]
@@ -1499,48 +1509,48 @@ effects = ["modify_package_json", "modify_lockfile", "git_commit", "run_lifecycl
 
 [[case]]
 argv = ["npm", "version", "patch", "--workspace", "a", "--no-workspaces-update", "false"]
-action = "unmodeled"
+action = "version"
+fields = { newversion = "patch", workspace = ["a"] }
+effects = ["git_commit", "modify_lockfile", "modify_node_modules", "modify_package_json", "network", "run_lifecycle_scripts"]
 
 # --- author cases after verification round 2 (R2-1) ---
 
-# nopt reads `--no-workspaces-update false` as workspaces-update=true, so the reify runs; the
-# operand `false` adds ambiguous_argv. The same rule covers init's initializer args and version.
+# nopt reads `--no-workspaces-update true` as workspaces-update=false, so the reify does not run.
+# The flag is boolean, so the grammar reads it the same way.
 [[case]]
 argv = ["npm", "init", "--no-workspaces-update", "true"]
 action = "init"
-fields = { no_workspaces_update = true, package_spec = "true" }
-effects = ["ambiguous_argv", "modify_package_json", "network", "run_program"]
+fields = { no_workspaces_update = true }
+effects = ["modify_package_json"]
 
 [[case]]
 argv = ["npm", "init", "vite", "--no-workspaces-update", "false"]
 action = "init"
-fields = { no_workspaces_update = true, package_spec = "vite", initializer_args = ["false"] }
-effects = ["ambiguous_argv", "modify_package_json", "network", "run_program"]
+fields = { package_spec = "vite" }
+effects = ["modify_package_json", "network", "run_program"]
 
 [[case]]
 argv = ["npm", "version", "--ignore-scripts", "false"]
 action = "version"
-fields = { ignore_scripts = true, newversion = "false" }
-effects = ["ambiguous_argv", "git_commit", "modify_lockfile", "modify_package_json"]
 
 # --- independent verifier cases, round 3 (9612d26) ---
-# Actions with no operand: a trailing true/false is a left-over word.
+# Actions with no operand: a trailing true/false is the boolean flag's value.
 [[case]]
 argv = ["npm", "dedupe", "--dry-run", "false"]
-action = "unmodeled"
+action = "dedupe"
+effects = ["modify_lockfile", "modify_node_modules", "network", "run_lifecycle_scripts"]
 
 [[case]]
 argv = ["npm", "audit", "fix", "--package-lock-only", "false"]
-action = "unmodeled"
+action = "audit_fix"
+effects = ["modify_lockfile", "modify_node_modules", "modify_package_json", "network", "run_lifecycle_scripts"]
 
 [[case]]
 argv = ["npm", "version", "--ignore-scripts", "false"]
 action = "version"
-fields = { ignore_scripts = true, newversion = "false" }
-effects = ["modify_package_json", "modify_lockfile", "git_commit", "ambiguous_argv"]
 
 [[case]]
 argv = ["npm", "init", "vite", "--no-workspaces-update", "true"]
 action = "init"
-fields = { package_spec = "vite", no_workspaces_update = true, initializer_args = ["true"] }
-effects = ["modify_package_json", "network", "run_program", "ambiguous_argv"]
+fields = { no_workspaces_update = true, package_spec = "vite" }
+effects = ["modify_package_json", "network", "run_program"]

@@ -116,12 +116,12 @@ operands.query              = { like = "-*", adds = ["option_like_value"] }
 # ─── contents ──────────────────────────────────────────────────────────────────
 
 # `-s, --summary [instructions]`: commander takes the next word as the value when it does not
-# start with `-`. The grammar reads a bare `--summary` as "" and the next word as a URL, so a bare
-# `--summary` adds `option_like_value`. `-s<text>` and `--summary=<text>` do not.
+# start with `-`. `value = "optional-next"` reads it the same way, so in
+# `contents --summary https://a.example https://b.example` the first URL is the summary.
 [shell.contents]
 usage = "valyu [global options] contents [options] [<urls>...]"
 adds  = ["network", "spend_credits"]
-options.summary           = { flag = ["-s", "--summary"], value = "optional", when = [{ like = "", adds = ["option_like_value"] }] }
+options.summary           = { flag = ["-s", "--summary"], value = "optional-next", when = [{ like = "", adds = ["option_like_value"] }] }
 options.length            = { flag = ["-l", "--length"], value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "upload_file", "notify_external"] }] }
 options.structured        = { flag = "--structured", value = "required", when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "upload_file", "notify_external"] }] }
 options.structured_file   = { flag = "--structured-file", value = "required", adds = ["upload_file"], when = [{ like = ["--*", "-p*", "-q*", "-v*"], adds = ["option_like_value", "other_account", "upload_file", "notify_external"] }] }
