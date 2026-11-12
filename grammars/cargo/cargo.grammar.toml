@@ -61,7 +61,7 @@ publish_crate      = "Uploads a package to a registry"
 install_binary     = "Installs binaries into the cargo install root"
 uninstall_binary   = "Deletes installed binaries from the cargo install root"
 open_browser       = "Opens the generated documentation with a browser program"
-install_toolchain  = "The rustup proxy can download and install the toolchain that a +<toolchain> word names, before cargo starts"
+install_toolchain  = "The line names a toolchain with +<toolchain>, which the rustup proxy downloads and installs before cargo starts when it is missing"
 ambiguous_argv     = "An option with an optional value got a word that starts with -, which cargo reads as its own option, so the fields can be wrong"
 
 # cli.rs `cli()`: each of these is `global(true)`, so it may come before or after the command.

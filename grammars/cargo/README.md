@@ -63,7 +63,10 @@ because cargo-clippy passes them to `cargo check`. `fmt` accepts only its own op
 Every action accepts `cargo +<toolchain> ...`. The word goes into the field `toolchain`, without its
 `+`, and adds `install_toolchain`, because the rustup proxy downloads and installs a missing toolchain
 before cargo starts (auto-install is on by default since rustup 1.28.1), even for
-`cargo +beta --frozen fetch`.
+`cargo +beta --frozen fetch`. So `install_toolchain` means "the line names a toolchain". A
+`rust-toolchain.toml` or `RUSTUP_TOOLCHAIN` can make rustup install a toolchain with no `+` word, and
+the grammar does not see those (see the limits below). A rule that must stop every toolchain install
+needs `RUSTUP_AUTO_INSTALL=0` in the tool's environment.
 
 ## Effects
 
@@ -84,7 +87,7 @@ before cargo starts (auto-install is on by default since rustup 1.28.1), even fo
 | `install_binary` | Installs binaries into the install root | `install` | `install --list` |
 | `uninstall_binary` | Deletes installed binaries | `uninstall` | nothing |
 | `open_browser` | Opens the docs with a browser program | `doc --open` | nothing |
-| `install_toolchain` | The rustup proxy can download and install the toolchain that a `+<toolchain>` word names | `+<toolchain>` on every action | nothing |
+| `install_toolchain` | The line names a toolchain with `+`, which the rustup proxy installs when it is missing (a toolchain file can do the same, unseen) | `+<toolchain>` on every action | nothing |
 | `ambiguous_argv` | An optional-value option got a word that starts with `-`, which cargo reads as its own option, so the fields can be wrong | a value like `-*` on `-p`, `--bin`, `--example`, `--test`, `--bench`, `--target`, `tree -i` | nothing |
 
 `--offline` alone still lets cargo write `Cargo.lock` from its local cache; only `--locked` and
