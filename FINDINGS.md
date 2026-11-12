@@ -219,6 +219,9 @@ cargo +beta version     # the rustup proxy downloads and installs the toolchain 
 `[+<toolchain>]` gives a field, but no `adds`. **Workaround:** no cargo action declares a toolchain,
 so `cargo +<x> ...` is `unmodeled`.
 
+**Box change:** strands-agents/box#427 lets `operands.<toolchain>` carry effects. Every cargo action
+now takes `[+<toolchain>]`, which adds `install_toolchain`.
+
 ### Global removes are not scoped per action
 
 ```

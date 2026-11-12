@@ -2,9 +2,9 @@
 #
 # Project:    Cargo, https://github.com/rust-lang/cargo (shipped with the Rust toolchain)
 # Executable: cargo, usually the rustup proxy, which picks a toolchain and runs its cargo.
-#             `cargo +<toolchain> ...` is not modeled (`unmodeled`): rustup installs a missing
+#             `cargo +<toolchain> ...` adds `install_toolchain`: rustup installs a missing
 #             toolchain from the network before cargo starts (auto-install is on by default since
-#             rustup 1.28.1), and a grammar cannot put an effect on the toolchain word.
+#             rustup 1.28.1), also under `--offline` and `--frozen`.
 # Checked:    cargo 1.99.1 (5f94df478 2026-08-27), Rust 1.99.1, clippy and rustfmt of that
 #             toolchain. Sources: `cargo <cmd> --help` output, `cargo help <cmd>`, and the cargo
 #             source at commit 5f94df478 (src/bin/cargo/cli.rs, main.rs, commands/*.rs,
@@ -61,6 +61,7 @@ publish_crate      = "Uploads a package to a registry"
 install_binary     = "Installs binaries into the cargo install root"
 uninstall_binary   = "Deletes installed binaries from the cargo install root"
 open_browser       = "Opens the generated documentation with a browser program"
+install_toolchain  = "The line names a toolchain with +<toolchain>, which the rustup proxy downloads and installs before cargo starts when it is missing"
 ambiguous_argv     = "An option with an optional value got a word that starts with -, which cargo reads as its own option, so the fields can be wrong"
 
 # cli.rs `cli()`: each of these is `global(true)`, so it may come before or after the command.
@@ -79,7 +80,8 @@ options.unstable_features = { flag = ["-Z"], value = "required", repeated = true
 
 # cargo build --help
 [shell.build]
-usage = "cargo [global options] build [options]"
+usage = "cargo [+<toolchain>] [global options] build [options]"
+operands.toolchain = { adds = ["install_toolchain"] }
 adds  = ["network", "update_lockfile", "run_build_scripts"]
 options.future_incompat_report = { flag = ["--future-incompat-report"] }
 options.message_format = { flag = ["--message-format"], value = "required", repeated = true }
@@ -112,7 +114,8 @@ options.ignore_rust_version = { flag = ["--ignore-rust-version"] }
 
 # cargo check --help
 [shell.check]
-usage = "cargo [global options] check [options]"
+usage = "cargo [+<toolchain>] [global options] check [options]"
+operands.toolchain = { adds = ["install_toolchain"] }
 adds  = ["network", "update_lockfile", "run_build_scripts"]
 options.future_incompat_report = { flag = ["--future-incompat-report"] }
 options.message_format = { flag = ["--message-format"], value = "required", repeated = true }
@@ -145,7 +148,8 @@ options.ignore_rust_version = { flag = ["--ignore-rust-version"] }
 
 # cargo test --help. TESTNAME is one word; ARGS need `--` (clap `last`).
 [shell.test]
-usage = "cargo [global options] test [options] [<testname>] [-- <args_list>...]"
+usage = "cargo [+<toolchain>] [global options] test [options] [<testname>] [-- <args_list>...]"
+operands.toolchain = { adds = ["install_toolchain"] }
 adds  = ["network", "update_lockfile", "run_build_scripts", "execute_built_code"]
 options.no_run = { flag = ["--no-run"], removes = ["execute_built_code"] }
 options.no_fail_fast = { flag = ["--no-fail-fast"] }
@@ -181,7 +185,8 @@ operands.args_list = {}
 
 # cargo bench --help. No -r, --keep-going, or --future-incompat-report.
 [shell.bench]
-usage = "cargo [global options] bench [options] [<benchname>] [-- <args_list>...]"
+usage = "cargo [+<toolchain>] [global options] bench [options] [<benchname>] [-- <args_list>...]"
+operands.toolchain = { adds = ["install_toolchain"] }
 adds  = ["network", "update_lockfile", "run_build_scripts", "execute_built_code"]
 options.no_run = { flag = ["--no-run"], removes = ["execute_built_code"] }
 options.no_fail_fast = { flag = ["--no-fail-fast"] }
@@ -214,7 +219,8 @@ operands.args_list = {}
 
 # cargo run --help. ARGS is clap `trailing_var_arg`: the first operand and every word after it go to the program.
 [shell.run]
-usage = "cargo [global options] run [options] [<args_list>...]"
+usage = "cargo [+<toolchain>] [global options] run [options] [<args_list>...]"
+operands.toolchain = { adds = ["install_toolchain"] }
 adds  = ["network", "update_lockfile", "run_build_scripts", "execute_built_code"]
 options.message_format = { flag = ["--message-format"], value = "required", repeated = true }
 options.package = { flag = ["-p", "--package"], value = "required", when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
@@ -236,7 +242,8 @@ operands.args_list = { rest = true }
 
 # cargo doc --help
 [shell.doc]
-usage = "cargo [global options] doc [options]"
+usage = "cargo [+<toolchain>] [global options] doc [options]"
+operands.toolchain = { adds = ["install_toolchain"] }
 adds  = ["network", "update_lockfile", "run_build_scripts"]
 options.open = { flag = ["--open"], adds = ["open_browser"] }
 options.no_deps = { flag = ["--no-deps"] }
@@ -266,7 +273,8 @@ options.ignore_rust_version = { flag = ["--ignore-rust-version"] }
 
 # cargo clippy --help; rust-lang/rust 1.99.1 src/tools/clippy/src/main.rs (ClippyCmd::new).
 [shell.clippy]
-usage = "cargo clippy [options] [-- <lint_args>...]"
+usage = "cargo [+<toolchain>] clippy [options] [-- <lint_args>...]"
+operands.toolchain = { adds = ["install_toolchain"] }
 adds  = ["network", "update_lockfile", "run_build_scripts"]
 options.fix = { flag = ["--fix"], adds = ["write_source"] }
 options.no_deps = { flag = ["--no-deps"] }
@@ -313,7 +321,8 @@ operands.lint_args = { adds = ["pass_through_args"] }
 
 # cargo fmt --help; rust-lang/rust 1.99.1 src/tools/rustfmt/src/cargo-fmt/main.rs (Opts). Its own clap parser, so no cargo global option.
 [shell.fmt]
-usage = "cargo fmt [options] [-- <rustfmt_options>...]"
+usage = "cargo [+<toolchain>] fmt [options] [-- <rustfmt_options>...]"
+operands.toolchain = { adds = ["install_toolchain"] }
 adds  = ["write_source"]
 options.quiet = { flag = ["-q", "--quiet"] }
 options.verbose = { flag = ["-v", "--verbose"] }
@@ -326,7 +335,8 @@ operands.rustfmt_options = { adds = ["pass_through_args"] }
 
 # cargo clean --help; commands/clean.rs: -p or --workspace resolves the workspace (ops::resolve_ws).
 [shell.clean]
-usage = "cargo [global options] clean [options]"
+usage = "cargo [+<toolchain>] [global options] clean [options]"
+operands.toolchain = { adds = ["install_toolchain"] }
 adds  = ["delete_files"]
 options.doc = { flag = ["--doc"] }
 options.dry_run = { flag = ["-n", "--dry-run"], removes = ["delete_files", "update_lockfile"] }
@@ -340,7 +350,8 @@ options.manifest_path = { flag = ["-m", "--manifest-path"], value = "required", 
 
 # cargo add --help
 [shell.add]
-usage = "cargo [global options] add [options] [<dep_id>...]"
+usage = "cargo [+<toolchain>] [global options] add [options] [<dep_id>...]"
+operands.toolchain = { adds = ["install_toolchain"] }
 adds  = ["edit_manifest", "network", "update_lockfile"]
 options.no_default_features = { flag = ["--no-default-features"] }
 options.default_features = { flag = ["--default-features"] }
@@ -364,7 +375,8 @@ options.target = { flag = ["--target"], value = "required" }
 
 # cargo remove --help
 [shell.remove]
-usage = "cargo [global options] remove [options] <dep_id>..."
+usage = "cargo [+<toolchain>] [global options] remove [options] <dep_id>..."
+operands.toolchain = { adds = ["install_toolchain"] }
 adds  = ["edit_manifest", "network", "update_lockfile"]
 options.dry_run = { flag = ["-n", "--dry-run"], removes = ["edit_manifest", "update_lockfile"] }
 options.dev = { flag = ["--dev"] }
@@ -375,7 +387,8 @@ options.manifest_path = { flag = ["-m", "--manifest-path"], value = "required", 
 
 # cargo update --help
 [shell.update]
-usage = "cargo [global options] update [options] [<spec>...]"
+usage = "cargo [+<toolchain>] [global options] update [options] [<spec>...]"
+operands.toolchain = { adds = ["install_toolchain"] }
 adds  = ["network", "update_lockfile"]
 options.dry_run = { flag = ["-n", "--dry-run"], removes = ["update_lockfile"] }
 options.recursive = { flag = ["--recursive"] }
@@ -386,14 +399,16 @@ options.ignore_rust_version = { flag = ["--ignore-rust-version"] }
 
 # cargo fetch --help
 [shell.fetch]
-usage = "cargo [global options] fetch [options]"
+usage = "cargo [+<toolchain>] [global options] fetch [options]"
+operands.toolchain = { adds = ["install_toolchain"] }
 adds  = ["network", "update_lockfile"]
 options.target = { flag = ["--target"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
 options.manifest_path = { flag = ["-m", "--manifest-path"], value = "required", adds = ["override_config"] }
 
 # cargo tree --help
 [shell.tree]
-usage = "cargo [global options] tree [options]"
+usage = "cargo [+<toolchain>] [global options] tree [options]"
+operands.toolchain = { adds = ["install_toolchain"] }
 adds  = ["network", "update_lockfile"]
 options.edges = { flag = ["-e", "--edges"], value = "required", repeated = true }
 options.invert = { flag = ["-i", "--invert"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
@@ -415,7 +430,8 @@ options.manifest_path = { flag = ["-m", "--manifest-path"], value = "required", 
 
 # cargo metadata --help
 [shell.metadata]
-usage = "cargo [global options] metadata [options]"
+usage = "cargo [+<toolchain>] [global options] metadata [options]"
+operands.toolchain = { adds = ["install_toolchain"] }
 adds  = ["network", "update_lockfile"]
 options.filter_platform = { flag = ["--filter-platform"], value = "required", repeated = true }
 options.no_deps = { flag = ["--no-deps"], removes = ["network", "update_lockfile"] }
@@ -427,7 +443,8 @@ options.manifest_path = { flag = ["-m", "--manifest-path"], value = "required", 
 
 # cargo locate-project --help
 [shell.locate_project]
-usage = "cargo [global options] locate-project [options]"
+usage = "cargo [+<toolchain>] [global options] locate-project [options]"
+operands.toolchain = { adds = ["install_toolchain"] }
 adds  = []
 options.workspace = { flag = ["--workspace"] }
 options.message_format = { flag = ["--message-format"], value = "required" }
@@ -435,12 +452,14 @@ options.manifest_path = { flag = ["-m", "--manifest-path"], value = "required", 
 
 # cargo version --help
 [shell.version]
-usage = "cargo [global options] version"
+usage = "cargo [+<toolchain>] [global options] version"
+operands.toolchain = { adds = ["install_toolchain"] }
 adds  = []
 
 # cargo new --help
 [shell.new]
-usage = "cargo [global options] new [options] <path>"
+usage = "cargo [+<toolchain>] [global options] new [options] <path>"
+operands.toolchain = { adds = ["install_toolchain"] }
 adds  = ["create_package"]
 options.vcs = { flag = ["--vcs"], value = "required" }
 options.bin = { flag = ["--bin"] }
@@ -451,7 +470,8 @@ options.registry = { flag = ["--registry"], value = "required" }
 
 # cargo init --help
 [shell.init]
-usage = "cargo [global options] init [options] [<path>]"
+usage = "cargo [+<toolchain>] [global options] init [options] [<path>]"
+operands.toolchain = { adds = ["install_toolchain"] }
 adds  = ["create_package"]
 options.vcs = { flag = ["--vcs"], value = "required" }
 options.bin = { flag = ["--bin"] }
@@ -462,7 +482,8 @@ options.registry = { flag = ["--registry"], value = "required" }
 
 # cargo install --help; commands/install.rs: --list prints the install list and builds nothing.
 [shell.install]
-usage = "cargo [global options] install [options] [<crate>...]"
+usage = "cargo [+<toolchain>] [global options] install [options] [<crate>...]"
+operands.toolchain = { adds = ["install_toolchain"] }
 adds  = ["install_binary", "network", "run_build_scripts"]
 options.version = { flag = ["--version"], value = "required" }
 options.index = { flag = ["--index"], value = "required" }
@@ -493,7 +514,8 @@ options.timings = { flag = ["--timings"] }
 
 # cargo uninstall --help
 [shell.uninstall]
-usage = "cargo [global options] uninstall [options] [<spec>...]"
+usage = "cargo [+<toolchain>] [global options] uninstall [options] [<spec>...]"
+operands.toolchain = { adds = ["install_toolchain"] }
 adds  = ["uninstall_binary"]
 options.root = { flag = ["--root"], value = "required" }
 options.package = { flag = ["-p", "--package"], value = "required", repeated = true, when = [{ like = "-*", adds = ["ambiguous_argv"] }] }
@@ -501,7 +523,8 @@ options.bin = { flag = ["--bin"], value = "required", repeated = true }
 
 # cargo search --help
 [shell.search]
-usage = "cargo [global options] search [options] [<query>...]"
+usage = "cargo [+<toolchain>] [global options] search [options] [<query>...]"
+operands.toolchain = { adds = ["install_toolchain"] }
 adds  = ["network"]
 options.limit = { flag = ["--limit"], value = "required" }
 options.index = { flag = ["--index"], value = "required" }
@@ -509,7 +532,8 @@ options.registry = { flag = ["--registry"], value = "required" }
 
 # cargo publish --help
 [shell.publish]
-usage = "cargo [global options] publish [options]"
+usage = "cargo [+<toolchain>] [global options] publish [options]"
+operands.toolchain = { adds = ["install_toolchain"] }
 adds  = ["publish_crate", "network", "update_lockfile", "run_build_scripts"]
 options.dry_run = { flag = ["-n", "--dry-run"], removes = ["publish_crate"] }
 options.index = { flag = ["--index"], value = "required" }
@@ -530,7 +554,8 @@ options.manifest_path = { flag = ["-m", "--manifest-path"], value = "required", 
 
 # cargo package --help; ops/cargo_package: --list skips the verify build.
 [shell.package]
-usage = "cargo [global options] package [options]"
+usage = "cargo [+<toolchain>] [global options] package [options]"
+operands.toolchain = { adds = ["install_toolchain"] }
 adds  = ["network", "update_lockfile", "run_build_scripts"]
 options.index = { flag = ["--index"], value = "required" }
 options.registry = { flag = ["--registry"], value = "required" }
@@ -553,7 +578,8 @@ options.manifest_path = { flag = ["-m", "--manifest-path"], value = "required", 
 
 # cargo vendor --help
 [shell.vendor]
-usage = "cargo [global options] vendor [options] [<path>]"
+usage = "cargo [+<toolchain>] [global options] vendor [options] [<path>]"
+operands.toolchain = { adds = ["install_toolchain"] }
 adds  = ["network", "update_lockfile", "write_files"]
 options.no_delete = { flag = ["--no-delete"] }
 options.sync = { flag = ["-s", "--sync"], value = "required", repeated = true, adds = ["override_config"] }
@@ -563,7 +589,8 @@ options.manifest_path = { flag = ["-m", "--manifest-path"], value = "required", 
 
 # cargo generate-lockfile --help
 [shell.generate_lockfile]
-usage = "cargo [global options] generate-lockfile [options]"
+usage = "cargo [+<toolchain>] [global options] generate-lockfile [options]"
+operands.toolchain = { adds = ["install_toolchain"] }
 adds  = ["network", "update_lockfile"]
 options.manifest_path = { flag = ["-m", "--manifest-path"], value = "required", adds = ["override_config"] }
 options.ignore_rust_version = { flag = ["--ignore-rust-version"] }
