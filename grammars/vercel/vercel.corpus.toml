@@ -128,18 +128,50 @@ action = "deploy"
 fields = { project_path = "--prod" }
 effects = ["deploy", "deploy_production", "change_traffic", "export_local_env"]
 
-# The bare program and a bare path also deploy, but a grammar needs a command word.
+# FINDINGS.md: the bare program and a bare path also deploy.
 [[case]]
 argv = ["vercel"]
-action = "unmodeled"
+action = "deploy"
+effects = ["deploy", "deploy_production", "change_traffic", "export_local_env"]
 
 [[case]]
 argv = ["vercel", "./site"]
-action = "unmodeled"
+action = "deploy"
+fields = { project_path = "./site" }
+effects = ["deploy", "deploy_production", "change_traffic", "export_local_env"]
 
 [[case]]
 argv = ["vercel", "--prod"]
+action = "deploy"
+fields = { prod = true }
+effects = ["deploy", "deploy_production", "change_traffic", "export_local_env"]
+
+[[case]]
+argv = ["vercel", "--token", "x", "--dry", "./site"]
+action = "deploy"
+fields = { dry = true, project_path = "./site", token = "x" }
+effects = ["export_local_env", "token_argument"]
+
+# A first operand that looks like a command word is never a path: a typo, a subcommand this grammar
+# does not model, or a directory name that must be written as `./site`.
+[[case]]
+argv = ["vercel", "lss"]
 action = "unmodeled"
+
+[[case]]
+argv = ["vercel", "site"]
+action = "unmodeled"
+
+[[case]]
+argv = ["vercel", "--prod", "--", "integration"]
+action = "unmodeled"
+
+# `vercel deploy` reads any first operand as the path.
+[[case]]
+argv = ["vercel", "deploy", "site"]
+action = "deploy"
+fields = { project_path = "site" }
+effects = ["deploy", "deploy_production", "change_traffic", "export_local_env"]
 
 # `-e` on deploy is the deprecated shorthand of `--env`, not `--environment`; it is not declared.
 [[case]]

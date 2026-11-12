@@ -78,8 +78,13 @@ options.token           = { flag = ["-t", "--token"], value = "required", anywhe
 # A deployment with no explicit target can go to production: the CLI sends a project's first
 # deployment and a `--temporary` deployment to production. So `deploy` has `deploy_production` and
 # `change_traffic` unless `--environment preview` names the preview target, which wins over `--prod`.
+#
+# `vercel` alone and `vercel <path>` deploy too, so the usage has no command word and `deploy` is an
+# alias. A first operand that looks like a command word (`vercel site`, a typo such as `vercel lss`)
+# is `unmodeled`, so a subcommand this grammar does not model is never a deploy; write `./site`.
 [shell.deploy]
-usage = "vercel [global options] deploy [options] [<project_path>]"
+usage   = "vercel [global options] [options] [<project_path>]"
+aliases = ["deploy"]
 adds  = ["deploy", "deploy_production", "change_traffic", "export_local_env"]
 options.prod                 = { flag = ["--prod"], adds = ["deploy_production", "change_traffic"] }
 options.environment          = { flag = ["--environment"], value = "required", like = ["preview"], removes = ["deploy_production", "change_traffic"] }
